@@ -4,31 +4,63 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My To-Do List</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main class="app">
-    <h1>My To-Do List</h1>
+    <header class="top">
+      <div>
+        <h1 data-i18n="title">My Tasks</h1>
+        <p class="sub" id="today"></p>
+      </div>
+      <div class="top-actions">
+        <button id="lang" class="icon-btn" title="Language">TH</button>
+        <button id="theme" class="icon-btn" title="Dark mode">🌙</button>
+        <button id="notify" class="icon-btn" title="Reminders">🔔</button>
+      </div>
+    </header>
 
-    <!-- Form: type a task and press Enter or click Add -->
-    <form id="todo-form">
-      <input id="todo-input" type="text" placeholder="What do you need to do?" autocomplete="off" required>
-      <button type="submit">Add</button>
+    <!-- Add a task -->
+    <form id="todo-form" class="card add">
+      <input id="todo-input" type="text" data-i18n-ph="placeholder" placeholder="What do you need to do?" autocomplete="off" required>
+      <div class="add-row">
+        <input id="due-input" type="datetime-local" title="Due date">
+        <select id="priority-input" title="Priority">
+          <option value="low" data-i18n="low">Low</option>
+          <option value="med" data-i18n="med" selected>Medium</option>
+          <option value="high" data-i18n="high">High</option>
+        </select>
+        <input id="cat-input" list="cat-list" data-i18n-ph="category" placeholder="Category" autocomplete="off">
+        <datalist id="cat-list"></datalist>
+        <button type="button" id="ai-add" class="ai" data-i18n="ai" title="Let AI fill in date, priority and category">✨ AI</button>
+        <button type="submit" class="primary" data-i18n="add">Add</button>
+      </div>
     </form>
 
-    <!-- Filter buttons -->
-    <div class="filters">
-      <button class="filter active" data-filter="all">All</button>
-      <button class="filter" data-filter="active">Active</button>
-      <button class="filter" data-filter="done">Done</button>
+    <!-- Search, filters, sort -->
+    <div class="toolbar">
+      <input id="search" type="search" data-i18n-ph="search" placeholder="Search tasks…">
+      <select id="sort">
+        <option value="manual" data-i18n="sortManual">My order</option>
+        <option value="due" data-i18n="sortDue">Due date</option>
+        <option value="priority" data-i18n="sortPriority">Priority</option>
+      </select>
     </div>
+    <div class="chips" id="filters">
+      <button class="chip active" data-filter="all" data-i18n="all">All</button>
+      <button class="chip" data-filter="active" data-i18n="active">Active</button>
+      <button class="chip" data-filter="done" data-i18n="done">Done</button>
+      <button class="chip" data-filter="overdue" data-i18n="overdue">Overdue</button>
+    </div>
+    <div class="chips" id="cat-filters"></div>
 
-    <!-- Tasks are added here by script.js -->
-    <ul id="todo-list"></ul>
+    <ul id="todo-list" class="card list"></ul>
 
     <footer>
-      <span id="counter">0 tasks left</span>
-      <button id="clear-done">Clear done</button>
+      <span id="counter"></span>
+      <button id="clear-done" class="link" data-i18n="clear">Clear done</button>
     </footer>
   </main>
 
