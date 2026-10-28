@@ -12,7 +12,7 @@ const TEXT = {
     empty: "Nothing here yet 🎉", left: (n) => `${n} task${n === 1 ? "" : "s"} left`,
     remind: "Task due", editHint: "Double-click to edit", locale: "en-GB", thinking: "✨ …",
     notFound: (q) => `Couldn't find task "${q}"`, which: (nums) => `Which one? ${nums}`,
-    nothing: "Nothing to change. Try e.g. \"move #2 to friday\".", sureDelete: (x) => `Delete ${x}?`,
+    nothing: "Nothing to change. Try e.g. \"move #2 to friday\".", sureDelete: (x) => `Delete ${x}?`, yes: "Yes, delete", no: "No",
     cmdOffline: "AI is offline, so only \"done #2\", \"undo #2\" and \"delete #2\" work right now.",
   },
   th: {
@@ -27,7 +27,7 @@ const TEXT = {
     empty: "ยังไม่มีงาน 🎉", left: (n) => `เหลือ ${n} งาน`,
     remind: "ถึงเวลางาน", editHint: "ดับเบิลคลิกเพื่อแก้ไข", locale: "th-TH", thinking: "✨ …",
     notFound: (q) => `ไม่พบงาน "${q}"`, which: (nums) => `หมายถึงงานไหน? ${nums}`,
-    nothing: "ไม่มีอะไรให้เปลี่ยน ลองพิมพ์ เช่น \"เลื่อน #2 เป็นวันศุกร์\"", sureDelete: (x) => `ลบ ${x} ใช่ไหม?`,
+    nothing: "ไม่มีอะไรให้เปลี่ยน ลองพิมพ์ เช่น \"เลื่อน #2 เป็นวันศุกร์\"", sureDelete: (x) => `ลบ ${x} ใช่ไหม?`, yes: "ใช่ ลบเลย", no: "ไม่",
     cmdOffline: "AI ไม่ทำงาน ตอนนี้ใช้ได้แค่ \"เสร็จ #2\", \"undo #2\" และ \"ลบ #2\"",
   },
 };
@@ -222,6 +222,36 @@ const showMessage = (msg, warn = false) => {
 };
 $("todo-input").addEventListener("input", () => showMessage(""));
 
+// Ask "Delete #4 …? [Yes] [No]" inside the message box. We don't use confirm(): some browsers
+// block it and it silently says "no", so "delete #4" looked like it did nothing.
+function askDelete(todo) {
+  const msg = $("cmd-msg");
+  const question = document.createElement("span");
+  question.textContent = t("sureDelete")(`#${todo.num} "${todo.text}"`); // textContent: never runs as HTML
+  const yes = document.createElement("button");
+  yes.type = "button";
+  yes.className = "chip active";
+  yes.textContent = t("yes");
+  const no = document.createElement("button");
+  no.type = "button";
+  no.className = "chip";
+  no.textContent = t("no");
+  yes.addEventListener("click", () => {
+    deleteTaskFiles(todo);
+    todos = todos.filter((x) => x !== todo);
+    update();
+    showMessage("");
+    $("todo-input").value = "";
+    $("todo-input").focus();
+  });
+  no.addEventListener("click", () => { showMessage(""); $("todo-input").focus(); });
+  const buttons = document.createElement("span");
+  buttons.style.cssText = "display: flex; gap: 6px; flex: none"; // keep both buttons whole on narrow screens
+  buttons.append(yes, no);
+  msg.className = "cmd-msg warn";
+  msg.replaceChildren(question, buttons);
+}
+
 // Briefly highlight the task a command just changed
 function flash(num) {
   const li = document.querySelector(`.todo-item[data-num="${num}"]`);
@@ -249,7 +279,7 @@ function simpleCommand(text) {
 }
 
 // Carry out a command from the server (or simpleCommand). Returns a message to show,
-// "" when it worked, or null when the owner cancelled.
+// "" when it worked, or null when there is nothing more to show (e.g. waiting for Yes/No).
 function applyCommand(cmd) {
   if (cmd.missing !== undefined) {
     // Not found, or several tasks match: don't guess
@@ -259,11 +289,8 @@ function applyCommand(cmd) {
   const todo = todos.find((x) => x.num === cmd.num);
   if (!todo) return t("notFound")(`#${cmd.num}`);
   if (cmd.action === "delete") {
-    if (!confirm(t("sureDelete")(`#${todo.num} "${todo.text}"`))) return null;
-    deleteTaskFiles(todo);
-    todos = todos.filter((x) => x !== todo);
-    update();
-    return "";
+    askDelete(todo); // deletes only after the owner clicks Yes
+    return null;
   }
   if (cmd.action === "complete" || cmd.action === "uncomplete") {
     todo.done = cmd.action === "complete";
@@ -339,7 +366,8 @@ $("todo-form").addEventListener("submit", async (e) => {
     // Always give the box back, even if something above went wrong
     button.disabled = input.disabled = false;
     button.textContent = t("add");
-    input.focus();
+    // A Yes/No question is waiting: put the focus on Yes, so Enter confirms the delete
+    ($("cmd-msg").querySelector("button") || input).focus();
   }
   if (problem) alert(problem);
 });
