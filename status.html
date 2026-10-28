@@ -49,6 +49,19 @@
       color: var(--text); text-decoration: none; font-weight: 600;
     }
     .back:hover { border-color: var(--accent); }
+    .cmd { display: grid; gap: 10px; }
+    .to { display: flex; gap: 8px; flex-wrap: wrap; }
+    .to button, .send { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit; cursor: pointer; }
+    .to button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    #cmd-text { min-height: 80px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--text); font: inherit; resize: vertical; }
+    .send { background: var(--accent); border: none; color: #fff; font-weight: 600; justify-self: start; }
+    .send:disabled { opacity: .6; cursor: wait; }
+    .hint { margin: 0; color: var(--muted); font-size: .85rem; }
+    #inbox { margin-top: 10px; }
+    .msg-head { display: flex; gap: 8px; align-items: center; font-size: .85rem; color: var(--muted); }
+    .msg-text { margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+    .reply { margin-top: 8px; padding: 8px 12px; border-radius: 10px; background: var(--accent-soft); font-size: .92rem; white-space: pre-wrap; }
+    .new { background: #fff3dc; color: #a16207; }
   </style>
 </head>
 <body>
@@ -62,18 +75,31 @@
     <h2>Agents</h2>
     <div id="agents"></div>
 
+    <h2>Send a command</h2>
+    <form id="cmd" class="card cmd">
+      <div class="to" id="to">
+        <button type="button" data-to="Toto" class="on">🤖 Toto</button>
+        <button type="button" data-to="Kimi">💻 Kimi</button>
+        <button type="button" data-to="George">🎨 George</button>
+      </div>
+      <textarea id="cmd-text" placeholder="e.g. Kimi, add a weekly summary of done tasks" required></textarea>
+      <button type="submit" class="send">Send to inbox</button>
+      <p class="hint">Toto reads the inbox when you message him in the Claude app (say "check inbox"). Works only on this PC.</p>
+    </form>
+    <div id="inbox"></div>
+
     <h2>Claude usage (<span id="plan">…</span> plan)</h2>
     <div id="usage"></div>
 
     <p class="note">
-      This page checks for new data every 10 seconds. Claude writes the data while it's working in your session,
-      so when Claude is idle the numbers stay at the last update time shown above.
+      This page checks for new data every 10 seconds. Toto writes the data while he's working in your session,
+      so when Toto is idle the numbers stay at the last update time shown above.
     </p>
   </div>
 
   <script>
-    const ICONS = { George: "🎨", Kimi: "💻", Claude: "🤖" };
-    const LABELS = { working: "Working", done: "Done", idle: "Idle" };
+    const ICONS = { George: "🎨", Kimi: "💻", Toto: "🤖" };
+    const LABELS = { working: "Working", done: "Done", idle: "Idle", new: "Waiting" };
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
     function timeAgo(iso) {
@@ -118,8 +144,54 @@
         document.getElementById("updated").textContent = "No status data yet";
       }
     }
+    // ---------- Command inbox ----------
+    let sendTo = "Toto";
+    document.getElementById("to").addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      sendTo = b.dataset.to;
+      document.querySelectorAll("#to button").forEach((x) => x.classList.toggle("on", x === b));
+    });
+
+    document.getElementById("cmd").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const box = document.getElementById("cmd-text");
+      const btn = e.target.querySelector(".send");
+      btn.disabled = true;
+      try {
+        const res = await fetch("api/inbox", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to: sendTo, text: box.value }),
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.status);
+        box.value = "";
+        loadInbox();
+      } catch (err) {
+        alert("Couldn't send. The inbox only works on this PC at http://127.0.0.1:8000 with server.py running.\n" + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    async function loadInbox() {
+      try {
+        const items = await (await fetch(`api/inbox?t=${Date.now()}`)).json();
+        document.getElementById("inbox").innerHTML = items.slice().reverse().slice(0, 15).map((m) => `
+          <div class="card">
+            <div class="msg-head">${ICONS[m.to] || ""} to <b>${esc(m.to)}</b> · ${esc(m.created)}
+              <span class="badge ${esc(m.status)}">${LABELS[m.status] || esc(m.status)}</span></div>
+            <div class="msg-text">${esc(m.text)}</div>
+            ${m.reply ? `<div class="reply">${esc(m.reply)}</div>` : ""}
+          </div>`).join("");
+      } catch {
+        document.getElementById("inbox").innerHTML = "";
+      }
+    }
+
     refresh();
-    setInterval(refresh, 10000);
+    loadInbox();
+    setInterval(() => { refresh(); loadInbox(); }, 10000);
   </script>
 </body>
 </html>

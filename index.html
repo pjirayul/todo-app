@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
   <!-- ?v= makes browsers fetch the new file after an update (raise it on each release) -->
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
   <main class="app">
@@ -24,12 +24,13 @@
       </div>
     </header>
 
-    <!-- Add a task -->
-    <!-- Type anything and press Enter: AI fills in date, priority and category -->
+    <!-- Command bar: add a task, or change one ("move #2 to friday", "done #3", "delete laundry") -->
+    <!-- AI fills in date, priority and category -->
     <form id="todo-form" class="card add">
-      <input id="todo-input" type="text" data-i18n-ph="placeholder" placeholder="e.g. pay rent on the 5th of next month, urgent" autocomplete="off" required>
-      <button type="submit" id="add-btn" class="primary" data-i18n="add">✨ Add</button>
+      <input id="todo-input" type="text" data-i18n-ph="placeholder" placeholder="Add or change tasks… e.g. pay rent on the 5th · move #2 to friday" autocomplete="off" required>
+      <button type="submit" id="add-btn" class="primary" data-i18n="add">✨ Go</button>
     </form>
+    <p id="cmd-msg" class="cmd-msg" role="status"></p>
     <datalist id="cat-list"></datalist>
 
     <!-- How much AI the app used today, against a daily limit you choose -->
@@ -63,6 +64,6 @@
     </footer>
   </main>
 
-  <script src="script.js?v=4"></script>
+  <script src="script.js?v=7"></script>
 </body>
 </html>

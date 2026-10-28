@@ -13,6 +13,16 @@
   --med: #f5a524;
   --low: #30a46c;
   --shadow: 0 1px 2px rgba(20, 16, 50, .04), 0 8px 24px rgba(20, 16, 50, .06);
+  --num-bg: #f1eff6;          /* task number pill */
+  --num-text: #5f5b72;
+  --info-bg: #f1effe;         /* message under the command bar */
+  --info-text: #3f3593;
+  --info-border: #dcd6fd;
+  --warn-bg: #fff6e6;
+  --warn-text: #8a5a00;
+  --warn-border: #f7deb0;
+  --flash: rgba(91, 76, 240, .16); /* changed-task highlight */
+  --flash-ring: rgba(91, 76, 240, .45);
 }
 
 [data-theme="dark"] {
@@ -26,6 +36,16 @@
   --accent-soft: #2a2647;
   --on-accent: #16131f;
   --shadow: 0 8px 24px rgba(0, 0, 0, .35);
+  --num-bg: #262434;
+  --num-text: #b3b0c7;
+  --info-bg: #221f3a;
+  --info-text: #cbc5ff;
+  --info-border: #36305f;
+  --warn-bg: #2d2416;
+  --warn-text: #f3c873;
+  --warn-border: #4a3a1e;
+  --flash: rgba(139, 127, 255, .22);
+  --flash-ring: rgba(139, 127, 255, .6);
   color-scheme: dark;
 }
 
@@ -82,7 +102,8 @@ a.icon-btn { display: grid; place-items: center; text-decoration: none; color: i
   font-size: 1.1rem; padding: 8px 0;
 }
 #todo-input { text-overflow: ellipsis; }
-#todo-input::placeholder { color: var(--muted); }
+/* Placeholder is a long example: a touch smaller than typed text so it fits */
+#todo-input::placeholder { color: var(--muted); font-size: .95rem; letter-spacing: -.005em; opacity: 1; }
 .add:focus-within { border-color: var(--accent); }
 .add #todo-input:focus { outline: none; }
 .edit-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
@@ -216,6 +237,39 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .meta:empty { display: none; }
 .tag { padding: 1px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
 .due.overdue { color: var(--high); font-weight: 600; }
+.num {
+  padding: 0 7px; border-radius: 6px;
+  background: var(--num-bg); color: var(--num-text);
+  font-weight: 600; font-size: .75rem; line-height: 1.6;
+  font-variant-numeric: tabular-nums; letter-spacing: .01em;
+}
+.done .num { opacity: .7; }
+
+/* Command bar message + highlight of the task a command just changed */
+.cmd-msg {
+  display: flex; gap: 8px; align-items: flex-start;
+  margin: 8px 2px 0; padding: 8px 12px;
+  border: 1px solid var(--info-border); border-radius: 12px;
+  background: var(--info-bg); color: var(--info-text);
+  font-size: .9rem; line-height: 1.45;
+  overflow-wrap: anywhere;
+  animation: msg-in .2s ease-out;
+}
+.cmd-msg::before { content: "💬"; flex: none; font-size: .85rem; line-height: 1.7; }
+.cmd-msg.warn { background: var(--warn-bg); color: var(--warn-text); border-color: var(--warn-border); }
+.cmd-msg.warn::before { content: "⚠️"; }
+.cmd-msg:empty { display: none; }
+@keyframes msg-in { from { opacity: 0; transform: translateY(-3px); } }
+
+.todo-item.flash { animation: flash 1.8s ease-out; }
+@keyframes flash {
+  0%, 35% { background: var(--flash); box-shadow: inset 0 0 0 1.5px var(--flash-ring); }
+  100% { background: transparent; box-shadow: inset 0 0 0 1.5px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .todo-item.flash { animation-duration: 2.4s; animation-timing-function: steps(1, end); }
+  .cmd-msg { animation: none; }
+}
 
 .todo-item:hover .delete, .delete:focus-visible { opacity: 1; }
 .delete:hover { color: var(--high); }
@@ -235,7 +289,8 @@ footer { display: flex; justify-content: space-between; align-items: center; mar
   .chip { padding: 8px 14px; }
   .primary { padding: 12px 16px; }
   .top-actions { gap: 6px; }
-  #todo-input::placeholder { font-size: .95rem; }
+  #todo-input::placeholder { font-size: .85rem; }
+  .cmd-msg { font-size: .85rem; padding: 8px 10px; }
   .todo-item { gap: 10px; padding: 12px 8px 12px 10px; }
   .edit-row > * { flex: 1 1 45%; }
   .edit-row .e-text, .edit-row .e-notes, .edit-row .e-files, .edit-row .e-due { flex: 1 1 100%; }
