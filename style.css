@@ -281,6 +281,15 @@ footer { display: flex; justify-content: space-between; align-items: center; mar
 .link { border: none; background: none; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; padding: 10px 6px; min-height: 44px; font-size: .9rem; border-radius: 10px; }
 .link:hover { color: var(--high); }
 
+/* Backup menu under the footer (reuses .link, .chip and .cmd-msg) */
+.backup-menu { margin-top: 4px; color: var(--muted); font-size: .9rem; }
+.backup-menu summary { display: inline-flex; align-items: center; cursor: pointer; list-style: none; }
+.backup-menu summary::-webkit-details-marker { display: none; }
+.backup-menu .chip { min-height: 44px; }
+.backup-note { margin: 4px 2px 8px; font-size: .8rem; }
+.backup-list { flex-direction: column; align-items: stretch; margin-top: 8px; }
+.backup-list .chip { text-align: left; overflow-wrap: anywhere; }
+
 @media (max-width: 480px) {
   body { padding: 24px 16px; }
   h1 { font-size: 1.6rem; }

@@ -62,6 +62,21 @@
     .msg-text { margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
     .reply { margin-top: 8px; padding: 8px 12px; border-radius: 10px; background: var(--accent-soft); font-size: .92rem; white-space: pre-wrap; }
     .new { background: #fff3dc; color: #a16207; }
+    /* Ideas from Lewis */
+    .idea-day { margin: 14px 0 6px; color: var(--muted); font-size: .85rem; font-weight: 600; }
+    .idea-title { font-weight: 600; }
+    .idea-why { margin-top: 4px; font-size: .95rem; word-break: break-word; }
+    .tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; font-size: .85rem; }
+    .tag { padding: 2px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    .tags a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; }
+    .idea-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+    .idea-actions button, .more { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit; cursor: pointer; }
+    .idea-actions .go { background: var(--accent); border: none; color: #fff; font-weight: 600; }
+    .idea-actions button:disabled { opacity: .6; cursor: wait; }
+    .idea-actions .badge { margin-left: 0; }
+    .idea.skipped { opacity: .5; }
+    .more { margin-top: 10px; }
+    .empty { color: var(--muted); }
   </style>
 </head>
 <body>
@@ -74,6 +89,9 @@
 
     <h2>Agents</h2>
     <div id="agents"></div>
+
+    <h2>💡 Ideas from Lewis</h2>
+    <div id="ideas"></div>
 
     <h2>Send a command</h2>
     <form id="cmd" class="card cmd">
@@ -98,7 +116,7 @@
   </div>
 
   <script>
-    const ICONS = { George: "🎨", Kimi: "💻", Toto: "🤖" };
+    const ICONS = { George: "🎨", Kimi: "💻", Toto: "🤖", Lewis: "💡" };
     const LABELS = { working: "Working", done: "Done", idle: "Idle", new: "Waiting" };
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
@@ -189,9 +207,110 @@
       }
     }
 
+    // ---------- Ideas from Lewis ----------
+    let ideas = [];
+    let showOlder = false;
+    const EFFORT = { S: "Small", M: "Medium", L: "Large" };
+
+    // Only real web links; blocks things like "javascript:" in a source
+    function safeUrl(u) {
+      try {
+        const url = new URL(u);
+        return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
+      } catch {
+        return "";
+      }
+    }
+
+    function ideaCard(idea, i) {
+      const url = safeUrl(idea.source);
+      const sent = idea.status === "sent", skipped = idea.status === "skipped";
+      return `
+        <div class="card idea ${skipped ? "skipped" : ""}">
+          <div class="idea-title">${esc(idea.title)}</div>
+          <div class="idea-why">${esc(idea.why)}</div>
+          <div class="tags">
+            ${idea.effort ? `<span class="tag">Effort: ${esc(EFFORT[idea.effort] || idea.effort)}</span>` : ""}
+            ${idea.who ? `<span class="tag">${esc(idea.who)}</span>` : ""}
+            ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">source ↗</a>` : ""}
+          </div>
+          <div class="idea-actions">
+            ${sent ? `<span class="badge done">Sent to inbox</span>`
+              : skipped ? `<span class="badge idle">Skipped</span>`
+              : `<button type="button" class="go" data-send="${i}">👍 Send to inbox</button>
+                 <button type="button" data-skip="${i}">Skip</button>`}
+          </div>
+        </div>`;
+    }
+
+    function renderIdeas() {
+      const box = document.getElementById("ideas");
+      if (!ideas.length) {
+        box.innerHTML = `<div class="card empty">Lewis posts 3 new ideas every morning at 08:00.</div>`;
+        return;
+      }
+      // Newest day first; the 3 latest days show, older ones hide behind a button
+      const days = [...new Set(ideas.map((x) => x.date))].sort().reverse();
+      const visible = showOlder ? days : days.slice(0, 3);
+      box.innerHTML = visible.map((day) => `
+        <div class="idea-day">${esc(day)}</div>
+        ${ideas.map((idea, i) => idea.date === day ? ideaCard(idea, i) : "").join("")}`).join("")
+        + (days.length > 3 ? `<button type="button" class="more" id="older">${showOlder ? "Hide older" : `Show older (${days.length - 3} ${days.length === 4 ? "day" : "days"})`}</button>` : "");
+    }
+
+    async function loadIdeas() {
+      try {
+        ideas = await (await fetch(`api/ideas?t=${Date.now()}`)).json();
+      } catch {
+        ideas = [];
+      }
+      renderIdeas();
+    }
+
+    async function setIdeaStatus(idea, status) {
+      const res = await fetch("api/ideas/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: idea.title, date: idea.date, status }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.status);
+    }
+
+    // One listener for all idea buttons (cards are re-drawn every 10 s)
+    document.getElementById("ideas").addEventListener("click", async (e) => {
+      if (e.target.id === "older") {
+        showOlder = !showOlder;
+        return renderIdeas();
+      }
+      const b = e.target.closest("button[data-send], button[data-skip]");
+      if (!b) return;
+      const idea = ideas[b.dataset.send ?? b.dataset.skip];
+      b.disabled = true;
+      try {
+        if (b.dataset.send !== undefined) {
+          const to = String(idea.who).includes("Kimi") ? "Kimi" : "George";
+          const res = await fetch("api/inbox", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ to, text: `Idea from Lewis: ${idea.title} — ${idea.why}` }),
+          });
+          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.status);
+          await setIdeaStatus(idea, "sent");
+          loadInbox();
+        } else {
+          await setIdeaStatus(idea, "skipped");
+        }
+        loadIdeas();
+      } catch (err) {
+        b.disabled = false;
+        alert("Couldn't save. This only works on this PC at http://127.0.0.1:8000 with server.py running.\n" + err.message);
+      }
+    });
+
     refresh();
     loadInbox();
-    setInterval(() => { refresh(); loadInbox(); }, 10000);
+    loadIdeas();
+    setInterval(() => { refresh(); loadInbox(); loadIdeas(); }, 10000);
   </script>
 </body>
 </html>

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
   <!-- ?v= makes browsers fetch the new file after an update (raise it on each release) -->
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
   <main class="app">
@@ -62,8 +62,23 @@
       <span id="counter"></span>
       <button id="clear-done" class="link" data-i18n="clear">Clear done</button>
     </footer>
+
+    <!-- Backups: the app also backs up by itself before changes (needs server.py) -->
+    <details class="backup-menu">
+      <summary class="link" data-i18n="backupMenu">⋯ Backup</summary>
+      <div class="chips">
+        <button id="backup-now" class="chip" data-i18n="backupNow" title="File attachments are not included">Back up now</button>
+        <button id="restore" class="chip" data-i18n="restore">Restore…</button>
+        <button id="export" class="chip" data-i18n="exportFile" title="File attachments are not included">Export file</button>
+        <button id="import" class="chip" data-i18n="importFile">Import file</button>
+        <input id="import-file" type="file" accept=".json,application/json" hidden>
+      </div>
+      <p class="backup-note" data-i18n="backupNote">Your tasks are backed up automatically before changes. File attachments are not included.</p>
+      <p id="backup-msg" class="cmd-msg" role="status"></p>
+      <div id="backup-list" class="chips backup-list"></div>
+    </details>
   </main>
 
-  <script src="script.js?v=9"></script>
+  <script src="script.js?v=11"></script>
 </body>
 </html>

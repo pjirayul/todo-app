@@ -12,6 +12,8 @@ import difflib
 import json
 import os
 import re
+import sqlite3
+import threading
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta
@@ -387,11 +389,39 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.split("?")[0] == "/api/inbox":
             return self.send_json(load_inbox())
+        if self.path.split("?")[0] == "/api/ideas":
+            return self.send_json(load_ideas())
+        if self.path.split("?")[0] == "/api/backups":
+            return self.send_json(list_backups())
+        if self.path.split("?")[0] == "/api/tasks":
+            return self.send_json(load_tasks())
+        if self.path.startswith("/api/backups/"):
+            return self.get_backup(self.path.split("?")[0][len("/api/backups/"):])
         super().do_GET()
+
+    def do_PUT(self):
+        if self.path != "/api/tasks":
+            return self.send_error(404)
+        # Same protection as the inbox: only our own pages may change tasks
+        if self.headers.get("Origin") not in ALLOWED_ORIGINS or "application/json" not in self.headers.get("Content-Type", ""):
+            return self.send_json({"error": "Not allowed"}, 403)
+        try:
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            tasks = clean_tasks(body.get("todos"))
+            if tasks is None:
+                return self.send_json({"error": "todos must be a list of tasks with a number and text"}, 400)
+            result, status = save_tasks(tasks, body.get("nextNum"), body.get("baseVersion"))
+            self.send_json(result, status)
+        except Exception as e:
+            self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
 
     def do_POST(self):
         if self.path == "/api/inbox":
             return self.post_inbox()
+        if self.path == "/api/ideas/status":
+            return self.post_idea_status()
+        if self.path == "/api/backup":
+            return self.post_backup()
         if self.path != "/api/parse":
             return self.send_error(404)
         try:
@@ -435,6 +465,239 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
 
 
+    def post_idea_status(self):
+        # Same protection as the inbox: only our own pages may change ideas
+        if self.headers.get("Origin") not in ALLOWED_ORIGINS or "application/json" not in self.headers.get("Content-Type", ""):
+            return self.send_json({"error": "Not allowed"}, 403)
+        try:
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            status = body.get("status")
+            if status not in ("sent", "skipped", "liked"):
+                return self.send_json({"error": "Unknown status"}, 400)
+            ideas = load_ideas()
+            # An idea has no id, so title + date together find it
+            match = [i for i in ideas if i.get("title") == body.get("title") and i.get("date") == body.get("date")]
+            if not match:
+                return self.send_json({"error": "Idea not found"}, 404)
+            for idea in match:
+                idea["status"] = status
+            with open(IDEAS_FILE, "w", encoding="utf-8") as f:
+                json.dump(ideas, f, ensure_ascii=False, indent=2)
+            self.send_json({"ok": True})
+        except Exception as e:
+            self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
+
+    def post_backup(self):
+        # Same protection as the inbox: only our own pages may write backups
+        if self.headers.get("Origin") not in ALLOWED_ORIGINS or "application/json" not in self.headers.get("Content-Type", ""):
+            return self.send_json({"error": "Not allowed"}, 403)
+        try:
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            if "todos" in body and not isinstance(body["todos"], list):
+                return self.send_json({"error": "todos must be a list"}, 400)
+            self.send_json({"ok": True, "name": save_backup(body)})
+        except Exception as e:
+            self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
+
+    def get_backup(self, name):
+        # Strict name check, so "../server.py" or other paths can never be read
+        if not BACKUP_NAME.fullmatch(name):
+            return self.send_json({"error": "Bad backup name"}, 400)
+        try:
+            with open(os.path.join(BACKUP_DIR, name), encoding="utf-8") as f:
+                return self.send_json(json.load(f))
+        except FileNotFoundError:
+            return self.send_json({"error": "Backup not found"}, 404)
+
+
+# ---------- Task backups (tasks live in the browser; copies are saved here) ----------
+BACKUP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backups")
+BACKUP_NAME = re.compile(r"tasks-\d{8}-\d{6}\.json")
+KEEP_BACKUPS = 50  # older automatic copies are removed so the folder doesn't grow forever
+
+
+def save_backup(body: dict) -> str:
+    """Write one backup file and return its name, e.g. tasks-20261028-224500.json."""
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    database = load_tasks() if os.path.exists(DB_FILE) else None
+    if "todos" not in body:  # nothing sent from the browser: back up what is in the database
+        body = {**body, "todos": database["todos"] if database else [], "nextNum": database and database["nextNum"]}
+    daily_db_copy()
+    now = datetime.now()
+    name = now.strftime("tasks-%Y%m%d-%H%M%S.json")
+    while os.path.exists(os.path.join(BACKUP_DIR, name)):  # two backups in the same second
+        now += timedelta(seconds=1)
+        name = now.strftime("tasks-%Y%m%d-%H%M%S.json")
+    data = {
+        "time": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "reason": str(body.get("reason", ""))[:200],
+        "todos": body["todos"],
+        "nextNum": body.get("nextNum"),
+        "settings": body.get("settings"),
+        "usage": body.get("usage"),
+        "database": database,  # what the tasks database held at that moment (None if there is none yet)
+    }
+    with open(os.path.join(BACKUP_DIR, name), "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    # Keep only the newest files. The names contain the date, so sorting them sorts by time.
+    # Only files named like our backups inside backups/ are ever removed.
+    old = sorted(n for n in os.listdir(BACKUP_DIR) if BACKUP_NAME.fullmatch(n))[:-KEEP_BACKUPS]
+    for n in old:
+        os.remove(os.path.join(BACKUP_DIR, n))
+    return name
+
+
+def list_backups() -> list:
+    """Newest first: [{name, time, count, reason}]."""
+    if not os.path.isdir(BACKUP_DIR):
+        return []
+    result = []
+    for name in sorted((n for n in os.listdir(BACKUP_DIR) if BACKUP_NAME.fullmatch(n)), reverse=True):
+        try:
+            with open(os.path.join(BACKUP_DIR, name), encoding="utf-8") as f:
+                data = json.load(f)
+            result.append({"name": name, "time": data.get("time", ""), "count": len(data.get("todos", [])),
+                           "reason": data.get("reason", "")})
+        except (OSError, ValueError):
+            continue  # a broken file is skipped instead of breaking the whole list
+    return result
+
+
+# ---------- Tasks database (SQLite, a single file: data/tasks.db) ----------
+# The browser sends the whole list on every change (simple, and fine for one owner).
+# "version" goes up by 1 on every save. The browser sends the version it last saw, so if another
+# tab saved in between, we refuse (409) instead of silently overwriting that tab's change.
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+DB_FILE = os.path.join(DATA_DIR, "tasks.db")
+DB_COPY_NAME = re.compile(r"tasks-db-\d{8}-\d{6}\.db")
+KEEP_DB_COPIES = 30  # one per day, so about a month
+DB_LOCK = threading.Lock()  # two saves at the same moment must not mix (the server runs several threads)
+DUE_FORMAT = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}")
+
+
+def open_db():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    con = sqlite3.connect(DB_FILE)
+    con.execute("""CREATE TABLE IF NOT EXISTS tasks (
+        num INTEGER PRIMARY KEY,   -- the #number the owner sees; never reused
+        id REAL,                   -- the browser's own id for the task
+        text TEXT NOT NULL,
+        done INTEGER NOT NULL DEFAULT 0,
+        due TEXT NOT NULL DEFAULT '',        -- YYYY-MM-DDTHH:MM or ''
+        priority TEXT NOT NULL DEFAULT 'med',
+        cat TEXT NOT NULL DEFAULT '',
+        notes TEXT NOT NULL DEFAULT '',
+        files TEXT NOT NULL DEFAULT '[]',    -- attachment names/ids as JSON (the files stay in the browser)
+        notified INTEGER NOT NULL DEFAULT 0,
+        sort INTEGER NOT NULL DEFAULT 0,     -- position in "My order"
+        created TEXT NOT NULL,
+        updated TEXT NOT NULL)""")
+    con.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")  # nextNum, version
+    return con
+
+
+def get_meta(con, key, default):
+    row = con.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    return int(row[0]) if row else default
+
+
+def load_tasks() -> dict:
+    con = open_db()
+    try:
+        rows = con.execute("SELECT id, num, text, done, due, priority, cat, notified, notes, files "
+                           "FROM tasks ORDER BY sort").fetchall()
+        todos = [{"id": r[0], "num": r[1], "text": r[2], "done": bool(r[3]), "due": r[4], "priority": r[5],
+                  "cat": r[6], "notified": bool(r[7]), "notes": r[8], "files": json.loads(r[9])} for r in rows]
+        return {"todos": todos, "nextNum": get_meta(con, "nextNum", 1), "version": get_meta(con, "version", 0)}
+    finally:
+        con.close()
+
+
+def clean_tasks(todos):
+    """Check the list from the browser; returns clean tasks, or None if it isn't a task list."""
+    if not isinstance(todos, list):
+        return None
+    clean, seen = [], set()
+    for t in todos:
+        if not isinstance(t, dict) or not isinstance(t.get("text"), str):
+            return None
+        num = t.get("num")
+        if not isinstance(num, int) or num < 1 or num in seen:  # every task needs its own number
+            return None
+        seen.add(num)
+        files = t.get("files") if isinstance(t.get("files"), list) else []
+        clean.append({
+            "id": t.get("id") if isinstance(t.get("id"), (int, float)) else None,
+            "num": num,
+            "text": t["text"][:2000],
+            "done": t.get("done") is True,
+            "due": t["due"] if isinstance(t.get("due"), str) and DUE_FORMAT.fullmatch(t["due"]) else "",
+            "priority": t.get("priority") if t.get("priority") in ("low", "med", "high") else "med",
+            "cat": str(t.get("cat") or "")[:100],
+            "notified": t.get("notified") is True,
+            "notes": str(t.get("notes") or "")[:20000],
+            "files": [{"id": str(f.get("id")), "name": str(f.get("name"))} for f in files if isinstance(f, dict)],
+        })
+    return clean
+
+
+def save_tasks(tasks: list, next_num, base_version):
+    """Replace all tasks in one transaction. Returns (result, http status)."""
+    with DB_LOCK:
+        return _save_tasks(tasks, next_num, base_version)
+
+
+def _save_tasks(tasks: list, next_num, base_version):
+    con = open_db()
+    try:
+        with con:  # one transaction: either everything is saved or nothing is
+            version = get_meta(con, "version", 0)
+            if base_version is not None and base_version != version:
+                con.rollback()
+                return {"error": "changed elsewhere", **load_tasks()}, 409
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # Keep each task's created time, and only touch "updated" when the task really changed
+            old = {r[0]: r[1:] for r in con.execute(
+                "SELECT num, id, text, done, due, priority, cat, notes, files, notified, created, updated FROM tasks")}
+            con.execute("DELETE FROM tasks")
+            for sort, t in enumerate(tasks):
+                values = (t["id"], t["text"], int(t["done"]), t["due"], t["priority"], t["cat"], t["notes"],
+                          json.dumps(t["files"], ensure_ascii=False), int(t["notified"]))
+                before = old.get(t["num"])
+                created = before[-2] if before else now
+                updated = before[-1] if before and tuple(before[:-2]) == values else now
+                con.execute("INSERT INTO tasks (id, text, done, due, priority, cat, notes, files, notified, num, sort, created, updated) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", values + (t["num"], sort, created, updated))
+            next_num = max([int(next_num) if isinstance(next_num, int) else 1, get_meta(con, "nextNum", 1)]
+                           + [t["num"] + 1 for t in tasks])  # numbers are never reused
+            con.execute("INSERT OR REPLACE INTO meta VALUES ('nextNum', ?)", (str(next_num),))
+            con.execute("INSERT OR REPLACE INTO meta VALUES ('version', ?)", (str(version + 1),))
+    finally:
+        con.close()
+    daily_db_copy()
+    return {"ok": True, "version": version + 1, "nextNum": next_num}, 200
+
+
+def daily_db_copy():
+    """Once a day, copy tasks.db to backups/tasks-db-YYYYMMDD-HHMMSS.db."""
+    if not os.path.exists(DB_FILE):
+        return
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    now = datetime.now()
+    if any(n.startswith(now.strftime("tasks-db-%Y%m%d-")) for n in os.listdir(BACKUP_DIR)):
+        return  # already have today's copy
+    if not load_tasks()["todos"]:
+        return  # an empty database (before the first tasks arrive) is not worth a copy
+    source, target = sqlite3.connect(DB_FILE), sqlite3.connect(os.path.join(BACKUP_DIR, now.strftime("tasks-db-%Y%m%d-%H%M%S.db")))
+    try:
+        source.backup(target)  # SQLite's own safe copy, even while the database is in use
+    finally:
+        source.close()
+        target.close()
+    for n in sorted(n for n in os.listdir(BACKUP_DIR) if DB_COPY_NAME.fullmatch(n))[:-KEEP_DB_COPIES]:
+        os.remove(os.path.join(BACKUP_DIR, n))
+
+
 # ---------- Command inbox (Team Status page) ----------
 INBOX_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inbox.json")
 ALLOWED_ORIGINS = ("http://127.0.0.1:8000", "http://localhost:8000")
@@ -444,6 +707,19 @@ def load_inbox() -> list:
     try:
         with open(INBOX_FILE, encoding="utf-8") as f:
             return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+# ---------- Ideas from Lewis (Team Status page) ----------
+IDEAS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ideas.json")
+
+
+def load_ideas() -> list:
+    try:
+        with open(IDEAS_FILE, encoding="utf-8-sig") as f:  # -sig: also reads files saved with a BOM
+            ideas = json.load(f)
+        return ideas if isinstance(ideas, list) else []
     except (FileNotFoundError, json.JSONDecodeError):
         return []
 

@@ -2,3 +2,6 @@
 .claude/
 status.json
 inbox.json
+ideas.json
+backups/
+data/
