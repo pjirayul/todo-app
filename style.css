@@ -62,15 +62,15 @@ h1 { margin: 0; font-size: 1.9rem; font-weight: 700; letter-spacing: -.02em; lin
 .sub { margin: 4px 0 0; color: var(--muted); }
 .top-actions { display: flex; gap: 8px; flex: none; }
 .icon-btn {
-  width: 50px; height: 50px;
-  border-radius: 14px;
+  width: 44px; height: 44px;
+  border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--card);
-  font-weight: 600; font-size: 1.05rem;
-  box-shadow: var(--shadow);
+  font-weight: 600; font-size: .9rem;
   transition: border-color .15s, transform .1s;
 }
 .icon-btn:hover { border-color: var(--accent); }
+a.icon-btn { display: grid; place-items: center; text-decoration: none; color: inherit; } /* link that looks like a button */
 .icon-btn:active, .primary:active, .chip:active { transform: scale(.96); }
 .icon-btn.on { background: var(--accent-soft); border-color: var(--accent); }
 
@@ -81,6 +81,7 @@ h1 { margin: 0; font-size: 1.9rem; font-weight: 700; letter-spacing: -.02em; lin
   border: none; outline: none; background: none;
   font-size: 1.1rem; padding: 8px 0;
 }
+#todo-input { text-overflow: ellipsis; }
 #todo-input::placeholder { color: var(--muted); }
 .add:focus-within { border-color: var(--accent); }
 .add #todo-input:focus { outline: none; }
@@ -92,6 +93,7 @@ h1 { margin: 0; font-size: 1.9rem; font-weight: 700; letter-spacing: -.02em; lin
   background: var(--bg);
   font-size: 1.1rem;
 }
+.toolbar input, .toolbar select { font-size: .95rem; padding: 10px 12px; min-height: 44px; }
 .edit-row .e-text { flex: 1 1 100%; }
 .edit-row .e-cat { flex: 1; min-width: 100px; }
 .edit-row .e-due, .edit-row .e-priority { min-width: 0; }
@@ -102,13 +104,13 @@ h1 { margin: 0; font-size: 1.9rem; font-weight: 700; letter-spacing: -.02em; lin
 .edit, .delete {
   width: 44px; height: 44px; flex: none;
   border: none; border-radius: 10px; background: none;
-  color: var(--muted); font-size: 1.4rem;
-  opacity: .35; transition: opacity .15s, background .15s, color .15s;
+  color: var(--muted); font-size: 1.1rem;
+  opacity: 0; transition: opacity .15s, background .15s, color .15s;
 }
 .edit:hover, .delete:hover { background: var(--card); }
-.todo-item:hover .edit, .edit:focus { opacity: 1; }
+.todo-item:hover .edit, .edit:focus-visible { opacity: 1; }
 .edit:hover { color: var(--accent); }
-@media (hover: none) { .edit { opacity: 1; } }
+@media (hover: none) { .edit, .delete { opacity: .6; } }
 input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 .primary {
   padding: 12px 26px;
@@ -120,15 +122,15 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 
 /* AI usage meter */
 .usage {
-  display: block; width: 100%; margin-top: 10px; padding: 10px 14px;
-  border: 1px solid var(--border); border-radius: 12px; background: var(--card);
-  text-align: left; color: var(--muted); font-size: .95rem;
-  transition: border-color .15s;
+  display: block; width: 100%; margin-top: 6px; padding: 8px 4px; min-height: 44px;
+  border: none; border-radius: 10px; background: none;
+  text-align: left; color: var(--muted); font-size: .8rem;
+  transition: color .15s;
 }
-.usage:hover { border-color: var(--accent); }
-.usage-label { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.usage:hover .usage-label { color: var(--text); }
+.usage-label { display: flex; justify-content: space-between; margin-bottom: 4px; }
 .usage-label b { color: var(--text); font-weight: 600; }
-.usage-bar { display: block; height: 8px; border-radius: 999px; background: var(--accent-soft); overflow: hidden; }
+.usage-bar { display: block; height: 4px; border-radius: 999px; background: var(--accent-soft); overflow: hidden; }
 #usage-fill { display: block; height: 100%; width: 0; background: var(--low); border-radius: 999px; transition: width .4s, background .4s; }
 #usage-fill.warn { background: var(--med); }
 #usage-fill.full { background: var(--high); }
@@ -155,20 +157,22 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .toolbar { display: flex; gap: 8px; margin: 18px 0 10px; }
 .toolbar input { flex: 1; min-width: 0; background: var(--card); }
 .toolbar select { flex: none; max-width: 45%; background: var(--card); }
-.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .chips:empty { display: none; }
 .chip {
-  padding: 8px 18px;
+  position: relative;
+  padding: 6px 14px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--card);
   color: var(--muted);
-  font-size: 1.05rem;
-  min-height: 44px;
+  font-size: .9rem;
+  min-height: 40px;
   transition: border-color .15s, color .15s;
 }
 .chip:hover { border-color: var(--accent); color: var(--text); }
-.chip.active { background: var(--text); border-color: var(--text); color: var(--card); }
+.chip::after { content: ""; position: absolute; inset: -2px 0; } /* 44px tap height */
+.chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
 
 /* Task list */
 .list { list-style: none; margin: 10px 0 0; padding: 4px; }
@@ -189,8 +193,9 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 
 .check {
   appearance: none;
-  width: 30px; height: 30px; flex: none;
-  border: 2px solid var(--muted);
+  position: relative;
+  width: 24px; height: 24px; flex: none;
+  border: 2px solid color-mix(in srgb, var(--muted) 50%, transparent);
   border-radius: 50%;
   display: grid; place-items: center;
   margin: 0;
@@ -198,28 +203,28 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   cursor: pointer;
   transition: border-color .15s, background .15s;
 }
+.check::before { content: ""; position: absolute; inset: -12px; } /* 44px tap area */
 .check:hover { border-color: var(--accent); }
 .check:checked { background: var(--accent); border-color: var(--accent); }
-.check:checked::after { content: "✓"; color: var(--on-accent); font-size: 16px; font-weight: 700; }
+.check:checked::after { content: "✓"; color: var(--on-accent); font-size: 14px; font-weight: 700; }
 
 .body { flex: 1; min-width: 0; }
-.text { word-break: break-word; font-size: 1.08rem; }
+.text { word-break: break-word; font-size: 1rem; }
 .text[contenteditable="true"] { outline: 2px solid var(--accent); border-radius: 4px; padding: 0 4px; }
 .done .text { text-decoration: line-through; color: var(--muted); }
-.meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; font-size: .85rem; color: var(--muted); }
+.meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; font-size: .8rem; color: var(--muted); }
 .meta:empty { display: none; }
 .tag { padding: 1px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
 .due.overdue { color: var(--high); font-weight: 600; }
 
-.todo-item:hover .delete, .delete:focus { opacity: 1; }
+.todo-item:hover .delete, .delete:focus-visible { opacity: 1; }
 .delete:hover { color: var(--high); }
 .done .check:hover { filter: brightness(1.1); }
-@media (hover: none) { .delete { opacity: 1; } }
 
 .empty { text-align: center; color: var(--muted); padding: 32px 0; }
 
-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; color: var(--muted); font-size: 1.05rem; }
-.link { border: none; background: none; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; padding: 10px 6px; min-height: 44px; font-size: 1.05rem; border-radius: 10px; }
+footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; color: var(--muted); font-size: .9rem; }
+.link { border: none; background: none; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; padding: 10px 6px; min-height: 44px; font-size: .9rem; border-radius: 10px; }
 .link:hover { color: var(--high); }
 
 @media (max-width: 480px) {
@@ -228,7 +233,9 @@ footer { display: flex; justify-content: space-between; align-items: center; mar
   .sub { font-size: .9rem; }
   .add { padding-left: 14px; }
   .chip { padding: 8px 14px; }
-  .primary { padding: 12px 20px; }
+  .primary { padding: 12px 16px; }
+  .top-actions { gap: 6px; }
+  #todo-input::placeholder { font-size: .95rem; }
   .todo-item { gap: 10px; padding: 12px 8px 12px 10px; }
   .edit-row > * { flex: 1 1 45%; }
   .edit-row .e-text, .edit-row .e-notes, .edit-row .e-files, .edit-row .e-due { flex: 1 1 100%; }

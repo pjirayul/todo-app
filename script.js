@@ -82,6 +82,7 @@ function render() {
   document.documentElement.lang = settings.lang;
   document.documentElement.dataset.theme = settings.theme;
   document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
+  if ($("add-btn").disabled) $("add-btn").textContent = t("thinking"); // still waiting for AI
   document.querySelectorAll("[data-i18n-ph]").forEach((el) => (el.placeholder = t(el.dataset.i18nPh)));
   $("lang").textContent = settings.lang === "en" ? "TH" : "EN";
   $("theme").textContent = settings.theme === "dark" ? "☀️" : "🌙";
@@ -186,32 +187,40 @@ $("todo-form").addEventListener("submit", async (e) => {
   button.disabled = input.disabled = true;
   button.textContent = t("thinking");
   let task = { text, due: "", priority: "med", category: "" };
+  let problem = ""; // message to show after the box is usable again
   try {
-    if (usageToday() >= settings.aiLimit) throw new Error(t("limitHit"));
-    const now = new Date();
-    const res = await fetch("api/parse", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text,
-        now: `${now.toLocaleDateString("en-CA")}T${now.toTimeString().slice(0, 5)} ${now.toLocaleDateString("en-US", { weekday: "long" })}`,
-        categories: [...new Set(todos.map((x) => x.cat).filter(Boolean))],
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || res.status);
-    task = data;
-    addUsage(data.tokens);
-  } catch (err) {
-    console.warn("AI unavailable:", err);
-    alert(err.message === t("limitHit") ? t("limitHit") : t("aiOff"));
+    try {
+      if (usageToday() >= settings.aiLimit) throw new Error(t("limitHit"));
+      const now = new Date();
+      const res = await fetch("api/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          now: `${now.toLocaleDateString("en-CA")}T${now.toTimeString().slice(0, 5)} ${now.toLocaleDateString("en-US", { weekday: "long" })}`,
+          categories: [...new Set(todos.map((x) => x.cat).filter(Boolean))],
+        }),
+        signal: AbortSignal.timeout(30000), // a stuck AI must not freeze the box forever
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`); // e.g. GitHub Pages sends an HTML error page
+      const data = await res.json();
+      if (!data.text) throw new Error("AI gave no task");
+      task = data;
+      addUsage(data.tokens);
+    } catch (err) {
+      console.warn("AI unavailable:", err);
+      problem = err.message === t("limitHit") ? t("limitHit") : t("aiOff");
+    }
+    todos.push({ id: Date.now() + Math.random(), text: task.text, done: false, due: task.due || "", priority: task.priority || "med", cat: task.category || "", notified: false, notes: "", files: [] });
+    input.value = "";
+    update();
+  } finally {
+    // Always give the box back, even if something above went wrong
+    button.disabled = input.disabled = false;
+    button.textContent = t("add");
+    input.focus();
   }
-  todos.push({ id: Date.now() + Math.random(), text: task.text, done: false, due: task.due, priority: task.priority, cat: task.category, notified: false, notes: "", files: [] });
-  input.value = "";
-  button.disabled = input.disabled = false;
-  button.textContent = t("add");
-  input.focus();
-  update();
+  if (problem) alert(problem);
 });
 
 // ---------- 5. Clicks inside the list: tick, edit, delete ----------

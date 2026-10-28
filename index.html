@@ -6,7 +6,8 @@
   <title>My To-Do List</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <!-- ?v= makes browsers fetch the new file after an update (raise it on each release) -->
+  <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
   <main class="app">
@@ -19,6 +20,7 @@
         <button id="lang" class="icon-btn" title="Language">TH</button>
         <button id="theme" class="icon-btn" title="Dark mode">🌙</button>
         <button id="notify" class="icon-btn" title="Reminders">🔔</button>
+        <a href="status.html" class="icon-btn" title="Team status">📊</a>
       </div>
     </header>
 
@@ -61,6 +63,6 @@
     </footer>
   </main>
 
-  <script src="script.js"></script>
+  <script src="script.js?v=4"></script>
 </body>
 </html>

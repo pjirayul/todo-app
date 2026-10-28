@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team Status</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f3f1ed; --card: #fff; --text: #1f1d2b; --muted: #7d7a8c; --border: #e8e5ef;
+      --accent: #5b4cf0; --accent-soft: #eeebff; --green: #30a46c; --amber: #f5a524; --red: #e5484d;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #121119; --card: #1c1b26; --text: #ecebf5; --muted: #8f8ca3; --border: #2c2a3a; --accent: #8b7fff; --accent-soft: #2a2647; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: "Inter", "Noto Sans Thai", system-ui, sans-serif; line-height: 1.5; padding: 32px 16px; }
+    .wrap { max-width: 640px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
+    h1 { margin: 0; font-size: 1.7rem; }
+    h2 { font-size: 1rem; margin: 28px 0 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+    a { color: var(--accent); }
+    .updated { color: var(--muted); font-size: .9rem; }
+    .stale { color: var(--amber); }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px; }
+    .card + .card { margin-top: 10px; }
+    .agent { display: flex; gap: 14px; align-items: flex-start; }
+    .avatar { width: 44px; height: 44px; flex: none; border-radius: 12px; display: grid; place-items: center; font-size: 1.4rem; background: var(--accent-soft); }
+    .name { font-weight: 600; font-size: 1.05rem; }
+    .role { color: var(--muted); font-size: .9rem; }
+    .job { margin-top: 6px; font-size: .95rem; }
+    .badge { margin-left: auto; padding: 4px 12px; border-radius: 999px; font-size: .85rem; font-weight: 600; white-space: nowrap; }
+    .working { background: #e6f0ff; color: #2563eb; }
+    .working::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: currentColor; animation: pulse 1.2s infinite; }
+    .done { background: #e3f6ec; color: var(--green); }
+    .idle { background: var(--accent-soft); color: var(--muted); }
+    @keyframes pulse { 50% { opacity: .3; } }
+    .meter-top { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .meter-top b { font-size: 1.1rem; }
+    .bar { height: 10px; border-radius: 999px; background: var(--accent-soft); overflow: hidden; }
+    .fill { height: 100%; border-radius: 999px; background: var(--green); transition: width .5s; }
+    .fill.warn { background: var(--amber); }
+    .fill.full { background: var(--red); }
+    .resets { margin-top: 6px; color: var(--muted); font-size: .85rem; }
+    .note { color: var(--muted); font-size: .85rem; margin-top: 24px; }
+    .back {
+      display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; margin-bottom: 16px;
+      border: 1px solid var(--border); border-radius: 12px; background: var(--card);
+      color: var(--text); text-decoration: none; font-weight: 600;
+    }
+    .back:hover { border-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <a href="/" class="back">← My Tasks</a>
+    <header>
+      <h1>Team Status</h1>
+      <span class="updated" id="updated">Loading…</span>
+    </header>
+
+    <h2>Agents</h2>
+    <div id="agents"></div>
+
+    <h2>Claude usage (<span id="plan">…</span> plan)</h2>
+    <div id="usage"></div>
+
+    <p class="note">
+      This page checks for new data every 10 seconds. Claude writes the data while it's working in your session,
+      so when Claude is idle the numbers stay at the last update time shown above.
+    </p>
+  </div>
+
+  <script>
+    const ICONS = { George: "🎨", Kimi: "💻", Claude: "🤖" };
+    const LABELS = { working: "Working", done: "Done", idle: "Idle" };
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+    function timeAgo(iso) {
+      const min = Math.round((Date.now() - new Date(iso)) / 60000);
+      return min < 1 ? "just now" : min < 60 ? `${min} min ago` : `${Math.round(min / 60)} h ago`;
+    }
+    function resetsIn(iso) {
+      const min = Math.max(0, Math.round((new Date(iso) - Date.now()) / 60000));
+      const d = Math.floor(min / 1440), h = Math.floor((min % 1440) / 60), m = min % 60;
+      return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
+    }
+
+    async function refresh() {
+      try {
+        const data = await (await fetch(`status.json?t=${Date.now()}`)).json();
+        const old = Date.now() - new Date(data.updated) > 30 * 60000;
+        const upd = document.getElementById("updated");
+        upd.textContent = `Updated ${timeAgo(data.updated)}`;
+        upd.classList.toggle("stale", old);
+
+        document.getElementById("agents").innerHTML = data.agents.map((a) => `
+          <div class="card agent">
+            <div class="avatar">${ICONS[a.name] || "🧑"}</div>
+            <div>
+              <div class="name">${esc(a.name)} <span class="role">· ${esc(a.role)}</span></div>
+              <div class="job">${esc(a.job)}</div>
+            </div>
+            <span class="badge ${esc(a.status)}">${LABELS[a.status] || esc(a.status)}</span>
+          </div>`).join("");
+
+        document.getElementById("plan").textContent = data.usage.plan;
+        document.getElementById("usage").innerHTML = data.usage.windows.map((w) => {
+          const cls = w.percentUsed >= 90 ? "full" : w.percentUsed >= 70 ? "warn" : "";
+          return `
+          <div class="card">
+            <div class="meter-top"><span>${esc(w.label)}</span><b>${w.percentUsed}% used</b></div>
+            <div class="bar"><div class="fill ${cls}" style="width:${Math.min(100, w.percentUsed)}%"></div></div>
+            <div class="resets">${100 - w.percentUsed}% left · resets in ${resetsIn(w.resetsAt)}</div>
+          </div>`;
+        }).join("");
+      } catch (err) {
+        document.getElementById("updated").textContent = "No status data yet";
+      }
+    }
+    refresh();
+    setInterval(refresh, 10000);
+  </script>
+</body>
+</html>

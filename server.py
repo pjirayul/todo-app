@@ -189,6 +189,11 @@ def parse_task(sentence: str, now: str, categories: list) -> dict:
 
 
 class Handler(SimpleHTTPRequestHandler):
+    def end_headers(self):
+        # Make the browser re-check files every time, so an old script.js never mixes with a new page
+        self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
     def do_POST(self):
         if self.path != "/api/parse":
             return self.send_error(404)
