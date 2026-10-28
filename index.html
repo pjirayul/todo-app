@@ -23,21 +23,18 @@
     </header>
 
     <!-- Add a task -->
+    <!-- Type anything and press Enter: AI fills in date, priority and category -->
     <form id="todo-form" class="card add">
-      <input id="todo-input" type="text" data-i18n-ph="placeholder" placeholder="What do you need to do?" autocomplete="off" required>
-      <div class="add-row">
-        <input id="due-input" type="datetime-local" title="Due date">
-        <select id="priority-input" title="Priority">
-          <option value="low" data-i18n="low">Low</option>
-          <option value="med" data-i18n="med" selected>Medium</option>
-          <option value="high" data-i18n="high">High</option>
-        </select>
-        <input id="cat-input" list="cat-list" data-i18n-ph="category" placeholder="Category" autocomplete="off">
-        <datalist id="cat-list"></datalist>
-        <button type="button" id="ai-add" class="ai" data-i18n="ai" title="Let AI fill in date, priority and category">✨ AI</button>
-        <button type="submit" class="primary" data-i18n="add">Add</button>
-      </div>
+      <input id="todo-input" type="text" data-i18n-ph="placeholder" placeholder="e.g. pay rent on the 5th of next month, urgent" autocomplete="off" required>
+      <button type="submit" id="add-btn" class="primary" data-i18n="add">✨ Add</button>
     </form>
+    <datalist id="cat-list"></datalist>
+
+    <!-- How much AI the app used today, against a daily limit you choose -->
+    <button id="usage" class="usage" title="Click to change the daily limit">
+      <span class="usage-label"><span data-i18n="aiToday">AI used today</span> <b id="usage-text"></b></span>
+      <span class="usage-bar"><span id="usage-fill"></span></span>
+    </button>
 
     <!-- Search, filters, sort -->
     <div class="toolbar">
