@@ -23,6 +23,18 @@
   --warn-border: #f7deb0;
   --flash: rgba(91, 76, 240, .16); /* changed-task highlight */
   --flash-ring: rgba(91, 76, 240, .45);
+  /* "AI" look for buttons: one soft violet gradient, used sparingly */
+  --ai-grad: linear-gradient(120deg, #5b4cf0 0%, #7a45e8 50%, #9b3fd6 100%);
+  --ai-glow: rgba(98, 70, 235, .32);         /* soft shadow under the gradient button */
+  --ai-ring: linear-gradient(120deg, #7b6cff, #b07cf5, #f0a3c8, #7b6cff); /* command bar border when focused */
+  --glass: rgba(255, 255, 255, .72);         /* frosted secondary buttons */
+  --glass-hi: rgba(255, 255, 255, .9);       /* top highlight line on glass */
+  --hover-shadow: 0 2px 4px rgba(20, 16, 50, .05), 0 6px 16px rgba(20, 16, 50, .08);
+  --chip-on: linear-gradient(120deg, #eeebff, #f4e9ff);  /* selected chip */
+  --chip-on-line: rgba(91, 76, 240, .45);
+  --chip-on-text: #4a3bd6;
+  --danger-soft: rgba(229, 72, 77, .1);
+  --shimmer: rgba(255, 255, 255, .38);       /* light sweep while AI is thinking */
 }
 
 [data-theme="dark"] {
@@ -46,6 +58,17 @@
   --warn-border: #4a3a1e;
   --flash: rgba(139, 127, 255, .22);
   --flash-ring: rgba(139, 127, 255, .6);
+  --ai-grad: linear-gradient(120deg, #8b7fff 0%, #a98bfa 50%, #c99af2 100%);
+  --ai-glow: rgba(139, 127, 255, .28);
+  --ai-ring: linear-gradient(120deg, #8b7fff, #b48cf7, #e59ac4, #8b7fff);
+  --glass: rgba(34, 32, 48, .66);
+  --glass-hi: rgba(255, 255, 255, .06);
+  --hover-shadow: 0 6px 18px rgba(0, 0, 0, .4);
+  --chip-on: linear-gradient(120deg, #2c2752, #35254d);
+  --chip-on-line: rgba(139, 127, 255, .6);
+  --chip-on-text: #d4cfff;
+  --danger-soft: rgba(229, 72, 77, .16);
+  --shimmer: rgba(255, 255, 255, .45);
   color-scheme: dark;
 }
 
@@ -81,18 +104,31 @@ button:focus-visible, a:focus-visible, .check:focus-visible { outline: 2px solid
 h1 { margin: 0; font-size: 1.9rem; font-weight: 700; letter-spacing: -.02em; line-height: 1.25; }
 .sub { margin: 4px 0 0; color: var(--muted); }
 .top-actions { display: flex; gap: 8px; flex: none; }
+/* Shared "glass" look for quiet buttons: frosted fill, hairline border, light top edge */
+.icon-btn, .chip, .edit-row button:not(.primary) {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  box-shadow: inset 0 1px 0 var(--glass-hi), 0 1px 2px rgba(20, 16, 50, .04);
+  transition: border-color .2s, color .2s, box-shadow .2s, transform .15s ease, background .2s;
+}
 .icon-btn {
   width: 44px; height: 44px;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid var(--border);
-  background: var(--card);
   font-weight: 600; font-size: .9rem;
-  transition: border-color .15s, transform .1s;
 }
-.icon-btn:hover { border-color: var(--accent); }
 a.icon-btn { display: grid; place-items: center; text-decoration: none; color: inherit; } /* link that looks like a button */
-.icon-btn:active, .primary:active, .chip:active { transform: scale(.96); }
-.icon-btn.on { background: var(--accent-soft); border-color: var(--accent); }
+.icon-btn.on { background: var(--chip-on); border-color: var(--chip-on-line); color: var(--chip-on-text); }
+/* Lift on hover only where there is a mouse (no "stuck" hover on phones) */
+@media (hover: hover) {
+  .icon-btn:hover, .chip:hover, .edit-row button:not(.primary):hover {
+    border-color: var(--chip-on-line);
+    box-shadow: inset 0 1px 0 var(--glass-hi), var(--hover-shadow);
+    transform: translateY(-1px);
+  }
+}
+/* Press: a quick squeeze */
+.icon-btn:active, .chip:active, .edit-row button:active, .primary:active:not(:disabled) { transform: scale(.96); transition-duration: .06s; }
 
 /* Add form */
 .add { padding: 10px 10px 10px 16px; display: flex; gap: 8px; align-items: center; }
@@ -104,7 +140,24 @@ a.icon-btn { display: grid; place-items: center; text-decoration: none; color: i
 #todo-input { text-overflow: ellipsis; }
 /* Placeholder is a long example: a touch smaller than typed text so it fits */
 #todo-input::placeholder { color: var(--muted); font-size: .95rem; letter-spacing: -.005em; opacity: 1; }
-.add:focus-within { border-color: var(--accent); }
+/* Command bar border: plain at rest, soft AI gradient + glow when you type, slowly flowing while AI thinks.
+   (Trick: the card fill sits on the padding box, the gradient on the border box, so it shows only in the border.) */
+.add {
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(var(--border), var(--border)) border-box;
+  transition: box-shadow .25s, background .25s;
+}
+.add:focus-within, .add:has(#add-btn:disabled) {
+  background:
+    linear-gradient(var(--card), var(--card)) padding-box,
+    var(--ai-ring) border-box;
+  background-size: 100% 100%, 300% 100%;
+  box-shadow: var(--shadow), 0 0 0 4px var(--accent-soft), 0 8px 28px var(--ai-glow);
+}
+.add:has(#add-btn:disabled) { animation: ring-flow 3s linear infinite; }
+@keyframes ring-flow { to { background-position: 0 0, 300% 0; } }
 .add #todo-input:focus { outline: none; }
 .edit-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .edit-row input, .edit-row select, .toolbar input, .toolbar select {
@@ -118,43 +171,74 @@ a.icon-btn { display: grid; place-items: center; text-decoration: none; color: i
 .edit-row .e-text { flex: 1 1 100%; }
 .edit-row .e-cat { flex: 1; min-width: 100px; }
 .edit-row .e-due, .edit-row .e-priority { min-width: 0; }
-.edit-row button { padding: 10px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); font-size: 1.1rem; }
-.edit-row .primary { border: none; background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.edit-row button { padding: 10px 18px; min-height: 44px; border-radius: 12px; border: 1px solid var(--border); font-size: 1.1rem; }
+.edit-row .primary { border: none; }
 .edit-form { padding: 4px 0; }
 .todo-item.editing, .todo-item.editing:hover { background: var(--accent-soft); }
+/* Row buttons ✎ and ×: invisible until the row is hovered, then a soft rounded tile */
 .edit, .delete {
   width: 44px; height: 44px; flex: none;
-  border: none; border-radius: 10px; background: none;
+  border: 1px solid transparent; border-radius: 12px; background: none;
   color: var(--muted); font-size: 1.1rem;
-  opacity: 0; transition: opacity .15s, background .15s, color .15s;
+  opacity: 0; transition: opacity .15s, background .2s, color .2s, border-color .2s, box-shadow .2s, transform .15s;
 }
-.edit:hover, .delete:hover { background: var(--card); }
+.edit:hover { background: var(--glass); border-color: var(--chip-on-line); color: var(--accent); box-shadow: var(--hover-shadow); }
+.edit:active, .delete:active { transform: scale(.92); }
 .todo-item:hover .edit, .edit:focus-visible { opacity: 1; }
-.edit:hover { color: var(--accent); }
 @media (hover: none) { .edit, .delete { opacity: .6; } }
 input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+/* The hero "✨ Go" button (and Save): violet gradient, soft glow, light top edge */
 .primary {
-  padding: 12px 26px;
-  border: none; border-radius: 12px;
-  background: var(--accent); color: var(--on-accent); font-weight: 600; font-size: 1.1rem;
+  position: relative; overflow: hidden; isolation: isolate;
+  padding: 12px 26px; min-height: 48px;
+  border: none; border-radius: 14px;
+  background: var(--ai-grad); background-size: 160% 100%; background-position: 0 0;
+  color: var(--on-accent); font-weight: 600; font-size: 1.1rem; white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), 0 4px 14px var(--ai-glow);
+  transition: background-position .4s ease, box-shadow .25s, transform .15s ease;
 }
-.primary:hover { filter: brightness(1.1); }
-.primary:disabled { opacity: .6; cursor: wait; }
+@media (hover: hover) {
+  .primary:hover:not(:disabled) {
+    background-position: 100% 0;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .32), 0 8px 24px var(--ai-glow);
+    transform: translateY(-1px);
+  }
+}
+/* Thinking ("✨ …", disabled): stays readable, glows softly, a light sweep passes over it */
+.primary:disabled { cursor: progress; animation: think-glow 1.6s ease-in-out infinite; }
+.primary:disabled::after {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(100deg, transparent 30%, var(--shimmer) 50%, transparent 70%);
+  background-size: 250% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+@keyframes shimmer { from { background-position: 150% 0; } to { background-position: -100% 0; } }
+@keyframes think-glow {
+  50% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), 0 4px 22px var(--ai-glow), 0 0 0 4px var(--accent-soft); }
+}
 
 /* AI usage meter */
+/* Quiet strip: becomes a frosted tile on hover */
 .usage {
-  display: block; width: 100%; margin-top: 6px; padding: 8px 4px; min-height: 44px;
-  border: none; border-radius: 10px; background: none;
+  display: block; width: 100%; margin-top: 8px; padding: 8px 12px; min-height: 44px;
+  border: 1px solid transparent; border-radius: 12px; background: none;
   text-align: left; color: var(--muted); font-size: .8rem;
-  transition: color .15s;
+  transition: color .2s, background .2s, border-color .2s;
 }
+.usage:hover { background: var(--glass); border-color: var(--border); }
 .usage:hover .usage-label { color: var(--text); }
-.usage-label { display: flex; justify-content: space-between; margin-bottom: 4px; }
-.usage-label b { color: var(--text); font-weight: 600; }
-.usage-bar { display: block; height: 4px; border-radius: 999px; background: var(--accent-soft); overflow: hidden; }
-#usage-fill { display: block; height: 100%; width: 0; background: var(--low); border-radius: 999px; transition: width .4s, background .4s; }
-#usage-fill.warn { background: var(--med); }
-#usage-fill.full { background: var(--high); }
+.usage-label { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.usage-label b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.usage-bar { display: block; height: 6px; border-radius: 999px; background: var(--accent-soft); overflow: hidden; }
+/* Fill keeps its meaning colour (green / amber / red) with a light sheen on top */
+#usage-fill {
+  display: block; height: 100%; width: 0; border-radius: 999px;
+  background-color: var(--low);
+  background-image: linear-gradient(90deg, rgba(255, 255, 255, .0), rgba(255, 255, 255, .35));
+  transition: width .4s, background-color .4s;
+}
+#usage-fill.warn { background-color: var(--med); }
+#usage-fill.full { background-color: var(--high); }
 
 /* Notes and attachments */
 .notes { margin-top: 4px; font-size: .9rem; color: var(--muted); white-space: pre-wrap; word-break: break-word; }
@@ -185,15 +269,20 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   padding: 6px 14px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: var(--card);
   color: var(--muted);
   font-size: .9rem;
   min-height: 40px;
-  transition: border-color .15s, color .15s;
 }
-.chip:hover { border-color: var(--accent); color: var(--text); }
+.chip:hover { color: var(--text); }
 .chip::after { content: ""; position: absolute; inset: -2px 0; } /* 44px tap height */
-.chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.chip.active { background: var(--chip-on); border-color: var(--chip-on-line); color: var(--chip-on-text); font-weight: 600; }
+
+/* Yes / No inside a message box: Yes is a solid gradient button, No stays glass */
+.cmd-msg .chip { color: var(--text); }
+.cmd-msg .chip.active {
+  background: var(--ai-grad); color: var(--on-accent); border-color: transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), 0 3px 10px var(--ai-glow);
+}
 
 /* Task list */
 .list { list-style: none; margin: 10px 0 0; padding: 4px; }
@@ -269,10 +358,15 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 @media (prefers-reduced-motion: reduce) {
   .todo-item.flash { animation-duration: 2.4s; animation-timing-function: steps(1, end); }
   .cmd-msg { animation: none; }
+  /* No movement: thinking state is shown by the steady glow ring instead of the sweep */
+  .primary:disabled, .add:has(#add-btn:disabled) { animation: none; }
+  .primary:disabled { box-shadow: 0 0 0 4px var(--accent-soft), 0 4px 14px var(--ai-glow); }
+  .primary:disabled::after { animation: none; background: none; }
+  .icon-btn, .chip, .primary, .edit, .delete, .edit-row button { transform: none !important; }
 }
 
 .todo-item:hover .delete, .delete:focus-visible { opacity: 1; }
-.delete:hover { color: var(--high); }
+.delete:hover { color: var(--high); background: var(--danger-soft); border-color: transparent; }
 .done .check:hover { filter: brightness(1.1); }
 
 .empty { text-align: center; color: var(--muted); padding: 32px 0; }
@@ -283,7 +377,15 @@ footer { display: flex; justify-content: space-between; align-items: center; mar
 
 /* Backup menu under the footer (reuses .link, .chip and .cmd-msg) */
 .backup-menu { margin-top: 4px; color: var(--muted); font-size: .9rem; }
-.backup-menu summary { display: inline-flex; align-items: center; cursor: pointer; list-style: none; }
+.backup-menu summary {
+  display: inline-flex; align-items: center; cursor: pointer; list-style: none;
+  padding: 10px 14px; border: 1px solid transparent; border-radius: 999px; text-decoration: none;
+  transition: background .2s, border-color .2s, color .2s;
+}
+.backup-menu summary:hover, .backup-menu[open] summary { color: var(--text); background: var(--glass); border-color: var(--border); }
+.backup-menu summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.link:hover { background: var(--danger-soft); }
+#clear-done { text-decoration: none; padding: 10px 14px; border-radius: 999px; }
 .backup-menu summary::-webkit-details-marker { display: none; }
 .backup-menu .chip { min-height: 44px; }
 .backup-note { margin: 4px 2px 8px; font-size: .8rem; }

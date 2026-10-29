@@ -41,6 +41,7 @@
     .fill { height: 100%; border-radius: 999px; background: var(--green); transition: width .5s; }
     .fill.warn { background: var(--amber); }
     .fill.full { background: var(--red); }
+    .fill.unknown { background: var(--muted); opacity: .4; }
     .resets { margin-top: 6px; color: var(--muted); font-size: .85rem; }
     .note { color: var(--muted); font-size: .85rem; margin-top: 24px; }
     .back {
@@ -107,11 +108,12 @@
     <div id="inbox"></div>
 
     <h2>Claude usage (<span id="plan">…</span> plan)</h2>
+    <p class="updated" id="checked"></p>
     <div id="usage"></div>
 
     <p class="note">
       This page checks for new data every 10 seconds. Toto writes the data while he's working in your session,
-      so when Toto is idle the numbers stay at the last update time shown above.
+      so when Toto is idle the usage numbers stay at the "Checked" time shown above.
     </p>
   </div>
 
@@ -148,14 +150,30 @@
             <span class="badge ${esc(a.status)}">${LABELS[a.status] || esc(a.status)}</span>
           </div>`).join("");
 
+        // Usage numbers have their own time: only Toto can read them, and the agents'
+        // "Updated" time can be newer than the numbers. So show when they were really checked.
+        const checkedAt = data.usage.checkedAt || data.updated;
+        const usageOld = !(Date.now() - new Date(checkedAt) <= 15 * 60000);  // also true if the date is broken
+        const chk = document.getElementById("checked");
+        chk.textContent = `Checked ${timeAgo(checkedAt)}`;
+        chk.classList.toggle("stale", usageOld);
+
         document.getElementById("plan").textContent = data.usage.plan;
-        document.getElementById("usage").innerHTML = data.usage.windows.map((w) => {
-          const cls = w.percentUsed >= 90 ? "full" : w.percentUsed >= 70 ? "warn" : "";
+        const warning = usageOld ? `
+          <div class="card new">These numbers may be out of date — ask Toto "show my usage" to refresh.</div>` : "";
+        document.getElementById("usage").innerHTML = warning + data.usage.windows.map((w) => {
+          const pct = Number(w.percentUsed) || 0;
+          const resetDate = w.resetsAt ? new Date(w.resetsAt) : null;
+          // The window already reset after Toto checked: the old percent no longer means anything
+          const wasReset = resetDate && resetDate <= Date.now();
+          let cls = pct >= 90 ? "full" : pct >= 70 ? "warn" : "";
+          let when = resetDate ? `resets in ${resetsIn(w.resetsAt)}` : "not started";
+          if (wasReset) { cls = "unknown"; when = "reset — ask Toto to refresh"; }
           return `
           <div class="card">
-            <div class="meter-top"><span>${esc(w.label)}</span><b>${w.percentUsed}% used</b></div>
-            <div class="bar"><div class="fill ${cls}" style="width:${Math.min(100, w.percentUsed)}%"></div></div>
-            <div class="resets">${100 - w.percentUsed}% left · resets in ${resetsIn(w.resetsAt)}</div>
+            <div class="meter-top"><span>${esc(w.label)}</span><b>${wasReset ? "unknown" : `${pct}% used`}</b></div>
+            <div class="bar"><div class="fill ${cls}" style="width:${wasReset ? 100 : Math.min(100, pct)}%"></div></div>
+            <div class="resets">${wasReset ? "" : `${100 - pct}% left · `}${esc(when)}</div>
           </div>`;
         }).join("");
       } catch (err) {
