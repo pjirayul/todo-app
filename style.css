@@ -3,6 +3,7 @@
   /* Icons drawn in CSS (where an <svg> can't go): tick, message, warning. Same lines as the icon set. */
   --tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
   --ic-message: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20V7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H8z'/%3E%3C/svg%3E");
+  --wave-white: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2'/%3E%3C/svg%3E");
   --ic-alert: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.3 4.6L2.9 17.5a2 2 0 0 0 1.7 3h14.8a2 2 0 0 0 1.7-3L13.7 4.6a2 2 0 0 0-3.4 0z'/%3E%3Cpath d='M12 10v3.5M12 17h.01'/%3E%3C/svg%3E");
   --bg: #f3f1ed;
   --bg-grad: radial-gradient(circle at 15% 0%, #e7e3ff 0, transparent 45%), radial-gradient(circle at 90% 10%, #ffe9dc 0, transparent 40%);
@@ -401,12 +402,71 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .cmd-msg.warn { background: var(--warn-bg); color: var(--warn-text); border-color: var(--warn-border); }
 .cmd-msg.warn::before { -webkit-mask-image: var(--ic-alert); mask-image: var(--ic-alert); }
 .cmd-msg:empty { display: none; }
-/* "Max asks when unsure" (askMax in script.js): question, optional inputs, answer chips. Minimal — George styles */
-.cmd-msg.ask { flex-wrap: wrap; align-items: center; }
-.cmd-msg.ask .ask-q { flex: 1 1 80%; }
-.cmd-msg.ask .ask-field { flex: 1 1 100%; display: flex; gap: 8px; align-items: center; }
-.cmd-msg.ask .ask-field input { flex: 1; min-width: 0; max-width: 18em; }
-.cmd-msg.ask .ask-chips { flex: 1 1 100%; margin: 0; }
+/* "Max asks when unsure" (askMax in script.js): Max talking under the command bar.
+   A soft card with a little notch pointing up at the bar, Max's voice-wave avatar,
+   the question, optional fields (Where / When / Budget, or a date), then answer chips. */
+.cmd-msg.ask {
+  position: relative;
+  display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: 12px; row-gap: 10px; align-items: start;
+  margin-top: 12px; padding: 14px 14px 14px 12px; border-radius: 18px;
+  border-color: var(--info-border); color: var(--text);
+  background: linear-gradient(180deg, var(--accent-soft), var(--card) 85%);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi);
+  animation: ask-in .28s cubic-bezier(.2, .8, .2, 1);
+}
+/* Max's avatar: the voice wave on the AI gradient (same as the logo) */
+.cmd-msg.ask::before {
+  grid-column: 1; grid-row: 1; width: 30px; height: 30px; margin: 0; border-radius: 50%;
+  -webkit-mask: none; mask: none;
+  background: var(--wave-white) center / 16px no-repeat, var(--ai-grad);
+  box-shadow: 0 3px 10px var(--ai-glow);
+}
+/* The notch: the card "comes out of" the command bar */
+.cmd-msg.ask::after {
+  content: ""; position: absolute; top: -7px; left: 22px; width: 12px; height: 12px; transform: rotate(45deg);
+  background: var(--accent-soft); border-left: 1px solid var(--info-border); border-top: 1px solid var(--info-border);
+  border-top-left-radius: 3px;
+}
+.cmd-msg.ask > * { grid-column: 2; }
+.cmd-msg.ask .ask-q { grid-row: 1; align-self: center; font-weight: 600; font-size: .95rem; line-height: 1.45; min-height: 30px; display: flex; align-items: center; }
+/* Fields: label on the left, input like the edit form */
+.cmd-msg.ask .ask-field {
+  display: grid; grid-template-columns: 4.5em minmax(0, 1fr); gap: 10px; align-items: center;
+  font-size: .82rem; font-weight: 600; color: var(--muted);
+}
+.cmd-msg.ask .ask-field > input { grid-column: 2; }
+/* A field without a label (e.g. the date box): no label column */
+.cmd-msg.ask .ask-field:has(> input[aria-label]) { grid-template-columns: minmax(0, 1fr); }
+.cmd-msg.ask .ask-field:has(> input[aria-label]) > input { grid-column: 1; max-width: 16em; }
+.cmd-msg.ask .ask-field input {
+  width: 100%; max-width: 24em; min-width: 0; min-height: 44px; padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--text);
+  font-size: .95rem; font-weight: 400;
+  transition: border-color .2s, box-shadow .2s;
+}
+.cmd-msg.ask .ask-field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.cmd-msg.ask .ask-field input::placeholder { color: var(--muted); }
+.cmd-msg.ask .ask-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 0; }
+/* Answer chips (also the Yes / No buttons): rounded, 40px tall, 44px tap area; the main one in the gradient */
+.cmd-msg .chip { min-height: 40px; padding: 6px 16px; font-size: .9rem; background: var(--card); border-color: var(--border); }
+.cmd-msg .chip.active { font-weight: 600; }
+@media (hover: hover) { .cmd-msg .chip:not(.active):hover { color: var(--accent); } }
+/* Yes / No questions (delete, Clear done, restore): same rounded card, buttons wrap under the question on phones */
+.cmd-msg.warn:has(.chip) { flex-wrap: wrap; align-items: center; row-gap: 10px; padding: 12px 14px; border-radius: 18px; box-shadow: var(--shadow); animation: ask-in .28s cubic-bezier(.2, .8, .2, 1); }
+.cmd-msg.warn:has(.chip) > span:first-of-type { flex: 1 1 12em; font-weight: 600; color: var(--text); }
+.cmd-msg.warn:has(.chip)::before { margin-top: 0; align-self: center; }
+@keyframes ask-in { from { opacity: 0; transform: translateY(-6px) scale(.985); } }
+@media (max-width: 480px) {
+  .cmd-msg.ask { grid-template-columns: 28px minmax(0, 1fr); column-gap: 10px; padding: 12px 12px 12px 10px; }
+  .cmd-msg.ask::before { width: 28px; height: 28px; background-size: 15px auto, auto; }
+  .cmd-msg.ask .ask-field { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .cmd-msg.ask .ask-field > input { grid-column: 1; max-width: none; }
+  .cmd-msg .chip { flex: 1 1 auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cmd-msg.ask, .cmd-msg.warn:has(.chip) { animation: none; }
+  .cmd-msg.ask .ask-field input { transition: none; }
+}
 @keyframes msg-in { from { opacity: 0; transform: translateY(-3px); } }
 
 .todo-item.flash { animation: flash 1.8s ease-out; }
