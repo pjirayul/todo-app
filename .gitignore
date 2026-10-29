@@ -1,4 +1,4 @@
-﻿__pycache__/
+__pycache__/
 .claude/
 status.json
 inbox.json
@@ -6,3 +6,4 @@ ideas.json
 backups/
 data/
 max-memory.json
+backups-test/

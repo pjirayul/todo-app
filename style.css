@@ -605,3 +605,8 @@ footer { display: flex; justify-content: space-between; align-items: center; mar
   .todo-item:not(.editing) > .delete { grid-column: 5; }
   .step-rm { opacity: 1; }
 }
+
+/* TEST MODE badge (python server.py --test). George can polish this later. */
+.test-mode-badge { position: fixed; top: 0; left: 50%; transform: translateX(-50%); z-index: 1000;
+  background: #c0392b; color: #fff; font-weight: 700; font-size: 12px; letter-spacing: .08em;
+  padding: 2px 14px; border-radius: 0 0 8px 8px; pointer-events: none; }

@@ -342,12 +342,21 @@ function drawMax() {
   $("max-status").classList.toggle("ready", maxReady === true);
   $("max-text").textContent = t(maxReady === null ? "maxChecking" : maxReady ? "maxReady" : "maxOffline");
 }
+// Served by "python server.py --test": a clear badge so nobody mistakes it for the real list
+function showTestBadge() {
+  if (document.querySelector(".test-mode-badge")) return;
+  const badge = document.createElement("div");
+  badge.className = "test-mode-badge";
+  badge.textContent = "TEST MODE";
+  document.body.prepend(badge);
+}
 async function loadMax() {
   if (LOCAL) {
     try {
       const res = await fetch("api/max/status", { signal: AbortSignal.timeout(5000) });
       const data = await res.json();
       maxReady = res.ok && data.ready === true;
+      if (data.testMode) showTestBadge();
     } catch {
       maxReady = false;
     }

@@ -20,6 +20,9 @@ JavaScript plus a small Python server — my first learning project.
 2. Start the Ollama app.
 3. In this folder run `python server.py` and open **http://127.0.0.1:8000**
 
+Try things safely: `python server.py --test` opens a separate test copy at **http://127.0.0.1:8001** (own database, red TEST MODE badge).
+Run the automatic tests with `python -m unittest` (no AI needed).
+
 Your tasks are saved in `data/tasks.db` (plus a copy in the browser). Backups go to `backups/`.
 These, and the other private files (status, inbox, About me), stay on your PC: they are not uploaded
 and the server never hands them out.

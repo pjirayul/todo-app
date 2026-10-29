@@ -28,6 +28,8 @@ The owner is a beginner builder; keep code simple, readable, and explained.
 - Tasks: SQLite database `data/tasks.db` via GET/PUT /api/tasks when the local server runs (source of truth); localStorage (`todos`, `nextNum`) is the offline copy and the only store on GitHub Pages. Attachment files stay in IndexedDB.
 - Backups: POST /api/backup, GET /api/backups; owner restores via "⋯ Backup → Restore…".
 - server.py — http://127.0.0.1:8000 (use 127.0.0.1, not localhost). Max = Ollama qwen2.5:3b; Python does dates, #numbers, command words, Thai times. The server only serves the public app files; private data goes through /api/*.
+- **Test mode:** `python server.py --test` runs a second copy on http://127.0.0.1:8001 with its own files (`data/test-tasks.db`, `data/test-*.json`, `backups-test/`; all gitignored) and a red "TEST MODE" badge. Test there; use the real 8000 database only when a check truly needs it.
+- **Automatic tests:** run `python -m unittest` in this folder (Max's date/command logic, no AI needed) before reporting any server.py change.
 - After changing server.py, restart it (Start-Process python server.py, minimized) and confirm 200.
 - Bump `?v=` in index.html when script.js/style.css change.
 - status.json / inbox.json / ideas.json / backups/ are private (gitignored). Update your own entry in status.json when you start/finish.

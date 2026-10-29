@@ -6,13 +6,16 @@
   ("move #2 to friday", "delete laundry", "done #3").
 
 Run:  python server.py   then open http://127.0.0.1:8000
+Test copy:  python server.py --test   then open http://127.0.0.1:8001  (own database, never touches your real data)
 """
 
 import difflib
 import json
 import os
 import re
+import shutil
 import sqlite3
+import sys
 import threading
 import urllib.error
 import urllib.request
@@ -757,7 +760,7 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path.split("?")[0] == "/api/tasks":
             return self.send_json(load_tasks())
         if self.path.split("?")[0] == "/api/max/status":
-            return self.send_json(max_status())
+            return self.send_json({**max_status(), "testMode": TEST_MODE})  # the page shows a TEST MODE badge
         if self.path.split("?")[0] == "/api/max/memory":
             return self.send_json(load_memory())
         if self.path.startswith("/api/backups/"):
@@ -1252,7 +1255,39 @@ def load_ideas() -> list:
         return []
 
 
-if __name__ == "__main__":
-    print(f"To-do app running at http://127.0.0.1:8000  (AI: {AI_PROVIDER})")
+# ---------- Test mode: python server.py --test ----------
+# A second copy of the server on port 8001 with its own data files, so testing never touches the
+# owner's real tasks. Only the file names change; all the code is the same.
+TEST_MODE = "--test" in sys.argv
+PORT = 8000
+
+
+def use_test_mode():
+    """Point every private file at a test copy and allow port 8001. Called only for --test."""
+    global PORT, ALLOWED_HOSTS, ALLOWED_ORIGINS, DATA_DIR, DB_FILE, BACKUP_DIR
+    global MEMORY_FILE, STATUS_FILE, INBOX_FILE, IDEAS_FILE
     here = os.path.dirname(os.path.abspath(__file__))
-    ThreadingHTTPServer(("127.0.0.1", 8000), partial(Handler, directory=here)).serve_forever()
+    PORT = 8001
+    ALLOWED_HOSTS = ("127.0.0.1:8001", "localhost:8001")
+    ALLOWED_ORIGINS = tuple("http://" + host for host in ALLOWED_HOSTS)
+    DATA_DIR = os.path.join(here, "data")                      # same gitignored folder...
+    DB_FILE = os.path.join(DATA_DIR, "test-tasks.db")           # ...but its own database
+    BACKUP_DIR = os.path.join(here, "backups-test")             # test backups, apart from backups/
+    # Files Max/status read: start as a COPY of the real one (so the page looks normal), then they
+    # live on their own. The real file is only ever read here, never written.
+    copies = {"max-memory.json": "MEMORY_FILE", "status.json": "STATUS_FILE",
+              "inbox.json": "INBOX_FILE", "ideas.json": "IDEAS_FILE"}
+    os.makedirs(DATA_DIR, exist_ok=True)
+    for real_name, variable in copies.items():
+        test_file = os.path.join(DATA_DIR, "test-" + real_name)
+        if not os.path.exists(test_file) and os.path.exists(os.path.join(here, real_name)):
+            shutil.copyfile(os.path.join(here, real_name), test_file)
+        globals()[variable] = test_file
+
+
+if __name__ == "__main__":
+    if TEST_MODE:
+        use_test_mode()
+    print(f"To-do app {'TEST MODE ' if TEST_MODE else ''}running at http://127.0.0.1:{PORT}  (AI: {AI_PROVIDER})")
+    here = os.path.dirname(os.path.abspath(__file__))
+    ThreadingHTTPServer(("127.0.0.1", PORT), partial(Handler, directory=here)).serve_forever()
