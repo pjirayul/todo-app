@@ -1,54 +1,75 @@
 // ---------- 1. Translations (English / Thai) ----------
 const TEXT = {
   en: {
-    title: "My Tasks", placeholder: "Add or change tasks… e.g. pay rent on the 5th · move #2 to friday",
-    placeholderShort: "Add or edit… e.g. move #2 to Fri", add: "✨ Go", category: "Category",
-    save: "Save", cancel: "Cancel", aiOff: "AI is offline, task added without date/category.",
+    title: "Just Say It",placeholder: "Tell Max… e.g. pay rent on the 5th · move #2 to friday",
+    placeholderShort: "Tell Max… e.g. move #2 to Fri", add: "Go", category: "Category",
+    save: "Save", cancel: "Cancel", aiOff: "Max is offline, so the task was added without date/category.",
     aiToday: "AI used today", limitAsk: "Daily AI limit in tokens (one task ≈ 1,500):", notes: "Details / notes…",
     limitHit: "Today's AI limit is reached, task added without AI. Click the usage bar to raise the limit.",
     low: "Low", med: "Medium", high: "High", search: "Search tasks…",
     sortManual: "My order", sortDue: "Due date", sortPriority: "Priority",
     all: "All", active: "Active", done: "Done", overdue: "Overdue", clear: "Clear done",
-    empty: "Nothing here yet 🎉", left: (n) => `${n} task${n === 1 ? "" : "s"} left`,
-    remind: "Task due", editHint: "Double-click to edit", locale: "en-GB", thinking: "✨ …",
+    empty: "Nothing here yet", left: (n) => `${n} task${n === 1 ? "" : "s"} left`,
+    remind: "Task due", editHint: "Double-click to edit", locale: "en-GB", thinking: "…",
     notFound: (q) => `Couldn't find task "${q}"`, which: (nums) => `Which one? ${nums}`,
     nothing: "Nothing to change. Try e.g. \"move #2 to friday\".", sureDelete: (x) => `Delete ${x}?`, yes: "Yes, delete", no: "No",
-    cmdOffline: "AI is offline, so only \"done #2\", \"undo #2\" and \"delete #2\" work right now.",
-    backupMenu: "⋯ Backup", backupNow: "Back up now", restore: "Restore…", exportFile: "Export file", importFile: "Import file",
+    cmdOffline: "Max is offline, so only \"done #2\", \"undo #2\" and \"delete #2\" work right now.",
+    backupMenu: "Backup", backupNow: "Back up now", restore: "Restore…", exportFile: "Export file", importFile: "Import file",
     backupNote: "Your tasks are backed up automatically before changes. File attachments are not included.",
-    backupDone: (name) => `Backed up ✓ ${name}`, noBackups: "No backups yet.", tasksN: (n) => `${n} task${n === 1 ? "" : "s"}`,
+    backupDone: (name) => `Backed up: ${name}`, noBackups: "No backups yet.", tasksN: (n) => `${n} task${n === 1 ? "" : "s"}`,
     backupFail: "Couldn't reach the app server, so nothing was backed up. Use \"Export file\" instead.",
     sureRestore: (when, n) => `Replace your tasks with the backup from ${when} (${n})? Your current tasks are backed up first.`,
     sureImport: (n) => `Replace your tasks with ${n} from this file? Your current tasks are backed up first.`,
-    yesRestore: "Yes, restore", yesImport: "Yes, import", restored: (n) => `Done ✓ You now have ${n}.`,
+    yesRestore: "Yes, restore", yesImport: "Yes, import", restored: (n) => `Done. You now have ${n}.`,
     badFile: "That file isn't a task export from this app.",
-    changedElsewhere: "Your tasks were changed in another window, so the latest list is shown. This window's last change was saved as a backup (⋯ Backup → Restore).",
+    changedElsewhere: "Your tasks were changed in another window, so the latest list is shown. This window's last change was saved as a backup (Backup › Restore).",
+    breakdown: "Break it down", stepsThinking: "Max is thinking of steps…", addSelected: "Add selected",
+    stepsOffline: "Break it down needs Max, the AI server on your PC.", stepsFail: "Max couldn't come up with steps right now. Is Ollama running? Try again.",
+    stepsPick: "Max suggests these steps. Pick the ones to add:", removeStep: "Remove step",
+    morning: "Good morning", afternoon: "Good afternoon", evening: "Good evening", comma: ", ",
+    dueToday: (n) => `${n} due today`, overdueN: (n) => `${n} overdue`, nothingDue: "Nothing due today",
+    team: "Team", teamWorking: (n) => ` · ${n} working`,
+    maxThinking: "Max is thinking…", maxReady: "Max ready", maxOffline: "Max offline",
+    maxAdded: (n, text, when) => `Max added #${n}: ${text}${when ? " · " + when : ""}`, maxUpdated: (n) => `Max updated #${n}`,
+    maxDone: (n) => `Max marked #${n} done`, maxUndone: (n) => `Max reopened #${n}`,
   },
   th: {
-    title: "งานของฉัน", placeholder: "เพิ่มหรือแก้งาน… เช่น จ่ายค่าเช่าวันที่ 5 · เลื่อน #2 เป็นวันศุกร์",
-    placeholderShort: "เพิ่มหรือแก้งาน… เช่น เลื่อน #2 เป็นศุกร์", add: "✨ ทำ", category: "หมวดหมู่",
-    save: "บันทึก", cancel: "ยกเลิก", aiOff: "AI ไม่ทำงาน เพิ่มงานโดยไม่มีวันที่/หมวดหมู่",
+    title: "บอกมาได้เลย",placeholder: "บอก Max… เช่น จ่ายค่าเช่าวันที่ 5 · เลื่อน #2 เป็นวันศุกร์",
+    placeholderShort: "บอก Max… เช่น เลื่อน #2 เป็นศุกร์", add: "ทำ", category: "หมวดหมู่",
+    save: "บันทึก", cancel: "ยกเลิก", aiOff: "Max ออฟไลน์อยู่ จึงเพิ่มงานโดยไม่มีวันที่/หมวดหมู่",
     aiToday: "AI ที่ใช้วันนี้", limitAsk: "ขีดจำกัด AI ต่อวัน (โทเคน, 1 งาน ≈ 1,500):", notes: "รายละเอียด / โน้ต…",
     limitHit: "ใช้ AI ครบขีดจำกัดวันนี้แล้ว เพิ่มงานโดยไม่ใช้ AI กดที่แถบเพื่อเพิ่มขีดจำกัด",
     low: "ต่ำ", med: "กลาง", high: "สูง", search: "ค้นหางาน…",
     sortManual: "ลำดับของฉัน", sortDue: "วันครบกำหนด", sortPriority: "ความสำคัญ",
     all: "ทั้งหมด", active: "ยังไม่เสร็จ", done: "เสร็จแล้ว", overdue: "เลยกำหนด", clear: "ลบงานที่เสร็จ",
-    empty: "ยังไม่มีงาน 🎉", left: (n) => `เหลือ ${n} งาน`,
-    remind: "ถึงเวลางาน", editHint: "ดับเบิลคลิกเพื่อแก้ไข", locale: "th-TH", thinking: "✨ …",
+    empty: "ยังไม่มีงาน", left: (n) => `เหลือ ${n} งาน`,
+    remind: "ถึงเวลางาน", editHint: "ดับเบิลคลิกเพื่อแก้ไข", locale: "th-TH", thinking: "…",
     notFound: (q) => `ไม่พบงาน "${q}"`, which: (nums) => `หมายถึงงานไหน? ${nums}`,
     nothing: "ไม่มีอะไรให้เปลี่ยน ลองพิมพ์ เช่น \"เลื่อน #2 เป็นวันศุกร์\"", sureDelete: (x) => `ลบ ${x} ใช่ไหม?`, yes: "ใช่ ลบเลย", no: "ไม่",
-    cmdOffline: "AI ไม่ทำงาน ตอนนี้ใช้ได้แค่ \"เสร็จ #2\", \"undo #2\" และ \"ลบ #2\"",
-    backupMenu: "⋯ สำรองข้อมูล", backupNow: "สำรองตอนนี้", restore: "กู้คืน…", exportFile: "ส่งออกไฟล์", importFile: "นำเข้าไฟล์",
+    cmdOffline: "Max ออฟไลน์อยู่ ตอนนี้ใช้ได้แค่ \"เสร็จ #2\", \"undo #2\" และ \"ลบ #2\"",
+    backupMenu: "สำรองข้อมูล", backupNow: "สำรองตอนนี้", restore: "กู้คืน…", exportFile: "ส่งออกไฟล์", importFile: "นำเข้าไฟล์",
     backupNote: "แอปสำรองงานให้อัตโนมัติก่อนทุกการแก้ไข แต่ไม่รวมไฟล์แนบ",
-    backupDone: (name) => `สำรองแล้ว ✓ ${name}`, noBackups: "ยังไม่มีข้อมูลสำรอง", tasksN: (n) => `${n} งาน`,
+    backupDone: (name) => `สำรองแล้ว: ${name}`, noBackups: "ยังไม่มีข้อมูลสำรอง", tasksN: (n) => `${n} งาน`,
     backupFail: "ติดต่อเซิร์ฟเวอร์ของแอปไม่ได้ จึงยังไม่ได้สำรอง ใช้ \"ส่งออกไฟล์\" แทนได้",
     sureRestore: (when, n) => `แทนที่งานทั้งหมดด้วยข้อมูลสำรองเมื่อ ${when} (${n}) ใช่ไหม? งานปัจจุบันจะถูกสำรองไว้ก่อน`,
     sureImport: (n) => `แทนที่งานทั้งหมดด้วย ${n} จากไฟล์นี้ใช่ไหม? งานปัจจุบันจะถูกสำรองไว้ก่อน`,
-    yesRestore: "ใช่ กู้คืน", yesImport: "ใช่ นำเข้า", restored: (n) => `เรียบร้อย ✓ ตอนนี้มี ${n}`,
+    yesRestore: "ใช่ กู้คืน", yesImport: "ใช่ นำเข้า", restored: (n) => `เรียบร้อย ตอนนี้มี ${n}`,
     badFile: "ไฟล์นี้ไม่ใช่ไฟล์งานที่ส่งออกจากแอปนี้",
-    changedElsewhere: "งานถูกแก้ไขจากหน้าต่างอื่น จึงแสดงรายการล่าสุด การแก้ไขล่าสุดของหน้านี้ถูกสำรองไว้ (⋯ สำรองข้อมูล → กู้คืน)",
+    changedElsewhere: "งานถูกแก้ไขจากหน้าต่างอื่น จึงแสดงรายการล่าสุด การแก้ไขล่าสุดของหน้านี้ถูกสำรองไว้ (สำรองข้อมูล › กู้คืน)",
+    breakdown: "แตกเป็นขั้นตอน", stepsThinking: "Max กำลังคิดขั้นตอน…", addSelected: "เพิ่มที่เลือก",
+    stepsOffline: "การแตกเป็นขั้นตอนต้องใช้ Max (เซิร์ฟเวอร์ AI บนคอมของคุณ)", stepsFail: "Max ยังคิดขั้นตอนไม่ออกตอนนี้ Ollama เปิดอยู่ไหม? ลองอีกครั้ง",
+    stepsPick: "Max แนะนำขั้นตอนเหล่านี้ เลือกที่จะเพิ่ม:", removeStep: "ลบขั้นตอน",
+    morning: "สวัสดีตอนเช้า", afternoon: "สวัสดีตอนบ่าย", evening: "สวัสดีตอนเย็น", comma: " ",
+    dueToday: (n) => `ครบกำหนดวันนี้ ${n}`, overdueN: (n) => `เลยกำหนด ${n}`, nothingDue: "ไม่มีงานครบกำหนดวันนี้",
+    team: "ทีม", teamWorking: (n) => ` · ทำงานอยู่ ${n}`,
+    maxThinking: "Max กำลังคิด…", maxReady: "Max พร้อม", maxOffline: "Max ออฟไลน์",
+    maxAdded: (n, text, when) => `Max เพิ่ม #${n}: ${text}${when ? " · " + when : ""} แล้ว`, maxUpdated: (n) => `Max แก้ #${n} แล้ว`,
+    maxDone: (n) => `Max ทำเครื่องหมาย #${n} ว่าเสร็จแล้ว`, maxUndone: (n) => `Max เปิด #${n} ใหม่แล้ว`,
   },
 };
+
+// The owner's name in the greeting ("Good morning, Jirayu") — change it here
+const OWNER_NAME = "Jirayu";
 
 // ---------- 2. Saved data and settings ----------
 const load = (key, fallback) => {
@@ -58,9 +79,10 @@ const save = (key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 };
 
-// A task looks like: { id, num, text, done, due, priority, cat, notified }
+// A task looks like: { id, num, text, done, due, priority, cat, notified, notes, files, steps }
+// steps is the task's checklist from "Break it down": [{ text, done }]
 // Older saved tasks get defaults for the new fields
-let todos = load("todos", []).map((x) => ({ due: "", priority: "med", cat: "", notified: false, notes: "", files: [], ...x }));
+let todos = load("todos", []).map((x) => ({ due: "", priority: "med", cat: "", notified: false, notes: "", files: [], steps: [], ...x }));
 
 // Every task gets a number (#1, #2…) to refer to it in commands. Numbers never change and are
 // never reused, even after a delete, so "#3" always means the same task.
@@ -107,6 +129,10 @@ const deleteFile = (id) => fileStore("readwrite", (s) => s.delete(id));
 const deleteTaskFiles = (todo) => (todo.files || []).forEach((f) => deleteFile(f.id));
 let view = { filter: "all", cat: "", search: "", sort: "manual" };
 let editingId = null; // the task whose edit form is open
+// "Break it down" suggestions on screen (nothing is saved until "Add selected"):
+// { id: task id, loading: true } while the AI thinks, then { id, steps: [...], picked: [true, ...] },
+// or { id, msg } when something went wrong
+let suggest = null;
 
 const $ = (id) => document.getElementById(id);
 const t = (key) => TEXT[settings.lang][key];
@@ -131,12 +157,14 @@ function render() {
   document.documentElement.lang = settings.lang;
   document.documentElement.dataset.theme = settings.theme;
   document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
+  document.title = t("title"); // browser tab shows the app name in the chosen language
   if ($("add-btn").disabled) $("add-btn").textContent = t("thinking"); // still waiting for AI
   setPlaceholders();
   $("lang").textContent = settings.lang === "en" ? "TH" : "EN";
-  $("theme").textContent = settings.theme === "dark" ? "☀️" : "🌙";
+  // Line icon: a sun in dark mode (click for light), a moon in light mode
+  $("theme").innerHTML = `<svg class="i"><use href="#i-${settings.theme === "dark" ? "sun" : "moon"}"/></svg>`;
   $("notify").classList.toggle("on", "Notification" in window && Notification.permission === "granted");
-  $("today").textContent = new Date().toLocaleDateString(t("locale"), { weekday: "long", day: "numeric", month: "long" });
+  drawGreeting();
 
   // AI usage bar: green, then yellow from 70%, red when full
   const used = usageToday();
@@ -166,7 +194,7 @@ function render() {
   if (view.sort === "priority") visible.sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
 
   const list = $("todo-list");
-  list.innerHTML = visible.length ? "" : `<li class="empty">${t("empty")}</li>`;
+  list.innerHTML = visible.length ? "" : `<li class="empty"><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg>${t("empty")}</li>`;
   const canDrag = view.sort === "manual" && !view.search;
 
   for (const todo of visible) {
@@ -199,24 +227,134 @@ function render() {
     }
 
     const due = todo.due
-      ? `<span class="due ${isOverdue(todo) ? "overdue" : ""}">📅 ${new Date(todo.due).toLocaleString(t("locale"), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>`
+      ? `<span class="due ${isOverdue(todo) ? "overdue" : ""}"><svg class="i sm" aria-hidden="true"><use href="#i-calendar"/></svg>${new Date(todo.due).toLocaleString(t("locale"), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>`
       : "";
+    // Checklist progress, e.g. "2/5"
+    const stepsDone = todo.steps.filter((s) => s.done).length;
+    const progress = todo.steps.length ? `<span class="steps-count"><svg class="i sm" aria-hidden="true"><use href="#i-steps"/></svg>${stepsDone}/${todo.steps.length}</span>` : "";
     li.innerHTML = `
       <input type="checkbox" class="check" ${todo.done ? "checked" : ""}>
       <div class="body">
         <div class="text" title="${t("editHint")}">${escapeHtml(todo.text)}</div>
-        <div class="meta"><span class="num">#${todo.num}</span>${due}${todo.cat ? `<span class="tag">#${escapeHtml(todo.cat)}</span>` : ""}</div>
+        <div class="meta"><span class="num">#${todo.num}</span>${due}${todo.cat ? `<span class="tag">#${escapeHtml(todo.cat)}</span>` : ""}${progress}</div>
         ${todo.notes ? `<div class="notes">${escapeHtml(todo.notes)}</div>` : ""}
         ${todo.files.length ? `<div class="files">${todo.files.map((f) =>
-          `<a class="file" href="#" data-file="${f.id}" title="Open">📎 ${escapeHtml(f.name)}<button class="rm" data-rm="${f.id}" title="Remove">×</button></a>`).join("")}</div>` : ""}
+          `<a class="file" href="#" data-file="${f.id}" title="Open"><svg class="i sm" aria-hidden="true"><use href="#i-paperclip"/></svg>${escapeHtml(f.name)}<button class="rm" data-rm="${f.id}" title="Remove" aria-label="Remove"><svg class="i sm" aria-hidden="true"><use href="#i-x"/></svg></button></a>`).join("")}</div>` : ""}
+        ${stepsHtml(todo)}
+        ${suggest?.id === todo.id ? suggestHtml() : ""}
       </div>
-      <button class="edit" title="Edit">✎</button>
-      <button class="delete" title="Delete">×</button>`;
+      <button class="edit breakdown" title="${t("breakdown")}" aria-label="${t("breakdown")}"><svg class="i" aria-hidden="true"><use href="#i-breakdown"/></svg></button>
+      <button class="edit" title="Edit" aria-label="Edit"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></button>
+      <button class="delete" title="Delete" aria-label="Delete"><svg class="i" aria-hidden="true"><use href="#i-trash"/></svg></button>`;
     list.append(li);
   }
 
   const left = todos.filter((x) => !x.done).length;
   $("counter").textContent = t("left")(left);
+}
+
+// Header greeting by time of day, and today's summary ("Thu 29 Oct · 3 due today · 1 overdue").
+// Called from render(), which also runs every 30 s (reminders), so it follows the clock.
+function drawGreeting() {
+  const now = new Date();
+  const hour = now.getHours();
+  const part = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+  const name = document.createElement("em"); // the name gets the gradient colour
+  name.textContent = OWNER_NAME;
+  $("greet").replaceChildren(t(part) + t("comma"), name);
+
+  // Only tasks not done yet. "Due today" leaves out ones already overdue, so nothing is counted twice.
+  const open = todos.filter((x) => !x.done);
+  const overdue = open.filter(isOverdue).length;
+  const dueToday = open.filter((x) => x.due && x.due.slice(0, 10) === todayKey() && !isOverdue(x)).length;
+  const parts = [document.createTextNode(now.toLocaleDateString(t("locale"), { weekday: "short", day: "numeric", month: "short" }))];
+  if (dueToday) {
+    const b = document.createElement("b");
+    b.textContent = t("dueToday")(dueToday);
+    parts.push(" · ", b);
+  }
+  if (overdue) parts.push(" · " + t("overdueN")(overdue));
+  if (!dueToday && !overdue) parts.push(" · " + t("nothingDue"));
+  parts.push(" · ");
+  $("summary").replaceChildren(...parts);
+  drawMax(); // "Max ready" in the chosen language
+}
+
+// Team pill: the four agents' status dots from status.json (written by Toto on this PC).
+// On GitHub Pages there is no status.json, so the pill just stays hidden.
+const TEAM = ["Toto", "Kimi", "George", "Lewis"];
+async function loadTeam() {
+  try {
+    const res = await fetch(`status.json?t=${Date.now()}`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const statusOf = (name) => data.agents?.find((a) => a.name === name)?.status;
+    $("team-avs").replaceChildren(...TEAM.map((name) => {
+      const av = document.createElement("span");
+      av.className = `av av-${name.toLowerCase()}`;
+      av.textContent = name[0];
+      const dot = document.createElement("i");
+      const status = statusOf(name);
+      if (status === "working" || status === "done") dot.className = status; // anything else: grey (idle)
+      av.title = `${name}: ${status || "idle"}`;
+      av.append(dot);
+      return av;
+    }));
+    const working = TEAM.filter((name) => statusOf(name) === "working").length;
+    $("team-working").textContent = working ? t("teamWorking")(working) : "";
+    $("team").hidden = false;
+  } catch {
+    $("team").hidden = true; // quietly: no team data here
+  }
+}
+
+// Max's status (the AI on this PC): asks server.py, which checks that Ollama is running.
+// On GitHub Pages there is no server, so Max simply shows as offline.
+let maxReady = false;
+function drawMax() {
+  $("max-status").classList.toggle("ready", maxReady);
+  $("max-text").textContent = t(maxReady ? "maxReady" : "maxOffline");
+}
+async function loadMax() {
+  if (LOCAL) {
+    try {
+      const res = await fetch("api/max/status", { signal: AbortSignal.timeout(5000) });
+      const data = await res.json();
+      maxReady = res.ok && data.ready === true;
+    } catch {
+      maxReady = false;
+    }
+  }
+  drawMax();
+}
+
+// The task's saved checklist: a tick box per step, and an x icon to remove it
+function stepsHtml(todo) {
+  if (!todo.steps.length) return "";
+  return `<ul class="steps">${todo.steps.map((s, i) => `
+    <li class="step${s.done ? " step-done" : ""}">
+      <label><input type="checkbox" class="step-check" data-step="${i}" ${s.done ? "checked" : ""}> <span>${escapeHtml(s.text)}</span></label>
+      <button type="button" class="step-rm" data-step="${i}" title="${t("removeStep")}" aria-label="${t("removeStep")}"><svg class="i sm" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </li>`).join("")}</ul>`;
+}
+
+// The AI's suggested steps: pick some, then "Add selected" or "Cancel"
+function suggestHtml() {
+  if (suggest.loading) return `<p class="cmd-msg suggest-msg">${t("stepsThinking")}</p>`;
+  if (suggest.msg) {
+    return `<p class="cmd-msg warn suggest-msg">${escapeHtml(suggest.msg)}
+      <button type="button" class="chip suggest-cancel">${t("cancel")}</button></p>`;
+  }
+  return `<div class="suggest">
+    <p class="suggest-title"><svg class="i sm" aria-hidden="true"><use href="#i-wave"/></svg>${t("stepsPick")}</p>
+    <ul class="steps">${suggest.steps.map((s, i) => `
+      <li class="step"><label><input type="checkbox" class="suggest-pick" data-step="${i}" ${suggest.picked[i] ? "checked" : ""}> <span>${escapeHtml(s)}</span></label></li>`).join("")}
+    </ul>
+    <div class="chips">
+      <button type="button" class="chip active suggest-add">${t("addSelected")}</button>
+      <button type="button" class="chip suggest-cancel">${t("cancel")}</button>
+    </div>
+  </div>`;
 }
 
 // Typed text must never run as HTML
@@ -227,14 +365,14 @@ function escapeHtml(s) {
 const findTodo = (el) => todos.find((x) => x.id === Number(el.closest(".todo-item").dataset.id));
 const update = () => { saveTodos(); render(); };
 
-// ---------- 4. The ✨ command bar: add a task, or change one ----------
-// Enter or ✨ Go sends the sentence to our server. A normal sentence becomes a new task
+// ---------- 4. The command bar: add a task, or change one ----------
+// Enter or Go sends the sentence to our server. A normal sentence becomes a new task
 // (AI fills in date, priority and category); "move #2 to friday", "delete laundry", "done #3"
 // act on an existing task. If the AI is unreachable (e.g. on GitHub Pages), new tasks are still
 // added with just their text, and the simplest commands ("done #2") still work.
 
 // Short message under the box; textContent so typed text never runs as HTML.
-// warn = true gives the amber ⚠️ look (something went wrong), otherwise a calm 💬 hint.
+// warn = true gives the amber warning look (something went wrong), otherwise a calm hint.
 // box: which message box (the one under the command bar, or the one in the Backup menu)
 const showMessage = (msg, warn = false, box = $("cmd-msg")) => {
   box.textContent = msg;
@@ -295,7 +433,7 @@ function simpleCommand(text) {
   if (/^(undo|undone|uncheck|unmark|reopen|not done)\b|ยังไม่เสร็จ|ยกเลิกเสร็จ/.test(low)) action = "uncomplete";
   else if (/^(delete|remove|del|erase)\b|^ลบ/.test(low)) action = "delete";
   else if (/^(done|mark|tick|finished|completed)\b|\b(done|finished|completed)$|เสร็จ(แล้ว)?$|^เสร็จ/.test(low)) action = "complete";
-  else if (/^#\s*\d/.test(low) || (/^(change|move|rename|edit|update|reschedule|postpone)\b|^(เปลี่ยน|แก้|ย้าย|เลื่อน)/.test(low)
+  else if (/^#\s*\d/.test(low) || (/^(change|modify|move|rename|edit|update|reschedule|postpone)\b|^(เปลี่ยน|แก้|ย้าย|เลื่อน)/.test(low)
     && (num || /\sto\s|เป็น/.test(low)))) action = "update";
   if (!action) return null; // a normal new task
   return num && action !== "update" ? { action, num: Number(num[1]) } : { action: "offline" };
@@ -341,7 +479,7 @@ $("todo-form").addEventListener("submit", async (e) => {
   const input = $("todo-input");
   button.disabled = input.disabled = true;
   button.textContent = t("thinking");
-  showMessage("");
+  showMessage(t("maxThinking"));
   let task = { text, due: "", priority: "med", category: "" };
   let cmd = null;    // set when the sentence is a command for an existing task
   let problem = "";  // message to show after the box is usable again
@@ -368,6 +506,7 @@ $("todo-form").addEventListener("submit", async (e) => {
       else throw new Error("AI gave no task");
     } catch (err) {
       console.warn("AI unavailable:", err);
+      showMessage("");
       problem = err.message === t("limitHit") ? t("limitHit") : t("aiOff");
       cmd = simpleCommand(text);
       if (cmd?.action === "offline") {
@@ -377,17 +516,27 @@ $("todo-form").addEventListener("submit", async (e) => {
       }
     }
     if (cmd) {
+      showMessage("");
       const msg = applyCommand(cmd);
-      if (msg === "") input.value = ""; // worked: clear the box
+      if (msg === "") {
+        input.value = ""; // worked: clear the box
+        // Say what Max did (only when Max really did it, not the offline fallback)
+        const done = { complete: "maxDone", uncomplete: "maxUndone", update: "maxUpdated" }[cmd.action];
+        if (!problem && done) showMessage(t(done)(cmd.num));
+      }
       if (msg) showMessage(msg, !cmd.choices?.length); // keep the text so the owner can fix it; "Which one?" is not a warning
       return;
     }
     backup(`before add "${task.text.slice(0, 40)}"`);
     const num = newNum();
-    todos.push({ id: Date.now() + Math.random(), num, text: task.text, done: false, due: task.due || "", priority: task.priority || "med", cat: task.category || "", notified: false, notes: "", files: [] });
+    todos.push({ id: Date.now() + Math.random(), num, text: task.text, done: false, due: task.due || "", priority: task.priority || "med", cat: task.category || "", notified: false, notes: "", files: [], steps: [] });
     input.value = "";
     update();
     flash(num);
+    if (!problem) {
+      const when = task.due ? new Date(task.due).toLocaleString(t("locale"), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+      showMessage(t("maxAdded")(num, task.text, when)); // textContent inside, so task text never runs as HTML
+    }
   } finally {
     // Always give the box back, even if something above went wrong
     button.disabled = input.disabled = false;
@@ -395,7 +544,7 @@ $("todo-form").addEventListener("submit", async (e) => {
     // A Yes/No question is waiting: put the focus on Yes, so Enter confirms the delete
     ($("cmd-msg").querySelector("button") || input).focus();
   }
-  if (problem) alert(problem);
+  if (problem) showMessage(problem, true); // in-page: the owner's browser blocks alert()
 });
 
 // ---------- 5. Clicks inside the list: tick, edit, delete ----------
@@ -429,6 +578,33 @@ $("todo-list").addEventListener("click", async (e) => {
     deleteTaskFiles(todo);
     todos = todos.filter((x) => x !== todo);
     update();
+  } else if (e.target.classList.contains("step-check")) {
+    // Tick or untick one step of the checklist
+    const todo = findTodo(e.target);
+    backup(`before ticking a step of #${todo.num}`);
+    todo.steps[Number(e.target.dataset.step)].done = e.target.checked;
+    update();
+  } else if (e.target.classList.contains("step-rm")) {
+    const todo = findTodo(e.target);
+    backup(`before removing a step from #${todo.num}`);
+    todo.steps.splice(Number(e.target.dataset.step), 1);
+    update();
+  } else if (e.target.classList.contains("suggest-pick")) {
+    // Remember the choice (the list is redrawn now and then, e.g. by reminders)
+    suggest.picked[Number(e.target.dataset.step)] = e.target.checked;
+  } else if (e.target.classList.contains("suggest-add")) {
+    const todo = findTodo(e.target);
+    const chosen = suggest.steps.filter((s, i) => suggest.picked[i]);
+    suggest = null;
+    if (!chosen.length) return render();
+    backup(`before adding steps to #${todo.num}`);
+    todo.steps.push(...chosen.map((text) => ({ text, done: false })));
+    update();
+  } else if (e.target.classList.contains("suggest-cancel")) {
+    suggest = null;
+    render();
+  } else if (e.target.classList.contains("breakdown")) {
+    breakDown(findTodo(e.target)); // checked before "edit": this button also has the edit class for its look
   } else if (e.target.classList.contains("edit")) {
     openEditor(findTodo(e.target));
   } else if (e.target.classList.contains("e-cancel")) {
@@ -436,6 +612,36 @@ $("todo-list").addEventListener("click", async (e) => {
     render();
   }
 });
+
+// "Break it down": ask the server's AI for 3-6 small steps and show them as suggestions.
+// Nothing is saved here; the owner picks steps and clicks "Add selected".
+async function breakDown(todo) {
+  if (suggest?.loading) return; // one question at a time
+  if (!LOCAL) { suggest = { id: todo.id, msg: t("stepsOffline") }; return render(); } // GitHub Pages: no AI server
+  if (usageToday() >= settings.aiLimit) { suggest = { id: todo.id, msg: t("limitHit") }; return render(); }
+  const mine = { id: todo.id, loading: true };
+  suggest = mine;
+  render();
+  try {
+    const res = await fetch("api/breakdown", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: todo.text, notes: todo.notes, due: todo.due }),
+      signal: AbortSignal.timeout(60000), // a stuck AI must not leave "Thinking…" forever (server gives up first)
+    });
+    const data = await res.json();
+    if (!res.ok || !Array.isArray(data.steps) || !data.steps.length) throw new Error(data.error || `HTTP ${res.status}`);
+    addUsage(data.tokens);
+    if (suggest !== mine) return; // cancelled, or another task was asked meanwhile
+    const steps = data.steps.filter((s) => typeof s === "string");
+    suggest = { id: todo.id, steps, picked: steps.map(() => true) };
+  } catch (err) {
+    console.warn("Break it down failed:", err);
+    if (suggest === mine) suggest = { id: todo.id, msg: t("stepsFail") };
+  } finally {
+    if (editingId === null) render(); // don't wipe an open edit form
+  }
+}
 
 // Double-click a task to edit it too
 $("todo-list").addEventListener("dblclick", (e) => {
@@ -530,6 +736,22 @@ $("lang").addEventListener("click", () => {
   settings.lang = settings.lang === "en" ? "th" : "en";
   save("settings", settings);
   render();
+  loadTeam(); // "· 2 working" in the new language
+});
+
+// Phone: the three-dots button opens a small menu with language / dark mode / reminders.
+// It stays open while you use it; a click outside or Escape closes it.
+const setMenu = (open) => {
+  $("quick").classList.toggle("open", open);
+  $("more").setAttribute("aria-expanded", open);
+};
+$("more").addEventListener("click", () => setMenu(!$("quick").classList.contains("open")));
+document.addEventListener("click", (e) => {
+  // composedPath: the dark-mode button redraws its icon, so e.target may already be gone from the page
+  if (!e.composedPath().some((el) => el.id === "quick" || el.id === "more")) setMenu(false);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("quick").classList.contains("open")) { setMenu(false); $("more").focus(); }
 });
 $("theme").addEventListener("click", () => {
   settings.theme = settings.theme === "dark" ? "light" : "dark";
@@ -617,12 +839,16 @@ function cleanTodos(list) {
     notified: x.notified === true,
     notes: str(x.notes),
     files: Array.isArray(x.files) ? x.files.filter((f) => f && /^[\w.-]+$/.test(f.id) && typeof f.name === "string") : [],
+    steps: Array.isArray(x.steps)
+      ? x.steps.filter((s) => s && typeof s.text === "string").map((s) => ({ text: s.text, done: s.done === true }))
+      : [],
   }));
 }
 
 // Put a whole new task list in place (after Restore or Import)
 function replaceTasks(list, savedNextNum) {
   todos = list;
+  suggest = null;
   nextNum = Math.max(Number(savedNextNum) || 1, 1, ...todos.map((x) => x.num + 1));
   for (const x of todos) {
     if (!x.num) x.num = nextNum++;
@@ -817,5 +1043,8 @@ startDb().finally(() => { // ...then the database's list (when the server is on)
   checkReminders();
   dailyBackup();
 });
+loadTeam();
+loadMax();
+setInterval(() => { loadTeam(); loadMax(); }, 30000); // team dots follow status.json; Max follows Ollama
 // Phone turned or window resized past 480px: swap long/short placeholder
 phone.addEventListener("change", setPlaceholders); // only the hints, so an open edit form is not redrawn

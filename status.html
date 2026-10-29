@@ -5,36 +5,102 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Team Status</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
+  <script>
+    // Same light/dark as the app: read the app's saved setting (index.html keeps it in localStorage "settings").
+    // No saved setting yet: follow the computer's setting. Runs before the page draws, so there is no flash.
+    function applyTheme() {
+      let theme = "";
+      try { theme = (JSON.parse(localStorage.getItem("settings")) || {}).theme || ""; } catch {}
+      if (theme !== "dark" && theme !== "light") theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = theme;
+    }
+    applyTheme();
+    addEventListener("storage", (e) => { if (e.key === "settings") applyTheme(); }); // changed in the app's tab
+  </script>
   <style>
     :root {
       --bg: #f3f1ed; --card: #fff; --text: #1f1d2b; --muted: #7d7a8c; --border: #e8e5ef;
       --accent: #5b4cf0; --accent-soft: #eeebff; --green: #30a46c; --amber: #f5a524; --red: #e5484d;
+      /* Same glass bar + logo as the app (values from style.css) */
+      --glass: rgba(255, 255, 255, .72); --glass-hi: rgba(255, 255, 255, .9); --chip-on-line: rgba(91, 76, 240, .45);
+      --ai-grad: linear-gradient(120deg, #5b4cf0 0%, #7a45e8 50%, #9b3fd6 100%); --ai-glow: rgba(98, 70, 235, .32);
+      --on-accent: #fff;
+      --bg-grad: radial-gradient(circle at 15% 0%, #e7e3ff 0, transparent 45%), radial-gradient(circle at 90% 10%, #ffe9dc 0, transparent 40%);
+      --ok-soft: #e3f6ec; --busy-soft: #fff4dd; --new-bg: #fff3dc; --new-text: #a16207;
     }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg: #121119; --card: #1c1b26; --text: #ecebf5; --muted: #8f8ca3; --border: #2c2a3a; --accent: #8b7fff; --accent-soft: #2a2647; }
+    :root[data-theme="dark"] {
+      --bg: #121119; --card: #1c1b26; --text: #ecebf5; --muted: #8f8ca3; --border: #2c2a3a; --accent: #8b7fff; --accent-soft: #2a2647;
+      --glass: rgba(34, 32, 48, .66); --glass-hi: rgba(255, 255, 255, .06); --chip-on-line: rgba(139, 127, 255, .6);
+      --ai-grad: linear-gradient(120deg, #8b7fff 0%, #a98bfa 50%, #c99af2 100%); --ai-glow: rgba(139, 127, 255, .28);
+      --on-accent: #16131f; --green: #3dd68c; --amber: #ffc53d;
+      --bg-grad: radial-gradient(circle at 15% 0%, #2a2354 0, transparent 45%), radial-gradient(circle at 90% 10%, #3a2320 0, transparent 40%);
+      --ok-soft: rgba(61, 214, 140, .14); --busy-soft: rgba(255, 197, 61, .14); --new-bg: #2d2416; --new-text: #f3c873;
+      color-scheme: dark;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--text); font-family: "Inter", "Noto Sans Thai", system-ui, sans-serif; line-height: 1.5; padding: 32px 16px; }
+    body { margin: 0; min-height: 100vh; background: var(--bg-grad), var(--bg); color: var(--text); font-family: "Inter", "Noto Sans Thai", system-ui, sans-serif; line-height: 1.5; padding: 32px 16px; }
     .wrap { max-width: 640px; margin: 0 auto; }
-    header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
-    h1 { margin: 0; font-size: 1.7rem; }
+    /* Top bar: same look as the app's header (logo left, Back pill right) */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding: 6px 6px 6px 10px; border-radius: 16px;
+      background: var(--glass); border: 1px solid var(--border); box-shadow: inset 0 1px 0 var(--glass-hi);
+      -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    }
+    .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: .92rem; letter-spacing: -.01em; white-space: nowrap; }
+    .mark { width: 26px; height: 26px; border-radius: 8px; flex: none; display: grid; place-items: center;
+      background: var(--ai-grad); box-shadow: 0 4px 14px var(--ai-glow), inset 0 1px 0 rgba(255, 255, 255, .35); }
+    .mark svg { width: 15px; height: 15px; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; fill: none; }
+    .back svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .greet { margin: 20px 2px 0; font-size: 1.7rem; font-weight: 700; letter-spacing: -.025em; line-height: 1.25; }
+    .greet + .updated { margin: 4px 2px 0; }
+    h2 svg.i { vertical-align: -4px; margin-right: 8px; }
     h2 { font-size: 1rem; margin: 28px 0 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
     a { color: var(--accent); }
     .updated { color: var(--muted); font-size: .9rem; }
     .stale { color: var(--amber); }
     .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px; }
     .card + .card { margin-top: 10px; }
-    .agent { display: flex; gap: 14px; align-items: flex-start; }
-    .avatar { width: 44px; height: 44px; flex: none; border-radius: 12px; display: grid; place-items: center; font-size: 1.4rem; background: var(--accent-soft); }
+    .agent { display: flex; gap: 14px; align-items: flex-start; position: relative; }
+    .agent > div:not(.avatar) { flex: 1; min-width: 0; }
+    /* Phone: the status badge sits in the corner so the text gets the full width */
+    @media (max-width: 480px) {
+      .agent .badge { position: absolute; top: 14px; right: 14px; }
+      .agent .name { padding-right: 88px; }
+    }
+    /* Line icons (same set as the app) */
+    svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+    svg.i.sm { width: 15px; height: 15px; }
+    /* Avatars: a gradient circle with the initial, plus a small role icon */
+    .avatar {
+      width: 44px; height: 44px; flex: none; border-radius: 50%; display: grid; place-items: center; position: relative;
+      color: #fff; font-weight: 700; font-size: 1.05rem; background: linear-gradient(135deg, #9a97ab, #6d6a80);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3);
+    }
+    .avatar .role-ic {
+      position: absolute; right: -4px; bottom: -4px; width: 22px; height: 22px; border-radius: 50%;
+      display: grid; place-items: center; background: var(--card); color: var(--text); box-shadow: 0 0 0 1px var(--border);
+    }
+    .avatar .role-ic svg.i { width: 13px; height: 13px; stroke-width: 2; }
+    .av-toto { background: linear-gradient(135deg, #7b6cff, #4a3bd6); }
+    .av-kimi { background: linear-gradient(135deg, #ff6b6f, #d03439); }
+    .av-george { background: linear-gradient(135deg, #2cc7b2, #0b8576); }
+    .av-lewis { background: linear-gradient(135deg, #f6a53c, #c4650a); }
+    .mini { width: 24px; height: 24px; flex: none; border-radius: 50%; display: inline-grid; place-items: center; color: #fff; font-size: .68rem; font-weight: 700; }
+    .mini:not([class*="av-"]) { background: linear-gradient(135deg, #9a97ab, #6d6a80); }
     .name { font-weight: 600; font-size: 1.05rem; }
     .role { color: var(--muted); font-size: .9rem; }
     .job { margin-top: 6px; font-size: .95rem; }
     .badge { margin-left: auto; padding: 4px 12px; border-radius: 999px; font-size: .85rem; font-weight: 600; white-space: nowrap; }
-    .working { background: #e6f0ff; color: #2563eb; }
-    .working::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: currentColor; animation: pulse 1.2s infinite; }
-    .done { background: #e3f6ec; color: var(--green); }
+    .badge { display: inline-flex; align-items: center; gap: 6px; }
+    .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .working { background: var(--busy-soft); color: #a86a10; }
+    .working::before { background: var(--amber); }
+    :root[data-theme="dark"] .working { color: var(--amber); }
+    .done { background: var(--ok-soft); color: #217a4f; }
+    .done::before { background: var(--green); }
+    :root[data-theme="dark"] .done { color: var(--green); }
     .idle { background: var(--accent-soft); color: var(--muted); }
-    @keyframes pulse { 50% { opacity: .3; } }
     .meter-top { display: flex; justify-content: space-between; margin-bottom: 8px; }
     .meter-top b { font-size: 1.1rem; }
     .bar { height: 10px; border-radius: 999px; background: var(--accent-soft); overflow: hidden; }
@@ -45,64 +111,129 @@
     .resets { margin-top: 6px; color: var(--muted); font-size: .85rem; }
     .note { color: var(--muted); font-size: .85rem; margin-top: 24px; }
     .back {
-      display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; margin-bottom: 16px;
-      border: 1px solid var(--border); border-radius: 12px; background: var(--card);
-      color: var(--text); text-decoration: none; font-weight: 600;
+      display: inline-flex; align-items: center; gap: 4px; height: 40px; padding: 0 14px 0 8px; border-radius: 99px;
+      border: 1px solid var(--border); background: var(--card);
+      color: var(--text); text-decoration: none; font-size: .82rem; font-weight: 600; transition: border-color .2s;
     }
-    .back:hover { border-color: var(--accent); }
+    .back:hover { border-color: var(--chip-on-line); }
+    @media (prefers-reduced-motion: reduce) { .back, .to button, .send, .idea-actions button { transition: none; } }
     .cmd { display: grid; gap: 10px; }
     .to { display: flex; gap: 8px; flex-wrap: wrap; }
-    .to button, .send { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit; cursor: pointer; }
+    .to button, .send { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit; cursor: pointer; transition: border-color .2s, filter .2s; }
+    .to button { display: inline-flex; align-items: center; gap: 8px; padding-left: 8px; border-radius: 99px; }
+    .to button:hover { border-color: var(--chip-on-line); }
     .to button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
     #cmd-text { min-height: 80px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--text); font: inherit; resize: vertical; }
-    .send { background: var(--accent); border: none; color: #fff; font-weight: 600; justify-self: start; }
+    .send, .idea-actions .go {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--ai-grad); border: none; color: var(--on-accent); font-weight: 600;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), 0 4px 14px var(--ai-glow);
+    }
+    .send { justify-self: start; }
+    .send:hover, .idea-actions .go:hover { filter: brightness(1.06); }
     .send:disabled { opacity: .6; cursor: wait; }
     .hint { margin: 0; color: var(--muted); font-size: .85rem; }
     #inbox { margin-top: 10px; }
-    .msg-head { display: flex; gap: 8px; align-items: center; font-size: .85rem; color: var(--muted); }
+    .msg-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: .85rem; color: var(--muted); }
     .msg-text { margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
     .reply { margin-top: 8px; padding: 8px 12px; border-radius: 10px; background: var(--accent-soft); font-size: .92rem; white-space: pre-wrap; }
-    .new { background: #fff3dc; color: #a16207; }
+    .new { background: var(--new-bg); color: var(--new-text); }
     /* Ideas from Lewis */
     .idea-day { margin: 14px 0 6px; color: var(--muted); font-size: .85rem; font-weight: 600; }
     .idea-title { font-weight: 600; }
     .idea-why { margin-top: 4px; font-size: .95rem; word-break: break-word; }
     .tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; font-size: .85rem; }
     .tag { padding: 2px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-    .tags a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; }
+    .tags a { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 4px; font-weight: 600; text-decoration: none; }
+    .tags a:hover { text-decoration: underline; }
     .idea-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
-    .idea-actions button, .more { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit; cursor: pointer; }
-    .idea-actions .go { background: var(--accent); border: none; color: #fff; font-weight: 600; }
+    .idea-actions button, .more { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit; cursor: pointer; transition: border-color .2s, filter .2s; }
+    .idea-actions button:not(.go):hover, .more:hover { border-color: var(--chip-on-line); }
     .idea-actions button:disabled { opacity: .6; cursor: wait; }
     .idea-actions .badge { margin-left: 0; }
     .idea.skipped { opacity: .5; }
     .more { margin-top: 10px; }
     .empty { color: var(--muted); }
+    /* Max's card and the About me form (plain; George polishes) */
+    .max-avatar { background: var(--ai-grad); box-shadow: 0 4px 14px var(--ai-glow), inset 0 1px 0 rgba(255, 255, 255, .35); }
+    .max-avatar svg.i { width: 24px; height: 24px; stroke: #fff; stroke-width: 2.2; }
+    .about { display: grid; gap: 12px; margin-top: 10px; }
+    .about > .name { display: flex; align-items: center; gap: 8px; }
+    .about > .name svg.i { color: var(--accent); }
+    .about label { display: grid; gap: 4px; font-size: .85rem; font-weight: 600; color: var(--muted); }
+    .about input, .about textarea { min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--text); font: inherit; font-weight: 400; transition: border-color .2s, box-shadow .2s; }
+    .about input:focus, .about textarea:focus, #cmd-text:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .about textarea { min-height: 70px; resize: vertical; }
+    .about .times { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+    .about .hint { margin: 0; }
   </style>
 </head>
 <body>
+  <!-- Line icons (same set as the app), reused with <use href="#i-..."> -->
+  <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+    <symbol id="i-wave" viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="M8.5 7L3.5 12l5 5M15.5 7l5 5-5 5M13.5 4.5l-3 15"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.3 0 2-.9 2-2 0-.6-.3-1-.6-1.4-.4-.4-.6-.8-.6-1.4 0-1.1.9-2 2-2h2.3A3.9 3.9 0 0 0 21 10.4C21 6.3 17 3 12 3z"/><circle cx="7.5" cy="11.5" r=".9"/><circle cx="10" cy="7.5" r=".9"/><circle cx="14.5" cy="7.5" r=".9"/></symbol>
+    <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9.5 18h5M10.5 21h3"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2v.1h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M21 3L10 14"/><path d="M21 3l-6.5 18-4-7.5L3 9.5z"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></symbol>
+    <symbol id="i-team" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c2 .7 3.2 2.5 3.5 5.2"/></symbol>
+  </svg>
   <div class="wrap">
-    <a href="/" class="back">← My Tasks</a>
-    <header>
-      <h1>Team Status</h1>
-      <span class="updated" id="updated">Loading…</span>
+    <header class="topbar">
+      <span class="brand">
+        <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#i-wave"/></svg></span>
+        Just Say It
+      </span>
+      <a href="./" class="back"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-back"/></svg>Back</a>
     </header>
+    <h1 class="greet">Team</h1>
+    <p class="updated" id="updated">Loading…</p>
 
-    <h2>Agents</h2>
+    <h2>Your assistant</h2>
+    <!-- Max is the AI inside the app (not one of the builders below) -->
+    <div class="card agent" id="max">
+      <div class="avatar max-avatar" aria-hidden="true"><svg class="i"><use href="#i-wave"/></svg></div>
+      <div class="max-body">
+        <div class="name">Max <span class="role">· Your assistant</span></div>
+        <div class="job" id="max-brains">Checking…</div>
+      </div>
+      <span class="badge idle" id="max-badge">…</span>
+    </div>
+    <form class="card about" id="about">
+      <div class="name">About me</div>
+      <p class="hint">Max reads this to understand you better. Never put passwords or other secrets here.</p>
+      <label>Your name <input id="m-name" maxlength="60"></label>
+      <div class="times">
+        <label>Morning <input type="time" id="m-morning"></label>
+        <label>Afternoon <input type="time" id="m-afternoon"></label>
+        <label>Evening <input type="time" id="m-evening"></label>
+        <label>Tonight <input type="time" id="m-tonight"></label>
+      </div>
+      <label>People you often mention (comma between names) <input id="m-people" maxlength="1000"></label>
+      <label>Your categories (comma between) <input id="m-categories" maxlength="600"></label>
+      <label>Notes for Max <textarea id="m-notes" maxlength="500"></textarea></label>
+      <div class="idea-actions"><button type="submit" class="go">Save</button><span class="hint" id="m-msg" role="status"></span></div>
+    </form>
+
+    <h2><svg class="i" aria-hidden="true"><use href="#i-team"/></svg>Builder team</h2>
     <div id="agents"></div>
 
-    <h2>💡 Ideas from Lewis</h2>
+    <h2><svg class="i" aria-hidden="true"><use href="#i-bulb"/></svg>Ideas from Lewis</h2>
     <div id="ideas"></div>
 
     <h2>Send a command</h2>
     <form id="cmd" class="card cmd">
       <div class="to" id="to">
-        <button type="button" data-to="Toto" class="on">🤖 Toto</button>
-        <button type="button" data-to="Kimi">💻 Kimi</button>
-        <button type="button" data-to="George">🎨 George</button>
+        <button type="button" data-to="Toto" class="on"><span class="mini av-toto" aria-hidden="true">T</span>Toto</button>
+        <button type="button" data-to="Kimi"><span class="mini av-kimi" aria-hidden="true">K</span>Kimi</button>
+        <button type="button" data-to="George"><span class="mini av-george" aria-hidden="true">G</span>George</button>
       </div>
       <textarea id="cmd-text" placeholder="e.g. Kimi, add a weekly summary of done tasks" required></textarea>
-      <button type="submit" class="send">Send to inbox</button>
+      <button type="submit" class="send"><svg class="i sm" aria-hidden="true"><use href="#i-send"/></svg>Send to inbox</button>
       <p class="hint">Toto reads the inbox when you message him in the Claude app (say "check inbox"). Works only on this PC.</p>
     </form>
     <div id="inbox"></div>
@@ -118,7 +249,17 @@
   </div>
 
   <script>
-    const ICONS = { George: "🎨", Kimi: "💻", Toto: "🤖", Lewis: "💡" };
+    // Each builder: a gradient circle with the initial, plus a small role icon
+    const ROLE_ICON = { Toto: "compass", Kimi: "code", George: "palette", Lewis: "bulb" };
+    const avatar = (name) => {
+      const n = String(name ?? "");
+      const icon = ROLE_ICON[n] ? `<span class="role-ic"><svg class="i"><use href="#i-${ROLE_ICON[n]}"/></svg></span>` : "";
+      return `<div class="avatar ${ROLE_ICON[n] ? "av-" + n.toLowerCase() : ""}" aria-hidden="true">${esc(n.charAt(0).toUpperCase())}${icon}</div>`;
+    };
+    const mini = (name) => {
+      const n = String(name ?? "");
+      return `<span class="mini ${ROLE_ICON[n] ? "av-" + n.toLowerCase() : ""}" aria-hidden="true">${esc(n.charAt(0).toUpperCase())}</span>`;
+    };
     const LABELS = { working: "Working", done: "Done", idle: "Idle", new: "Waiting" };
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
@@ -142,7 +283,7 @@
 
         document.getElementById("agents").innerHTML = data.agents.map((a) => `
           <div class="card agent">
-            <div class="avatar">${ICONS[a.name] || "🧑"}</div>
+            ${avatar(a.name)}
             <div>
               <div class="name">${esc(a.name)} <span class="role">· ${esc(a.role)}</span></div>
               <div class="job">${esc(a.job)}</div>
@@ -215,7 +356,7 @@
         const items = await (await fetch(`api/inbox?t=${Date.now()}`)).json();
         document.getElementById("inbox").innerHTML = items.slice().reverse().slice(0, 15).map((m) => `
           <div class="card">
-            <div class="msg-head">${ICONS[m.to] || ""} to <b>${esc(m.to)}</b> · ${esc(m.created)}
+            <div class="msg-head">${mini(m.to)} to <b>${esc(m.to)}</b> · ${esc(m.created)}
               <span class="badge ${esc(m.status)}">${LABELS[m.status] || esc(m.status)}</span></div>
             <div class="msg-text">${esc(m.text)}</div>
             ${m.reply ? `<div class="reply">${esc(m.reply)}</div>` : ""}
@@ -250,12 +391,12 @@
           <div class="tags">
             ${idea.effort ? `<span class="tag">Effort: ${esc(EFFORT[idea.effort] || idea.effort)}</span>` : ""}
             ${idea.who ? `<span class="tag">${esc(idea.who)}</span>` : ""}
-            ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">source ↗</a>` : ""}
+            ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">Source<svg class="i sm" aria-hidden="true"><use href="#i-external"/></svg></a>` : ""}
           </div>
           <div class="idea-actions">
             ${sent ? `<span class="badge done">Sent to inbox</span>`
               : skipped ? `<span class="badge idle">Skipped</span>`
-              : `<button type="button" class="go" data-send="${i}">👍 Send to inbox</button>
+              : `<button type="button" class="go" data-send="${i}"><svg class="i sm" aria-hidden="true"><use href="#i-send"/></svg>Send to inbox</button>
                  <button type="button" data-skip="${i}">Skip</button>`}
           </div>
         </div>`;
@@ -325,10 +466,64 @@
       }
     });
 
+    // ---------- Max: status and About me ----------
+    async function loadMax() {
+      const badge = document.getElementById("max-badge");
+      const brains = document.getElementById("max-brains");
+      try {
+        const data = await (await fetch(`api/max/status?t=${Date.now()}`, { signal: AbortSignal.timeout(5000) })).json();
+        badge.className = `badge ${data.ready ? "done" : "idle"}`;
+        badge.textContent = data.ready ? "Ready" : "Offline";
+        brains.textContent = data.ready
+          ? "Turns what you say into tasks, steps and reminders."
+          : "Max is resting. Start the Ollama app and he'll be ready.";
+      } catch {
+        badge.className = "badge idle";
+        badge.textContent = "Offline";
+        brains.textContent = "Max runs on your PC, so he's offline here.";
+      }
+    }
+
+    const field = (id) => document.getElementById(`m-${id}`);
+    const list = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
+    async function loadMemory() {
+      try {
+        const m = await (await fetch(`api/max/memory?t=${Date.now()}`, { signal: AbortSignal.timeout(5000) })).json();
+        field("name").value = m.name;
+        for (const k of ["morning", "afternoon", "evening", "tonight"]) field(k).value = m.times[k];
+        field("people").value = m.people.join(", ");
+        field("categories").value = m.categories.join(", ");
+        field("notes").value = m.notes;
+      } catch {
+        document.getElementById("about").hidden = true; // no server here (e.g. GitHub Pages)
+      }
+    }
+    document.getElementById("about").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const msg = document.getElementById("m-msg");
+      const times = {};
+      for (const k of ["morning", "afternoon", "evening", "tonight"]) times[k] = field(k).value;
+      try {
+        const res = await fetch("api/max/memory", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: field("name").value, times, people: list(field("people").value),
+                                 categories: list(field("categories").value), notes: field("notes").value }),
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.status);
+        msg.textContent = "Saved. Max will use this from now on.";
+        loadMemory(); // show what was really saved (the server trims and checks it)
+      } catch (err) {
+        msg.textContent = `Couldn't save: ${err.message}`;
+      }
+    });
+
     refresh();
     loadInbox();
     loadIdeas();
-    setInterval(() => { refresh(); loadInbox(); loadIdeas(); }, 10000);
+    loadMax();
+    loadMemory();
+    setInterval(() => { refresh(); loadInbox(); loadIdeas(); loadMax(); }, 10000);
   </script>
 </body>
 </html>

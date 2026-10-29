@@ -3,32 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My To-Do List</title>
+  <title>Just Say It</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
   <!-- ?v= makes browsers fetch the new file after an update (raise it on each release) -->
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
+  <!-- Line icons, drawn once and reused with <use href="#i-..."> -->
+  <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></symbol>
+    <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></symbol>
+    <symbol id="i-wave" viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></symbol>
+    <symbol id="i-breakdown" viewBox="0 0 24 24"><path d="M4 5h16"/><path d="M7 5v4a3 3 0 0 0 3 3h2"/><path d="M7 9v6.5a3 3 0 0 0 3 3h2"/><path d="M16 12h4M16 18.5h4"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4.5h6V7"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
+    <symbol id="i-steps" viewBox="0 0 24 24"><path d="M4 7l1.8 1.8L9 5.5M4 15.5l1.8 1.8L9 14M12.5 7.5H20M12.5 16H20"/></symbol>
+    <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.7 17.2a1.7 1.7 0 0 1-2.4-2.4L15 7"/></symbol>
+    <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3.5 3.5V8H8"/><path d="M12 8v4.5l3 2"/></symbol>
+  </svg>
+
   <main class="app">
+    <!-- Header: slim glass bar (logo, settings, team), then a greeting with today's summary -->
     <header class="top">
-      <div>
-        <h1 data-i18n="title">My Tasks</h1>
-        <p class="sub" id="today"></p>
+      <div class="topbar">
+        <span class="brand">
+          <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#i-wave"/></svg></span>
+          <span data-i18n="title">Just Say It</span>
+        </span>
+        <div class="top-actions">
+          <!-- On phones these three fold into the "more" (three dots) menu -->
+          <div class="quick" id="quick">
+            <button id="lang" class="ib" title="Language">TH</button>
+            <button id="theme" class="ib" title="Dark mode" aria-label="Dark mode"><svg class="i"><use href="#i-moon"/></svg></button>
+            <button id="notify" class="ib" title="Reminders" aria-label="Reminders"><svg class="i"><use href="#i-bell"/></svg></button>
+          </div>
+          <!-- Team pill: filled from status.json; stays hidden where there is none (GitHub Pages) -->
+          <a href="status.html" class="team" id="team" title="Team status" hidden>
+            <span class="avs" id="team-avs"></span><span data-i18n="team">Team</span><small id="team-working"></small>
+          </a>
+          <button id="more" class="ib only-phone" title="More" aria-label="More" aria-expanded="false" aria-controls="quick"><svg class="i"><use href="#i-dots"/></svg></button>
+        </div>
       </div>
-      <div class="top-actions">
-        <button id="lang" class="icon-btn" title="Language">TH</button>
-        <button id="theme" class="icon-btn" title="Dark mode">🌙</button>
-        <button id="notify" class="icon-btn" title="Reminders">🔔</button>
-        <a href="status.html" class="icon-btn" title="Team status">📊</a>
-      </div>
+      <h1 class="greet" id="greet">Hello</h1>
+      <p class="summary"><span id="summary"></span>
+        <!-- Max (the AI assistant): green dot = ready, grey = offline. Opens Max's card on the status page -->
+        <a href="status.html#max" class="max-status" id="max-status"><i></i><span id="max-text">Max</span></a>
+      </p>
     </header>
 
     <!-- Command bar: add a task, or change one ("move #2 to friday", "done #3", "delete laundry") -->
     <!-- AI fills in date, priority and category -->
     <form id="todo-form" class="card add">
       <input id="todo-input" type="text" data-i18n-ph="placeholder" placeholder="Add or change tasks… e.g. pay rent on the 5th · move #2 to friday" autocomplete="off" required>
-      <button type="submit" id="add-btn" class="primary" data-i18n="add">✨ Go</button>
+      <button type="submit" id="add-btn" class="primary" data-i18n="add">Go</button>
     </form>
     <p id="cmd-msg" class="cmd-msg" role="status"></p>
     <datalist id="cat-list"></datalist>
@@ -65,7 +98,7 @@
 
     <!-- Backups: the app also backs up by itself before changes (needs server.py) -->
     <details class="backup-menu">
-      <summary class="link" data-i18n="backupMenu">⋯ Backup</summary>
+      <summary class="link"><svg class="i" aria-hidden="true"><use href="#i-history"/></svg><span data-i18n="backupMenu">Backup</span></summary>
       <div class="chips">
         <button id="backup-now" class="chip" data-i18n="backupNow" title="File attachments are not included">Back up now</button>
         <button id="restore" class="chip" data-i18n="restore">Restore…</button>
@@ -79,6 +112,6 @@
     </details>
   </main>
 
-  <script src="script.js?v=11"></script>
+  <script src="script.js?v=16"></script>
 </body>
 </html>

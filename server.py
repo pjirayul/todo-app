@@ -21,10 +21,19 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # ---------- Settings: change these to switch AI ----------
+# "Max" is the owner's name for this AI assistant (command bar, dates, Break it down).
 AI_PROVIDER = "ollama"          # "ollama" (free, on this PC) or "claude" (needs ANTHROPIC_API_KEY)
-OLLAMA_MODEL = "qwen2.5:3b"     # upgrade later, e.g. "qwen2.5:7b", after: ollama pull <name>
+# Two brains: a fast one for the command bar, a smarter (slower) one for Break it down.
+# If the smart one is missing or too slow, Max falls back to the fast one by itself.
+FAST_MODEL = "qwen2.5:3b"
+# Smart brain for Break it down. OFF for now (= the fast one): on this PC (4 GB graphics card) the 7B
+# and the 3B can't stay loaded together, so each switch reloads a model: 7B ~50 s per Break it down,
+# and the next command bar answer ~22 s instead of 1-2 s. To try it: SMART_MODEL = "qwen2.5:7b"
+SMART_MODEL = FAST_MODEL
+SMART_TIMEOUT = 20              # seconds to wait for the smart brain before falling back to the fast one
 CLAUDE_MODEL = "claude-haiku-5-5"
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
+OLLAMA_TAGS_URL = "http://127.0.0.1:11434/api/tags"  # lists the models Ollama has
 
 WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
@@ -44,7 +53,8 @@ INSTRUCTIONS = (
     "next_week: true only if the sentence says next week / next Friday / สัปดาห์หน้า.\n"
     "day: day of month for date, else 0. month: month number 1-12 if a month is named, else 0.\n"
     "next_month: true if the sentence says next month / เดือนหน้า.\n"
-    "time: 24h HH:MM if a time is said (5pm=17:00, บ่ายสาม=15:00, evening=18:00, morning=09:00), else \"\"."
+    "time: 24h HH:MM if a time is said (5pm=17:00, บ่ายสาม=15:00, evening=18:00, morning=09:00, tonight=20:00), else \"\".\n"
+    "The examples only show the format: never copy their words, use only the words of the sentence."
 )
 
 # The exact shape we want back
@@ -73,7 +83,7 @@ def add_months(d: datetime, n: int) -> datetime:
     return d.replace(year=d.year + m // 12, month=m % 12 + 1, day=1)
 
 
-def resolve_due(task: dict, now: datetime) -> str:
+def resolve_due(task: dict, now: datetime, times: dict = None) -> str:
     """Turn the AI's date words into a real YYYY-MM-DDTHH:MM, or "" if no date."""
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
     when = task.get("when", "none")
@@ -112,23 +122,26 @@ def resolve_due(task: dict, now: datetime) -> str:
         hour, minute = map(int, task.get("time", "").split(":"))
         date = date.replace(hour=hour, minute=minute)
     except ValueError:
-        date = date.replace(hour=9)
+        # No time said: use the owner's "morning" time from About me (09:00 if not set)
+        hour, minute = map(int, (times or DEFAULT_TIMES)["morning"].split(":"))
+        date = date.replace(hour=hour, minute=minute)
     return date.strftime("%Y-%m-%dT%H:%M")
 
 
-def parse_with_ollama(prompt: str) -> dict:
+def parse_with_ollama(prompt: str, system: str = INSTRUCTIONS, schema: dict = TASK_SCHEMA,
+                      timeout: int = 120, temperature: float = 0, model: str = FAST_MODEL) -> dict:
     request = urllib.request.Request(
         OLLAMA_URL,
         data=json.dumps({
-            "model": OLLAMA_MODEL,
-            "messages": [{"role": "system", "content": INSTRUCTIONS}, {"role": "user", "content": prompt}],
-            "format": TASK_SCHEMA,   # forces the answer into our JSON shape
+            "model": model,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+            "format": schema,   # forces the answer into our JSON shape
             "stream": False,
-            "options": {"temperature": 0},
+            "options": {"temperature": temperature},
         }).encode(),
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(request, timeout=120) as response:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         reply = json.loads(response.read())
     task = json.loads(reply["message"]["content"])
     task["tokens"] = reply.get("prompt_eval_count", 0) + reply.get("eval_count", 0)
@@ -173,7 +186,8 @@ EXAMPLES = """Examples:
 "dentist 20 November 2pm" -> {"text":"Dentist","priority":"med","category":"Health","when":"date","in_days":0,"weekday":"","next_week":false,"day":20,"month":11,"next_month":false,"time":"14:00"}
 "maybe repaint the bedroom someday" -> {"text":"Repaint the bedroom","priority":"low","category":"Home","when":"none","in_days":0,"weekday":"","next_week":false,"day":0,"month":0,"next_month":false,"time":""}
 "do lundry and by grocerys tomorrow" -> {"text":"Do laundry and buy groceries","priority":"med","category":"Home","when":"tomorrow","in_days":0,"weekday":"","next_week":false,"day":0,"month":0,"next_month":false,"time":""}
-"ซักผ้าพรุ่งนี้" -> {"text":"ซักผ้า","priority":"med","category":"Home","when":"tomorrow","in_days":0,"weekday":"","next_week":false,"day":0,"month":0,"next_month":false,"time":""}"""
+"นัดหมอฟันวันศุกร์หน้า 10 โมง" -> {"text":"นัดหมอฟัน","priority":"med","category":"Health","when":"weekday","in_days":0,"weekday":"Friday","next_week":true,"day":0,"month":0,"next_month":false,"time":"10:00"}
+"buy a birthday gift for dad in 3 days" -> {"text":"Buy a birthday gift for dad","priority":"med","category":"Shopping","when":"in_days","in_days":3,"weekday":"","next_week":false,"day":0,"month":0,"next_month":false,"time":""}"""
 
 
 # Date words people often mistype; close matches get corrected before the AI sees them
@@ -212,9 +226,23 @@ def fix_date_typos(sentence: str) -> str:
     return " ".join(words)
 
 
+# Parts of the day: when no clock time is said, Python uses the owner's own times (About me).
+# Thai words are kept specific ("ตอนเย็น", not "เย็น", which is also in ตู้เย็น = fridge).
+DAY_PARTS = ((r"\btonight\b|คืนนี้", "tonight"), (r"\bevening\b|ตอนเย็น|เย็นนี้|พรุ่งนี้เย็น", "evening"),
+             (r"\bafternoon\b|ตอนบ่าย", "afternoon"), (r"\bmorning\b|ตอนเช้า|เช้านี้|พรุ่งนี้เช้า", "morning"))
+CLOCK_TIME = re.compile(r"\d\s*(:\s*\d\d|\.\d\d|am\b|pm\b|น\.|โมง|ทุ่ม)|บ่าย\S*โมง|noon|เที่ยง", re.I)
+THAI_DATE_WORDS = (r"มะรืนนี้|มะรืน|พรุ่งนี้|วันนี้|คืนนี้|ตอนเช้า|ตอนเย็น|ตอนบ่าย|ด่วน|ไม่รีบ|"
+                   r"(วัน)?(จันทร์|อังคาร|พุธ|พฤหัส(บดี)?|ศุกร์|เสาร์|อาทิตย์)(หน้า)?|วันที่\s*\d+|"
+                   r"\d+\s*(โมง|ทุ่ม)|บ่าย\S*โมง|(สัปดาห์|เดือน)หน้า")
+THAI_LETTERS = re.compile(r"[฀-๿]")
+
+
 def parse_task(sentence: str, now: str, categories: list) -> dict:
     sentence = fix_date_typos(sentence)
-    prompt = f"{EXAMPLES}\n\nExisting categories: {', '.join(categories) or 'none'}\nSentence: {sentence}"
+    memory = load_memory()
+    known = list(dict.fromkeys(categories + memory["categories"]))[:30]  # existing + the owner's own, no repeats
+    about = memory_summary(memory)
+    prompt = f"{EXAMPLES}\n\n{about + chr(10) if about else ''}Existing categories: {', '.join(known) or 'none'}\nSentence: {sentence}"
     task = parse_with_ollama(prompt) if AI_PROVIDER == "ollama" else parse_with_claude(prompt)
     # Common day words are certain, so they override the AI
     lower = sentence.lower()
@@ -224,15 +252,108 @@ def parse_task(sentence: str, now: str, categories: list) -> dict:
         if any(w in lower for w in words):
             task["when"] = when
             break
+    # "tonight" / "this evening" without a clock time: the owner's own time, not the AI's guess
+    if not CLOCK_TIME.search(lower):
+        for pattern, part in DAY_PARTS:
+            if re.search(pattern, lower):
+                task["time"] = memory["times"][part]
+                break
     # Small models sometimes slip; keep the result safe for the app
     title = task.get("text") or sentence
+    if THAI_LETTERS.search(sentence) and not THAI_LETTERS.search(title):
+        title = sentence  # a Thai sentence got an English title: keep the owner's own words
+    if THAI_LETTERS.search(title):
+        # Date/time words the AI left in a Thai title ("นัดหมอฟัน เย็น" -> "นัดหมอฟัน")
+        clean = re.sub(THAI_DATE_WORDS, " ", title)
+        clean = re.sub(r"\s(เช้า|เย็น|บ่าย|ค่ำ|ดึก)(\s|$)", " ", " " + clean + " ")
+        title = " ".join(clean.split()) or title
     return {
         "text": title[:1].upper() + title[1:],  # "pay rent" -> "Pay rent"
-        "due": resolve_due(task, datetime.strptime(now[:16], "%Y-%m-%dT%H:%M")),
+        "due": resolve_due(task, datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"), memory["times"]),
         "priority": task.get("priority") if task.get("priority") in ("low", "med", "high") else "med",
         "category": task.get("category", ""),
         "tokens": task.get("tokens", 0),
     }
+
+
+# ---------- "Break it down": the AI suggests small steps for one task ----------
+BREAKDOWN_INSTRUCTIONS = (
+    "You are Max, a personal assistant. Split one to-do task into 3 to 6 small, concrete steps, "
+    "in the order they are done. Each step is a short action (under 10 words) that starts with a verb. "
+    "Make the steps fit THIS task: use its places, dates, people and notes. "
+    "No numbering, no explanations, no steps that repeat the task itself. "
+    "The examples only show the format: never copy their steps. Write the steps in the language you are told."
+)
+BREAKDOWN_SCHEMA = {
+    "type": "object",
+    "properties": {"steps": {"type": "array", "items": {"type": "string"}}},
+    "required": ["steps"],
+}
+BREAKDOWN_EXAMPLES = """Examples:
+Task: Renew passport -> {"steps":["Check the passport expiry date","Book an appointment at the passport office","Take a new passport photo","Bring the old passport and ID","Pay the fee and keep the receipt"]}
+Task: Plan a birthday dinner for mom -> {"steps":["Pick a date that suits the family","Choose a restaurant mom likes","Book a table for everyone","Order a birthday cake"]}
+Task: ทำความสะอาดห้องครัว -> {"steps":["เก็บของบนเคาน์เตอร์","ล้างจานที่ค้างอยู่","เช็ดเตาและเคาน์เตอร์","ถูพื้นห้องครัว","ทิ้งขยะ"]}
+Task: ยื่นภาษีออนไลน์ -> {"steps":["รวบรวมเอกสารรายได้และค่าลดหย่อน","เข้าเว็บกรมสรรพากร","กรอกแบบฟอร์มภาษี","ตรวจทานแล้วกดยื่นแบบ","บันทึกหลักฐานการยื่น"]}"""
+
+
+def breakdown_with_claude(prompt: str) -> dict:
+    import anthropic  # only needed for Claude: pip install anthropic
+    from pydantic import BaseModel
+
+    class Steps(BaseModel):
+        steps: list[str]
+
+    response = anthropic.Anthropic().messages.parse(
+        model=CLAUDE_MODEL,
+        max_tokens=1024,
+        output_config={"effort": "low"},
+        system=BREAKDOWN_INSTRUCTIONS,
+        messages=[{"role": "user", "content": prompt}],
+        output_format=Steps,
+    )
+    result = response.parsed_output.model_dump()
+    result["tokens"] = response.usage.input_tokens + response.usage.output_tokens
+    return result
+
+
+def break_down(text: str, notes: str, due: str, model: str = None) -> dict:
+    """Ask the AI for steps, then make the answer safe: 3-6 short, different steps.
+    model: force one brain (for testing); normally the smart one, falling back to the fast one."""
+    # Small models drift into English, so Python decides the language and says it plainly
+    language = "Thai" if THAI_LETTERS.search(text) else "English"
+    about = memory_summary(load_memory(), notes_only=True)
+    prompt = f"{BREAKDOWN_EXAMPLES}\n\n{about + chr(10) if about else ''}Language: {language}\nTask: {text}"
+    if notes:
+        prompt += f"\nNotes: {notes}"
+    if due:
+        # Friendly date, so the AI doesn't paste "2026-10-30T09:00" into a step
+        prompt += f"\nDue: {datetime.strptime(due, '%Y-%m-%dT%H:%M').strftime('%a %d %b %H:%M')}"
+    brain = CLAUDE_MODEL
+    if AI_PROVIDER == "ollama":
+        # A little temperature gives livelier steps
+        ask = lambda m, secs: parse_with_ollama(prompt, BREAKDOWN_INSTRUCTIONS, BREAKDOWN_SCHEMA,
+                                                timeout=secs, temperature=0.3, model=m)
+        brain = model or (SMART_MODEL if SMART_MODEL in max_status()["models"] else FAST_MODEL)
+        try:
+            result = ask(brain, SMART_TIMEOUT if brain != FAST_MODEL else 45)
+        except Exception as e:
+            if brain == FAST_MODEL or model:
+                raise
+            # The smart brain is missing, busy or too slow: the fast one answers instead
+            print(f"Max: {brain} failed ({type(e).__name__}), using {FAST_MODEL}")
+            brain = FAST_MODEL
+            result = ask(brain, 30)
+    else:
+        result = breakdown_with_claude(prompt)
+    steps, seen = [], set()
+    for s in result.get("steps") or []:
+        s = re.sub(r"^\s*(\d+[.)]|[-*•])\s*", "", str(s)).strip()  # drop "1." or "-" the AI may add
+        if len(s) > 80:
+            s = s[:79].rstrip() + "…"
+        if s and s.lower() not in seen:
+            seen.add(s.lower())
+            steps.append(s[:1].upper() + s[1:])
+    return {"steps": steps[:6], "tokens": result.get("tokens", 0), "brain": brain}
 
 
 # ---------- Command bar: act on an existing task ----------
@@ -241,7 +362,7 @@ def parse_task(sentence: str, now: str, categories: list) -> dict:
 UNDO_WORDS = r"^(undo|undone|uncheck|unmark|reopen|not done)\b|ยังไม่เสร็จ|ยกเลิกเสร็จ"
 DELETE_WORDS = r"^(delete|remove|del|erase)\b|^ลบ"
 DONE_WORDS = r"^(done|mark|tick|finished|completed)\b|\b(done|finished|completed)$|เสร็จ(แล้ว)?$|^เสร็จ"
-UPDATE_WORDS = r"^(change|move|rename|set|edit|update|reschedule|postpone)\b|^(เปลี่ยน|แก้|ย้าย|เลื่อน)"
+UPDATE_WORDS = r"^(change|modify|move|rename|set|edit|update|reschedule|postpone)\b|^(เปลี่ยน|แก้|ย้าย|เลื่อน)"
 # Filler words removed around the target ("mark #2 as done", "งาน #1 เสร็จแล้ว")
 FILLER = r"^((the|task|as|is|of|to)\b|งาน|ของ|ให้เป็น|เป็น|ไปเป็น|ไป)\s*"
 FIELD_WORDS = {"category": "category", "cat": "category", "หมวดหมู่": "category", "หมวด": "category",
@@ -365,7 +486,7 @@ def run_command(sentence: str, now: str, categories: list, tasks: list) -> dict:
             tokens = parsed["tokens"]
             if parsed["due"]:
                 changes["due"] = parsed["due"]
-            elif not priority and field != "due" and re.match(r"(change|edit|update|เปลี่ยน|แก้)", low):
+            elif not priority and field != "due" and re.match(r"(change|modify|edit|update|เปลี่ยน|แก้)", low):
                 changes["text"] = change[:1].upper() + change[1:]  # "change #2 to call mom" = new name
         if not changes:
             return {"action": action, "num": num, "nothing": True, "tokens": tokens}
@@ -395,11 +516,17 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(list_backups())
         if self.path.split("?")[0] == "/api/tasks":
             return self.send_json(load_tasks())
+        if self.path.split("?")[0] == "/api/max/status":
+            return self.send_json(max_status())
+        if self.path.split("?")[0] == "/api/max/memory":
+            return self.send_json(load_memory())
         if self.path.startswith("/api/backups/"):
             return self.get_backup(self.path.split("?")[0][len("/api/backups/"):])
         super().do_GET()
 
     def do_PUT(self):
+        if self.path == "/api/max/memory":
+            return self.put_memory()
         if self.path != "/api/tasks":
             return self.send_error(404)
         # Same protection as the inbox: only our own pages may change tasks
@@ -422,6 +549,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.post_idea_status()
         if self.path == "/api/backup":
             return self.post_backup()
+        if self.path == "/api/breakdown":
+            return self.post_breakdown()
         if self.path != "/api/parse":
             return self.send_error(404)
         try:
@@ -484,6 +613,42 @@ class Handler(SimpleHTTPRequestHandler):
             with open(IDEAS_FILE, "w", encoding="utf-8") as f:
                 json.dump(ideas, f, ensure_ascii=False, indent=2)
             self.send_json({"ok": True})
+        except Exception as e:
+            self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
+
+    def put_memory(self):
+        # Same protection as the inbox: only our own pages may change what Max remembers
+        if self.headers.get("Origin") not in ALLOWED_ORIGINS or "application/json" not in self.headers.get("Content-Type", ""):
+            return self.send_json({"error": "Not allowed"}, 403)
+        try:
+            size = int(self.headers.get("Content-Length") or 0)
+            if size > MEMORY_MAX_BYTES:
+                return self.send_json({"error": "Too long. Keep About me short."}, 413)
+            memory = clean_memory(json.loads(self.rfile.read(size)))
+            with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+                json.dump(memory, f, ensure_ascii=False, indent=2)
+            self.send_json(memory)
+        except Exception as e:
+            self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
+
+    def post_breakdown(self):
+        # Same protection as the inbox: only our own pages may use the AI
+        if self.headers.get("Origin") not in ALLOWED_ORIGINS or "application/json" not in self.headers.get("Content-Type", ""):
+            return self.send_json({"error": "Not allowed"}, 403)
+        try:
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            text = str(body.get("text", "")).strip()[:500]
+            if not text:
+                return self.send_json({"error": "Empty task"}, 400)
+            due = str(body.get("due", ""))
+            result = break_down(text, str(body.get("notes", ""))[:1000], due if DUE_FORMAT.fullmatch(due) else "")
+            if not result["steps"]:
+                return self.send_json({"error": "The AI gave no steps. Try again."}, 502)
+            self.send_json(result)
+        except TimeoutError:
+            self.send_json({"error": "The AI took too long. Try again."}, 504)
+        except urllib.error.URLError:
+            self.send_json({"error": "Ollama isn't running. Start the Ollama app and try again."}, 502)
         except Exception as e:
             self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
 
@@ -591,7 +756,13 @@ def open_db():
         notified INTEGER NOT NULL DEFAULT 0,
         sort INTEGER NOT NULL DEFAULT 0,     -- position in "My order"
         created TEXT NOT NULL,
-        updated TEXT NOT NULL)""")
+        updated TEXT NOT NULL,
+        steps TEXT NOT NULL DEFAULT '[]')""")  # checklist as JSON: [{"text": "...", "done": false}]
+    # Databases made before "Break it down" have no steps column yet: add it (existing tasks get [])
+    columns = [row[1] for row in con.execute("PRAGMA table_info(tasks)")]
+    if "steps" not in columns:
+        con.execute("ALTER TABLE tasks ADD COLUMN steps TEXT NOT NULL DEFAULT '[]'")
+        con.commit()
     con.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")  # nextNum, version
     return con
 
@@ -604,10 +775,11 @@ def get_meta(con, key, default):
 def load_tasks() -> dict:
     con = open_db()
     try:
-        rows = con.execute("SELECT id, num, text, done, due, priority, cat, notified, notes, files "
+        rows = con.execute("SELECT id, num, text, done, due, priority, cat, notified, notes, files, steps "
                            "FROM tasks ORDER BY sort").fetchall()
         todos = [{"id": r[0], "num": r[1], "text": r[2], "done": bool(r[3]), "due": r[4], "priority": r[5],
-                  "cat": r[6], "notified": bool(r[7]), "notes": r[8], "files": json.loads(r[9])} for r in rows]
+                  "cat": r[6], "notified": bool(r[7]), "notes": r[8], "files": json.loads(r[9]),
+                  "steps": json.loads(r[10])} for r in rows]
         return {"todos": todos, "nextNum": get_meta(con, "nextNum", 1), "version": get_meta(con, "version", 0)}
     finally:
         con.close()
@@ -626,6 +798,7 @@ def clean_tasks(todos):
             return None
         seen.add(num)
         files = t.get("files") if isinstance(t.get("files"), list) else []
+        steps = t.get("steps") if isinstance(t.get("steps"), list) else []
         clean.append({
             "id": t.get("id") if isinstance(t.get("id"), (int, float)) else None,
             "num": num,
@@ -637,6 +810,8 @@ def clean_tasks(todos):
             "notified": t.get("notified") is True,
             "notes": str(t.get("notes") or "")[:20000],
             "files": [{"id": str(f.get("id")), "name": str(f.get("name"))} for f in files if isinstance(f, dict)],
+            "steps": [{"text": s["text"][:200], "done": s.get("done") is True}
+                      for s in steps if isinstance(s, dict) and isinstance(s.get("text"), str)][:30],
         })
     return clean
 
@@ -658,16 +833,17 @@ def _save_tasks(tasks: list, next_num, base_version):
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             # Keep each task's created time, and only touch "updated" when the task really changed
             old = {r[0]: r[1:] for r in con.execute(
-                "SELECT num, id, text, done, due, priority, cat, notes, files, notified, created, updated FROM tasks")}
+                "SELECT num, id, text, done, due, priority, cat, notes, files, notified, steps, created, updated FROM tasks")}
             con.execute("DELETE FROM tasks")
             for sort, t in enumerate(tasks):
                 values = (t["id"], t["text"], int(t["done"]), t["due"], t["priority"], t["cat"], t["notes"],
-                          json.dumps(t["files"], ensure_ascii=False), int(t["notified"]))
+                          json.dumps(t["files"], ensure_ascii=False), int(t["notified"]),
+                          json.dumps(t["steps"], ensure_ascii=False))
                 before = old.get(t["num"])
                 created = before[-2] if before else now
                 updated = before[-1] if before and tuple(before[:-2]) == values else now
-                con.execute("INSERT INTO tasks (id, text, done, due, priority, cat, notes, files, notified, num, sort, created, updated) "
-                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", values + (t["num"], sort, created, updated))
+                con.execute("INSERT INTO tasks (id, text, done, due, priority, cat, notes, files, notified, steps, num, sort, created, updated) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", values + (t["num"], sort, created, updated))
             next_num = max([int(next_num) if isinstance(next_num, int) else 1, get_meta(con, "nextNum", 1)]
                            + [t["num"] + 1 for t in tasks])  # numbers are never reused
             con.execute("INSERT OR REPLACE INTO meta VALUES ('nextNum', ?)", (str(next_num),))
@@ -696,6 +872,79 @@ def daily_db_copy():
         target.close()
     for n in sorted(n for n in os.listdir(BACKUP_DIR) if DB_COPY_NAME.fullmatch(n))[:-KEEP_DB_COPIES]:
         os.remove(os.path.join(BACKUP_DIR, n))
+
+
+# ---------- Max: status and "About me" memory ----------
+# max-memory.json is private (gitignored): things Max should know about the owner.
+# Never put passwords or other secrets in it: it is sent to the AI with every request.
+MEMORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "max-memory.json")
+DEFAULT_TIMES = {"morning": "09:00", "afternoon": "14:00", "evening": "18:00", "tonight": "20:00"}
+HHMM = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
+MEMORY_MAX_BYTES = 4000
+
+
+def clean_memory(m) -> dict:
+    """Keep only known fields with safe sizes; missing or bad times get the defaults."""
+    m = m if isinstance(m, dict) else {}
+    times = m.get("times") if isinstance(m.get("times"), dict) else {}
+
+    def words(value, count, size):  # a list of short strings
+        if not isinstance(value, list):
+            return []
+        return [x.strip()[:size] for x in value if isinstance(x, str) and x.strip()][:count]
+
+    return {
+        "name": str(m.get("name") or "").strip()[:60],
+        "times": {k: times[k] if isinstance(times.get(k), str) and HHMM.fullmatch(times[k]) else v
+                  for k, v in DEFAULT_TIMES.items()},
+        "people": words(m.get("people"), 30, 60),
+        "categories": words(m.get("categories"), 30, 40),
+        "notes": str(m.get("notes") or "").strip()[:500],
+    }
+
+
+def load_memory() -> dict:
+    try:
+        with open(MEMORY_FILE, encoding="utf-8-sig") as f:
+            return clean_memory(json.load(f))
+    except (FileNotFoundError, ValueError):
+        return clean_memory({})
+
+
+def memory_summary(m: dict, notes_only: bool = False) -> str:
+    """One short line for Max's prompts (small models get confused by long ones).
+    notes_only: for Break it down, where names made the AI add steps like "tell Jirayu"."""
+    parts = []
+    if m["name"] and not notes_only:
+        parts.append(f"The owner is {m['name']}.")
+    if m["people"] and not notes_only:
+        parts.append(f"People they know (spell exactly): {', '.join(m['people'])}.")
+    if m["notes"]:
+        parts.append(f"Notes: {m['notes']}")
+    return ("About the owner: " + " ".join(parts)) if parts else ""
+
+
+_status = {"at": 0.0, "data": None}  # Max's status is cached for 30 s, so the page can ask often
+
+
+def max_status() -> dict:
+    """Is Max ready? For Ollama: is it running, and which models (brains) does it have?"""
+    now = datetime.now().timestamp()
+    if _status["data"] and now - _status["at"] < 30:
+        return _status["data"]
+    if AI_PROVIDER == "ollama":
+        try:
+            with urllib.request.urlopen(OLLAMA_TAGS_URL, timeout=2) as response:
+                models = [m.get("name", "") for m in json.loads(response.read()).get("models", [])]
+        except (OSError, ValueError):
+            models = []  # Ollama is not running
+        data = {"ready": FAST_MODEL in models, "models": models, "fast": FAST_MODEL,
+                "smart": SMART_MODEL if SMART_MODEL in models else FAST_MODEL, "smartWanted": SMART_MODEL}
+    else:
+        data = {"ready": bool(os.environ.get("ANTHROPIC_API_KEY")), "models": [CLAUDE_MODEL],
+                "fast": CLAUDE_MODEL, "smart": CLAUDE_MODEL, "smartWanted": CLAUDE_MODEL}
+    _status.update(at=now, data=data)
+    return data
 
 
 # ---------- Command inbox (Team Status page) ----------

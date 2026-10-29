@@ -1,5 +1,9 @@
 /* Colors live in variables so dark mode just swaps them */
 :root {
+  /* Icons drawn in CSS (where an <svg> can't go): tick, message, warning. Same lines as the icon set. */
+  --tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+  --ic-message: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20V7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H8z'/%3E%3C/svg%3E");
+  --ic-alert: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.3 4.6L2.9 17.5a2 2 0 0 0 1.7 3h14.8a2 2 0 0 0 1.7-3L13.7 4.6a2 2 0 0 0-3.4 0z'/%3E%3Cpath d='M12 10v3.5M12 17h.01'/%3E%3C/svg%3E");
   --bg: #f3f1ed;
   --bg-grad: radial-gradient(circle at 15% 0%, #e7e3ff 0, transparent 45%), radial-gradient(circle at 90% 10%, #ffe9dc 0, transparent 40%);
   --card: #ffffff;
@@ -34,7 +38,9 @@
   --chip-on-line: rgba(91, 76, 240, .45);
   --chip-on-text: #4a3bd6;
   --danger-soft: rgba(229, 72, 77, .1);
-  --shimmer: rgba(255, 255, 255, .38);       /* light sweep while AI is thinking */
+  --ok: #30a46c;    /* team status dots: done */
+  --busy: #f5a524;  /* working */
+  --idle: #b9b6c6;  /* idle */
 }
 
 [data-theme="dark"] {
@@ -68,7 +74,9 @@
   --chip-on-line: rgba(139, 127, 255, .6);
   --chip-on-text: #d4cfff;
   --danger-soft: rgba(229, 72, 77, .16);
-  --shimmer: rgba(255, 255, 255, .45);
+  --ok: #3dd68c;
+  --busy: #ffc53d;
+  --idle: #5d5a70;
   color-scheme: dark;
 }
 
@@ -99,36 +107,82 @@ button:focus-visible, a:focus-visible, .check:focus-visible { outline: 2px solid
   box-shadow: var(--shadow);
 }
 
-/* Header */
-.top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
-h1 { margin: 0; font-size: 1.9rem; font-weight: 700; letter-spacing: -.02em; line-height: 1.25; }
-.sub { margin: 4px 0 0; color: var(--muted); }
-.top-actions { display: flex; gap: 8px; flex: none; }
+/* Header (George's "Glass Bar + Greeting"): slim frosted bar, then a big greeting + today's summary */
+.top { margin-bottom: 20px; }
+.topbar {
+  position: relative; /* the phone three-dots menu opens just under the bar */
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 6px 6px 10px; border-radius: 16px;
+  background: var(--glass); border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+.brand { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 700; font-size: .92rem; letter-spacing: -.01em; white-space: nowrap; }
+/* Logo: a small "voice wave" on the AI gradient */
+.mark {
+  width: 26px; height: 26px; border-radius: 8px; flex: none; display: grid; place-items: center;
+  background: var(--ai-grad); box-shadow: 0 4px 14px var(--ai-glow), inset 0 1px 0 rgba(255, 255, 255, .35);
+}
+.mark svg { width: 15px; height: 15px; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; fill: none; }
+/* Line icons (George's set, style A): one thin line, colour follows the text.
+   pointer-events: none so a click on the icon counts as a click on its button. */
+svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+svg.i.sm { width: 15px; height: 15px; }
+.top-actions { display: flex; align-items: center; gap: 4px; flex: none; }
+.quick { display: flex; gap: 4px; }
+/* Icon buttons in the bar: quiet until hovered */
+.ib {
+  width: 40px; height: 40px; padding: 0; border-radius: 11px; display: grid; place-items: center;
+  border: 1px solid transparent; background: none; color: var(--text); font-size: .78rem; font-weight: 700;
+  transition: border-color .2s, background .2s, color .2s, transform .15s ease;
+}
+.ib.on { background: var(--chip-on); border-color: var(--chip-on-line); color: var(--chip-on-text); } /* reminders allowed */
+/* Team pill: initials with a status dot each, links to the Team Status page */
+.team {
+  display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px 0 6px; border-radius: 99px;
+  background: var(--card); border: 1px solid var(--border); color: var(--text); text-decoration: none;
+  font-size: .82rem; font-weight: 600; white-space: nowrap; transition: border-color .2s, box-shadow .2s;
+}
+.team[hidden] { display: none; }
+.team small { color: var(--muted); font-weight: 500; font-size: inherit; }
+.avs { display: flex; }
+.av {
+  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; position: relative;
+  margin-left: -7px; border: 2px solid var(--card); color: #fff; font-size: .66rem; font-weight: 700;
+}
+.av:first-child { margin-left: 0; }
+.av-toto { background: #5b4cf0; }
+.av-kimi { background: #e5484d; }
+.av-george { background: #0e9f8e; }
+.av-lewis { background: #d97706; }
+.av i { position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--card); background: var(--idle); }
+.av i.working { background: var(--busy); }
+.av i.done { background: var(--ok); }
+.greet { margin: 20px 2px 0; font-size: 1.7rem; font-weight: 700; letter-spacing: -.025em; line-height: 1.25; }
+.greet em { font-style: normal; background: var(--ai-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.summary { margin: 4px 2px 0; color: var(--muted); font-size: .88rem; }
+.summary b { color: var(--text); font-weight: 600; }
+.only-phone { display: none; }
+
 /* Shared "glass" look for quiet buttons: frosted fill, hairline border, light top edge */
-.icon-btn, .chip, .edit-row button:not(.primary) {
+.chip, .edit-row button:not(.primary) {
   background: var(--glass);
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
   box-shadow: inset 0 1px 0 var(--glass-hi), 0 1px 2px rgba(20, 16, 50, .04);
   transition: border-color .2s, color .2s, box-shadow .2s, transform .15s ease, background .2s;
 }
-.icon-btn {
-  width: 44px; height: 44px;
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  font-weight: 600; font-size: .9rem;
-}
-a.icon-btn { display: grid; place-items: center; text-decoration: none; color: inherit; } /* link that looks like a button */
-.icon-btn.on { background: var(--chip-on); border-color: var(--chip-on-line); color: var(--chip-on-text); }
 /* Lift on hover only where there is a mouse (no "stuck" hover on phones) */
 @media (hover: hover) {
-  .icon-btn:hover, .chip:hover, .edit-row button:not(.primary):hover {
+  .chip:hover, .edit-row button:not(.primary):hover {
     border-color: var(--chip-on-line);
     box-shadow: inset 0 1px 0 var(--glass-hi), var(--hover-shadow);
     transform: translateY(-1px);
   }
+  .ib:hover { background: var(--glass); border-color: var(--chip-on-line); color: var(--accent); }
+  .team:hover { border-color: var(--chip-on-line); box-shadow: var(--hover-shadow); }
 }
 /* Press: a quick squeeze */
-.icon-btn:active, .chip:active, .edit-row button:active, .primary:active:not(:disabled) { transform: scale(.96); transition-duration: .06s; }
+.ib:active, .chip:active, .edit-row button:active, .primary:active:not(:disabled) { transform: scale(.96); transition-duration: .06s; }
 
 /* Add form */
 .add { padding: 10px 10px 10px 16px; display: flex; gap: 8px; align-items: center; }
@@ -156,8 +210,6 @@ a.icon-btn { display: grid; place-items: center; text-decoration: none; color: i
   background-size: 100% 100%, 300% 100%;
   box-shadow: var(--shadow), 0 0 0 4px var(--accent-soft), 0 8px 28px var(--ai-glow);
 }
-.add:has(#add-btn:disabled) { animation: ring-flow 3s linear infinite; }
-@keyframes ring-flow { to { background-position: 0 0, 300% 0; } }
 .add #todo-input:focus { outline: none; }
 .edit-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .edit-row input, .edit-row select, .toolbar input, .toolbar select {
@@ -175,47 +227,36 @@ a.icon-btn { display: grid; place-items: center; text-decoration: none; color: i
 .edit-row .primary { border: none; }
 .edit-form { padding: 4px 0; }
 .todo-item.editing, .todo-item.editing:hover { background: var(--accent-soft); }
-/* Row buttons ✎ and ×: invisible until the row is hovered, then a soft rounded tile */
+/* Row buttons (Break it down, edit, delete): invisible until the row is hovered, then a soft rounded tile */
 .edit, .delete {
-  width: 44px; height: 44px; flex: none;
+  width: 44px; height: 44px; flex: none; padding: 0; display: grid; place-items: center;
   border: 1px solid transparent; border-radius: 12px; background: none;
   color: var(--muted); font-size: 1.1rem;
   opacity: 0; transition: opacity .15s, background .2s, color .2s, border-color .2s, box-shadow .2s, transform .15s;
 }
 .edit:hover { background: var(--glass); border-color: var(--chip-on-line); color: var(--accent); box-shadow: var(--hover-shadow); }
 .edit:active, .delete:active { transform: scale(.92); }
+.breakdown { color: var(--accent); } /* the AI action gets the accent colour */
 .todo-item:hover .edit, .edit:focus-visible { opacity: 1; }
 @media (hover: none) { .edit, .delete { opacity: .6; } }
 input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-/* The hero "✨ Go" button (and Save): violet gradient, soft glow, light top edge */
+/* The hero "Go" button (and Save), Aurora style: plain text on the violet gradient, soft glow, light top edge.
+   While the AI thinks it shows "…", a bit faded, with no animation. */
 .primary {
-  position: relative; overflow: hidden; isolation: isolate;
   padding: 12px 26px; min-height: 48px;
   border: none; border-radius: 14px;
-  background: var(--ai-grad); background-size: 160% 100%; background-position: 0 0;
-  color: var(--on-accent); font-weight: 600; font-size: 1.1rem; white-space: nowrap;
+  background: var(--ai-grad);
+  color: var(--on-accent); font-weight: 600; font-size: 1.05rem; letter-spacing: .01em; white-space: nowrap;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), 0 4px 14px var(--ai-glow);
-  transition: background-position .4s ease, box-shadow .25s, transform .15s ease;
+  transition: filter .2s, box-shadow .25s, transform .15s ease;
 }
 @media (hover: hover) {
   .primary:hover:not(:disabled) {
-    background-position: 100% 0;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .32), 0 8px 24px var(--ai-glow);
-    transform: translateY(-1px);
+    filter: brightness(1.06);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), 0 6px 20px var(--ai-glow);
   }
 }
-/* Thinking ("✨ …", disabled): stays readable, glows softly, a light sweep passes over it */
-.primary:disabled { cursor: progress; animation: think-glow 1.6s ease-in-out infinite; }
-.primary:disabled::after {
-  content: ""; position: absolute; inset: 0; z-index: -1;
-  background: linear-gradient(100deg, transparent 30%, var(--shimmer) 50%, transparent 70%);
-  background-size: 250% 100%;
-  animation: shimmer 1.4s linear infinite;
-}
-@keyframes shimmer { from { background-position: 150% 0; } to { background-position: -100% 0; } }
-@keyframes think-glow {
-  50% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), 0 4px 22px var(--ai-glow), 0 0 0 4px var(--accent-soft); }
-}
+.primary:disabled { cursor: progress; opacity: .75; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2), 0 2px 8px var(--ai-glow); }
 
 /* AI usage meter */
 /* Quiet strip: becomes a frosted tile on hover */
@@ -248,8 +289,9 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   min-height: 36px; padding: 4px 6px 4px 10px; border-radius: 10px; border: 1px solid var(--border);
   background: var(--card); color: var(--text); font-size: .85rem; text-decoration: none;
 }
-.file .rm { border: none; background: none; color: var(--muted); font-size: 1.15rem; width: 28px; height: 28px; border-radius: 6px; padding: 0; }
-.file .rm:hover { color: var(--high); background: var(--accent-soft); }
+.file svg.i.sm { color: var(--muted); }
+.file .rm { border: none; background: none; color: var(--muted); width: 28px; height: 28px; border-radius: 8px; padding: 0; display: grid; place-items: center; }
+.file .rm:hover { color: var(--high); background: var(--danger-soft); }
 .edit-row .e-notes { flex: 1 1 100%; min-height: 80px; resize: vertical; font: inherit; color: inherit; padding: 10px 13px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); }
 .edit-row .e-notes:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 .edit-row .e-files { flex: 1 1 100%; min-width: 0; max-width: 100%; font-size: 1rem; }
@@ -298,6 +340,9 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .todo-item.p-high { border-left-color: var(--high); }
 .todo-item.p-med { border-left-color: var(--med); }
 .todo-item.p-low { border-left-color: var(--low); }
+/* Checkbox and row buttons line up with the title (rows with steps or notes grow downwards) */
+.todo-item { align-items: flex-start; }
+.todo-item > .edit, .todo-item > .delete { margin-top: -10px; margin-bottom: -10px; }
 .todo-item.dragging { opacity: .4; }
 .todo-item[draggable="true"] { cursor: grab; }
 
@@ -316,7 +361,10 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .check::before { content: ""; position: absolute; inset: -12px; } /* 44px tap area */
 .check:hover { border-color: var(--accent); }
 .check:checked { background: var(--accent); border-color: var(--accent); }
-.check:checked::after { content: "✓"; color: var(--on-accent); font-size: 14px; font-weight: 700; }
+.check:checked::after, .step-check:checked::after, .suggest-pick:checked::after {
+  content: ""; width: 14px; height: 14px; background: var(--on-accent);
+  -webkit-mask: var(--tick) center / contain no-repeat; mask: var(--tick) center / contain no-repeat;
+}
 
 .body { flex: 1; min-width: 0; }
 .text { word-break: break-word; font-size: 1rem; }
@@ -325,6 +373,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; font-size: .8rem; color: var(--muted); }
 .meta:empty { display: none; }
 .tag { padding: 1px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.due, .steps-count { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
 .due.overdue { color: var(--high); font-weight: 600; }
 .num {
   padding: 0 7px; border-radius: 6px;
@@ -344,9 +393,12 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   overflow-wrap: anywhere;
   animation: msg-in .2s ease-out;
 }
-.cmd-msg::before { content: "💬"; flex: none; font-size: .85rem; line-height: 1.7; }
+.cmd-msg::before {
+  content: ""; flex: none; width: 17px; height: 17px; margin-top: 2px; background: currentColor;
+  -webkit-mask: var(--ic-message) center / contain no-repeat; mask: var(--ic-message) center / contain no-repeat;
+}
 .cmd-msg.warn { background: var(--warn-bg); color: var(--warn-text); border-color: var(--warn-border); }
-.cmd-msg.warn::before { content: "⚠️"; }
+.cmd-msg.warn::before { -webkit-mask-image: var(--ic-alert); mask-image: var(--ic-alert); }
 .cmd-msg:empty { display: none; }
 @keyframes msg-in { from { opacity: 0; transform: translateY(-3px); } }
 
@@ -359,17 +411,16 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
   .todo-item.flash { animation-duration: 2.4s; animation-timing-function: steps(1, end); }
   .cmd-msg { animation: none; }
   /* No movement: thinking state is shown by the steady glow ring instead of the sweep */
-  .primary:disabled, .add:has(#add-btn:disabled) { animation: none; }
-  .primary:disabled { box-shadow: 0 0 0 4px var(--accent-soft), 0 4px 14px var(--ai-glow); }
-  .primary:disabled::after { animation: none; background: none; }
-  .icon-btn, .chip, .primary, .edit, .delete, .edit-row button { transform: none !important; }
+  .ib, .chip, .primary, .edit, .delete, .edit-row button { transform: none !important; }
+  .ib, .team { transition: none; }
 }
 
 .todo-item:hover .delete, .delete:focus-visible { opacity: 1; }
 .delete:hover { color: var(--high); background: var(--danger-soft); border-color: transparent; }
 .done .check:hover { filter: brightness(1.1); }
 
-.empty { text-align: center; color: var(--muted); padding: 32px 0; }
+.empty { display: flex; justify-content: center; align-items: center; gap: 8px; color: var(--muted); padding: 32px 0; }
+.empty svg.i { color: var(--low); }
 
 footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; color: var(--muted); font-size: .9rem; }
 .link { border: none; background: none; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; padding: 10px 6px; min-height: 44px; font-size: .9rem; border-radius: 10px; }
@@ -378,13 +429,14 @@ footer { display: flex; justify-content: space-between; align-items: center; mar
 /* Backup menu under the footer (reuses .link, .chip and .cmd-msg) */
 .backup-menu { margin-top: 4px; color: var(--muted); font-size: .9rem; }
 .backup-menu summary {
-  display: inline-flex; align-items: center; cursor: pointer; list-style: none;
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer; list-style: none;
   padding: 10px 14px; border: 1px solid transparent; border-radius: 999px; text-decoration: none;
   transition: background .2s, border-color .2s, color .2s;
 }
 .backup-menu summary:hover, .backup-menu[open] summary { color: var(--text); background: var(--glass); border-color: var(--border); }
 .backup-menu summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .link:hover { background: var(--danger-soft); }
+.backup-menu summary svg.i { width: 18px; height: 18px; }
 #clear-done { text-decoration: none; padding: 10px 14px; border-radius: 999px; }
 .backup-menu summary::-webkit-details-marker { display: none; }
 .backup-menu .chip { min-height: 44px; }
@@ -394,16 +446,95 @@ footer { display: flex; justify-content: space-between; align-items: center; mar
 
 @media (max-width: 480px) {
   body { padding: 24px 16px; }
-  h1 { font-size: 1.6rem; }
-  .sub { font-size: .9rem; }
+  /* Header: language / dark / reminders fold into the three-dots menu; the team pill shows initials only */
+  .only-phone { display: grid; }
+  .team small { display: none; }
+  .greet { font-size: 1.45rem; }
+  .quick {
+    display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 10;
+    padding: 6px; border-radius: 14px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow);
+  }
+  .quick.open { display: flex; }
+  .ib { width: 44px; height: 44px; } /* bigger finger targets */
   .add { padding-left: 14px; }
   .chip { padding: 8px 14px; }
   .primary { padding: 12px 16px; }
-  .top-actions { gap: 6px; }
   #todo-input::placeholder { font-size: .85rem; }
   .cmd-msg { font-size: .85rem; padding: 8px 10px; }
   .todo-item { gap: 10px; padding: 12px 8px 12px 10px; }
   .edit-row > * { flex: 1 1 45%; }
   .edit-row .e-text, .edit-row .e-notes, .edit-row .e-files, .edit-row .e-due { flex: 1 1 100%; }
   .edit-row button { flex: 1 1 40%; min-height: 50px; }
+}
+
+/* "Break it down" checklist: small rounded tick boxes, quiet x to remove a step */
+.steps { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 1px; }
+.step { display: flex; align-items: center; gap: 4px; font-size: .9rem; min-height: 36px; padding-left: 2px; border-radius: 10px; }
+.step label { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 6px 0; word-break: break-word; cursor: pointer; }
+.step-check, .suggest-pick {
+  appearance: none; position: relative; flex: none; margin: 0; cursor: pointer;
+  width: 18px; height: 18px; border-radius: 6px; display: grid; place-items: center;
+  border: 1.75px solid color-mix(in srgb, var(--muted) 60%, transparent); background: var(--card);
+  transition: background .15s, border-color .15s;
+}
+.step-check:hover, .suggest-pick:hover { border-color: var(--accent); }
+.step-check:checked, .suggest-pick:checked { background: var(--accent); border-color: var(--accent); }
+.step-check:checked::after, .suggest-pick:checked::after { width: 12px; height: 12px; }
+.step-check:focus-visible, .suggest-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.step-done span { text-decoration: line-through; color: var(--muted); }
+.step-rm {
+  flex: none; width: 36px; height: 36px; padding: 0; display: grid; place-items: center;
+  border: none; background: none; color: var(--muted); border-radius: 10px; opacity: .7;
+  transition: opacity .15s, color .2s, background .2s;
+}
+.step-rm:hover, .step-rm:focus-visible { opacity: 1; color: var(--high); background: var(--danger-soft); }
+.steps-count svg.i.sm { color: var(--accent); }
+
+/* Max's suggested steps: a soft violet card with "Add selected" (gradient) and "Cancel" (glass) */
+.suggest {
+  margin-top: 8px; padding: 10px 12px; border-radius: 14px;
+  background: var(--info-bg); border: 1px solid var(--info-border);
+}
+.suggest-title { margin: 0 0 2px; display: flex; align-items: center; gap: 6px; font-size: .85rem; font-weight: 600; color: var(--info-text); }
+.suggest-title svg.i.sm { color: var(--accent); }
+.suggest .step label { padding: 4px 0; }
+.suggest .chips { margin: 8px 0 0; }
+.suggest .chip { color: var(--text); }
+.suggest .chip.active, .suggest-msg .chip.active {
+  background: var(--ai-grad); color: var(--on-accent); border-color: transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), 0 3px 10px var(--ai-glow);
+}
+.suggest-msg { margin: 8px 0 0; flex-wrap: wrap; align-items: center; }
+.suggest-msg .chip { margin-left: auto; color: var(--text); }
+
+/* Max status under the greeting: a small pill; grey dot = offline, green = ready */
+.max-status {
+  position: relative; display: inline-flex; align-items: center; gap: 6px; vertical-align: 1px;
+  padding: 2px 10px 2px 8px; border-radius: 99px; border: 1px solid var(--border); background: var(--glass);
+  color: var(--muted); font-size: .8rem; font-weight: 600; text-decoration: none; white-space: nowrap;
+  transition: border-color .2s, color .2s;
+}
+.max-status::after { content: ""; position: absolute; inset: -9px -2px; } /* bigger tap area */
+.max-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--idle); }
+.max-status.ready { color: var(--text); }
+.max-status.ready i { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
+.max-status:hover { color: var(--accent); border-color: var(--chip-on-line); }
+@media (prefers-reduced-motion: reduce) { .max-status, .step-check, .suggest-pick, .step-rm { transition: none; } }
+
+/* Phone: task rows put the three action buttons on the second line (next to #num, date, tag),
+   so the title gets the full width. .body's children join the row's grid. */
+@media (max-width: 480px) {
+  .todo-item:not(.editing) {
+    display: grid; grid-template-columns: 34px minmax(0, 1fr) 40px 40px 40px; column-gap: 0; align-items: center;
+  }
+  .todo-item:not(.editing) > .body { display: contents; }
+  .todo-item:not(.editing) > .check { grid-column: 1; grid-row: 1; }
+  .todo-item:not(.editing) > .body > * { grid-column: 2 / -1; }
+  .todo-item:not(.editing) > .body > .text { grid-row: 1; }
+  .todo-item:not(.editing) > .body > .meta { grid-column: 2; grid-row: 2; margin-top: 2px; }
+  .todo-item:not(.editing) > .edit, .todo-item:not(.editing) > .delete { grid-row: 2; width: 40px; height: 40px; margin: 0; border-radius: 11px; }
+  .todo-item:not(.editing) > .breakdown { grid-column: 3; }
+  .todo-item:not(.editing) > .edit:not(.breakdown) { grid-column: 4; }
+  .todo-item:not(.editing) > .delete { grid-column: 5; }
+  .step-rm { opacity: 1; }
 }

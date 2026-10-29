@@ -1,4 +1,4 @@
-# My To-Do List
+# Just Say It (บอกมาได้เลย)
 
 A simple to-do list app built with plain HTML, CSS and JavaScript — my first learning project.
 
