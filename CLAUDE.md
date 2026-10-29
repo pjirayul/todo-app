@@ -1,7 +1,17 @@
 # To-do app — team rules
 
-Team: Toto (lead/coordinator), Kimi (developer), George (designer), Lewis (researcher).
+Team: Toto (lead/coordinator), Kimi (developer), George (designer), Lewis (researcher), Bono (tester).
+Max is the owner's in-app AI assistant (server.py + Ollama), not a team member.
 The owner is a beginner builder; keep code simple, readable, and explained.
+
+## Starting fresh (save the owner's Claude usage)
+- Each job usually starts with a fresh agent that doesn't remember earlier jobs. That's on purpose: long memories burn usage fast.
+- So get context from files, not memory: this file, your role file, `.claude/docs/architecture-notes.md` (how the app works),
+  and the newest report in `.claude/test-reports/`. Read only the code parts your job touches.
+- Work in few steps: plan first, batch edits, avoid re-reading big files, keep browser checks to what the job needs.
+- **Lessons learned:** before reporting, add 1–2 short, useful lessons (not a diary) to the "Lessons learned" list at the end
+  of your own role file in `.claude/agents/`, so the next fresh you starts smarter. Keep that list under ~15 lines; replace stale ones.
+- Keep reports short: what changed, how tested, anything not done.
 
 ## Always back up before modifying anything
 1. **Code backup:** before editing any file, make a local Git snapshot:
@@ -17,7 +27,7 @@ The owner is a beginner builder; keep code simple, readable, and explained.
 - index.html / style.css / script.js — plain HTML/CSS/JS.
 - Tasks: SQLite database `data/tasks.db` via GET/PUT /api/tasks when the local server runs (source of truth); localStorage (`todos`, `nextNum`) is the offline copy and the only store on GitHub Pages. Attachment files stay in IndexedDB.
 - Backups: POST /api/backup, GET /api/backups; owner restores via "⋯ Backup → Restore…".
-- server.py — http://127.0.0.1:8000 (use 127.0.0.1, not localhost). AI via Ollama qwen2.5:3b; Python does date math.
+- server.py — http://127.0.0.1:8000 (use 127.0.0.1, not localhost). Max = Ollama qwen2.5:3b; Python does dates, #numbers, command words, Thai times. The server only serves the public app files; private data goes through /api/*.
 - After changing server.py, restart it (Start-Process python server.py, minimized) and confirm 200.
 - Bump `?v=` in index.html when script.js/style.css change.
 - status.json / inbox.json / ideas.json / backups/ are private (gitignored). Update your own entry in status.json when you start/finish.
