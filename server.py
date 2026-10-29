@@ -541,9 +541,14 @@ def time_said(text: str) -> bool:
 
 # ---------- "Max asks when unsure": Python decides when a question is worth it ----------
 # Tasks that clearly happen at a certain time or place. Kept small on purpose: Max should only ask
-# when it really helps. Used for "When?" on new tasks and "Quick details" before Break it down.
-ASK_WORDS = re.compile(r"\b(meeting|appointment|interview|dentist|doctor|flight|hotel|trip|travel|holiday|vacation)s?\b|"
-                       r"นัด|ประชุม|สัมภาษณ์|เที่ยวบิน|โรงแรม|เที่ยว|ทริป|จอง", re.I)
+# when it really helps. Both lists: "When?" on new tasks and "Quick details" before Break it down.
+# Only travel also gets "Budget?" (a budget for a meeting makes no sense).
+TRAVEL_WORDS = re.compile(r"\b(flight|hotel|trip|travel|holiday|vacation)s?\b|เที่ยวบิน|โรงแรม|เที่ยว|ทริป|จอง", re.I)
+EVENT_WORDS = re.compile(r"\b(meeting|appointment|interview|dentist|doctor)s?\b|นัด|ประชุม|สัมภาษณ์", re.I)
+
+
+def ask_words(text: str) -> bool:
+    return bool(TRAVEL_WORDS.search(text) or EVENT_WORDS.search(text))
 # "done it", "move it to friday", just "done": no task named, so Max asks which one
 PRONOUNS = {"", "it", "this", "that", "this one", "that one", "them", "มัน", "อันนี้", "งานนี้", "นี้"}
 # A place is named: "trip to Chiang Mai", "hotel in Penang", "ไปเชียงใหม่", "ที่ภูเก็ต"
@@ -555,7 +560,7 @@ TRIP_DETAILS = re.compile(r"Trip details:|รายละเอียดทร�
 def add_task(s: str, now: str, categories: list) -> dict:
     task = parse_task(s, now, categories)
     time = task.pop("time")  # only updates need it...
-    if not task["due"] and ASK_WORDS.search(s):
+    if not task["due"] and ask_words(s):
         # ...and "When?": "meeting with Tom at 3pm" has a time but no day. The page asks for the day
         # and uses this time (or the owner's morning time).
         task["askWhen"] = True
@@ -565,7 +570,7 @@ def add_task(s: str, now: str, categories: list) -> dict:
 
 def breakdown_questions(text: str, notes: str, due: str) -> list:
     """Before Break it down on a trip/event task: which details are missing? [] = just suggest."""
-    if not ASK_WORDS.search(text) or TRIP_DETAILS.search(notes):
+    if not ask_words(text) or TRIP_DETAILS.search(notes):
         return []
     both = f"{text} {notes}"
     missing = []
@@ -573,7 +578,7 @@ def breakdown_questions(text: str, notes: str, due: str) -> list:
         missing.append("where")
     if not due and not DAY_HINTS.search(fix_date_typos(both).lower()):
         missing.append("when")
-    return missing + ["budget"] if missing else []
+    return missing + ["budget"] if missing and TRAVEL_WORDS.search(text) else missing
 
 
 def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: int = None) -> dict:
