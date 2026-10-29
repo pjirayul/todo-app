@@ -363,6 +363,10 @@ def parse_task(sentence: str, now: str, categories: list) -> dict:
                 task["time"] = memory["times"][part]
                 break
     task["time"] = thai_time(lower) or task.get("time", "")  # "บ่ายสาม" = 15:00, whatever the AI said
+    # No day or time words at all: the AI made the date up ("นัดประชุมทีม" -> next Friday), so no date
+    # Only a time ("ส่งรายงานบ่ายสาม", "call mom at 5pm"): today, like "tonight"
+    if not DAY_HINTS.search(lower):
+        task["when"] = "today" if time_said(lower) else "none"
     # Small models sometimes slip; keep the result safe for the app
     title = task.get("text") or sentence
     if THAI_LETTERS.search(sentence) and not THAI_LETTERS.search(title):
@@ -535,13 +539,45 @@ def time_said(text: str) -> bool:
     return bool(CLOCK_TIME.search(text) or any(re.search(p, text) for p, _ in DAY_PARTS))
 
 
+# ---------- "Max asks when unsure": Python decides when a question is worth it ----------
+# Tasks that clearly happen at a certain time or place. Kept small on purpose: Max should only ask
+# when it really helps. Used for "When?" on new tasks and "Quick details" before Break it down.
+ASK_WORDS = re.compile(r"\b(meeting|appointment|interview|dentist|doctor|flight|hotel|trip|travel|holiday|vacation)s?\b|"
+                       r"นัด|ประชุม|สัมภาษณ์|เที่ยวบิน|โรงแรม|เที่ยว|ทริป|จอง", re.I)
+# "done it", "move it to friday", just "done": no task named, so Max asks which one
+PRONOUNS = {"", "it", "this", "that", "this one", "that one", "them", "มัน", "อันนี้", "งานนี้", "นี้"}
+# A place is named: "trip to Chiang Mai", "hotel in Penang", "ไปเชียงใหม่", "ที่ภูเก็ต"
+# (เที่ยว contains ที่, so that one is skipped; "เที่ยวเชียงใหม่" names the place right after เที่ยว)
+PLACE = re.compile(r"\b(to|in|at)\s+[A-Z]|(?<!เ)ที่\S|ไป(?!เที่ยว)\S|เที่ยว(?!บิน)\S")
+TRIP_DETAILS = re.compile(r"Trip details:|รายละเอียดทริป:")  # the line the page saves after asking
+
+
 def add_task(s: str, now: str, categories: list) -> dict:
     task = parse_task(s, now, categories)
-    task.pop("time")  # only updates need it
+    time = task.pop("time")  # only updates need it...
+    if not task["due"] and ASK_WORDS.search(s):
+        # ...and "When?": "meeting with Tom at 3pm" has a time but no day. The page asks for the day
+        # and uses this time (or the owner's morning time).
+        task["askWhen"] = True
+        task["time"] = time or load_memory()["times"]["morning"]
     return {"action": "add", **task}
 
 
-def run_command(sentence: str, now: str, categories: list, tasks: list) -> dict:
+def breakdown_questions(text: str, notes: str, due: str) -> list:
+    """Before Break it down on a trip/event task: which details are missing? [] = just suggest."""
+    if not ASK_WORDS.search(text) or TRIP_DETAILS.search(notes):
+        return []
+    both = f"{text} {notes}"
+    missing = []
+    if not PLACE.search(both):
+        missing.append("where")
+    if not due and not DAY_HINTS.search(fix_date_typos(both).lower()):
+        missing.append("when")
+    return missing + ["budget"] if missing else []
+
+
+def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: int = None) -> dict:
+    """chosen: the #number the owner picked after Max asked "Which one?" (None normally)."""
     """Work out what the sentence wants: add a task, or change/delete/complete an existing one."""
     s = " ".join(sentence.split())
     # "#9 rename to milk" means the same as "rename #9 to milk": put the action word first
@@ -587,12 +623,20 @@ def run_command(sentence: str, now: str, categories: list, tasks: list) -> dict:
         target, change = num_match.group(0), rest
     elif action == "update":
         parts = re.split(r"\s+to\s+|\s*(?:ให้เป็น|ไปเป็น|เป็น|ไปวัน|ไป)\s*", rest, maxsplit=1)
-        if len(parts) < 2:  # "set up the printer" is a new task, not a command
-            return add_task(s, now, categories)
+        if len(parts) < 2:
+            if chosen:
+                parts = ["", rest]  # the owner already picked the task: all of it is the change
+            else:  # "set up the printer" is a new task, not a command
+                return add_task(s, now, categories)
         target, change = strip_filler(parts[0]), strip_filler(parts[1])
     else:
         target, change = rest, ""
-    num, choices = find_task(target, tasks)
+    if chosen and any(t["num"] == chosen for t in tasks):
+        num, choices = chosen, []
+    elif not num_match and target.lower() in PRONOUNS:
+        return {"action": action, "pickTask": True}  # no task named: the page asks "Which task?"
+    else:
+        num, choices = find_task(target, tasks)
     if num is None:
         return {"action": action, "missing": target, "choices": choices}
     if action != "update":
@@ -746,7 +790,8 @@ class Handler(SimpleHTTPRequestHandler):
             tasks = [{"num": int(t["num"]), "text": str(t.get("text", "")),
                       "due": t["due"] if isinstance(t.get("due"), str) and DUE_FORMAT.fullmatch(t["due"]) else ""}
                      for t in body.get("tasks", [])[:300]]
-            result, status = run_command(sentence, now, body.get("categories", [])[:20], tasks), 200
+            chosen = body.get("num") if isinstance(body.get("num"), int) else None  # picked after "Which one?"
+            result, status = run_command(sentence, now, body.get("categories", [])[:20], tasks, chosen), 200
         except urllib.error.URLError:
             result, status = {"error": "Ollama isn't running. Start the Ollama app and try again."}, 502
         except Exception as e:
@@ -828,7 +873,13 @@ class Handler(SimpleHTTPRequestHandler):
             if not text:
                 return self.send_json({"error": "Empty task"}, 400)
             due = str(body.get("due", ""))
-            result = break_down(text, str(body.get("notes", ""))[:1000], due if DUE_FORMAT.fullmatch(due) else "")
+            due = due if DUE_FORMAT.fullmatch(due) else ""
+            notes = str(body.get("notes", ""))[:1000]
+            # Trip/event task without place or date: ask first (no AI used), unless the owner said "Skip"
+            ask = [] if body.get("skipAsk") else breakdown_questions(text, notes, due)
+            if ask:
+                return self.send_json({"ask": ask})
+            result = break_down(text, notes, due)
             if not result["steps"]:
                 return self.send_json({"error": "The AI gave no steps. Try again."}, 502)
             self.send_json(result)

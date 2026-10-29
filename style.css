@@ -401,6 +401,12 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .cmd-msg.warn { background: var(--warn-bg); color: var(--warn-text); border-color: var(--warn-border); }
 .cmd-msg.warn::before { -webkit-mask-image: var(--ic-alert); mask-image: var(--ic-alert); }
 .cmd-msg:empty { display: none; }
+/* "Max asks when unsure" (askMax in script.js): question, optional inputs, answer chips. Minimal — George styles */
+.cmd-msg.ask { flex-wrap: wrap; align-items: center; }
+.cmd-msg.ask .ask-q { flex: 1 1 80%; }
+.cmd-msg.ask .ask-field { flex: 1 1 100%; display: flex; gap: 8px; align-items: center; }
+.cmd-msg.ask .ask-field input { flex: 1; min-width: 0; max-width: 18em; }
+.cmd-msg.ask .ask-chips { flex: 1 1 100%; margin: 0; }
 @keyframes msg-in { from { opacity: 0; transform: translateY(-3px); } }
 
 .todo-item.flash { animation: flash 1.8s ease-out; }

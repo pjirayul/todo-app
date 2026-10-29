@@ -34,6 +34,12 @@ const TEXT = {
     notifyBlocked: "Reminders are blocked for this site. To allow them: click the icon left of the address bar › Notifications › Allow, then reload.",
     notifyNone: "This browser can't show reminders.", limitSaved: (n) => `Daily AI limit: ${n} tokens`,
     sureClear: (n) => `Delete ${n} done task${n === 1 ? "" : "s"}?`, yesClear: "Yes, delete",
+    askWhich: "Which one?", askWhichTask: "Which task?", askWhen: (x) => `When is "${x}"?`,
+    today: "Today", tomorrow: "Tomorrow", pickDate: "Pick date", noDate: "No date", ok: "OK", askDate: "Which day?",
+    askDetails: "Quick details so Max can plan better", suggestSteps: "Suggest steps", skipSuggest: "Skip, just suggest",
+    ask_where: "Where?", ask_when: "When?", ask_budget: "Budget?",
+    eg_where: "e.g. Chiang Mai", eg_when: "e.g. 20–22 Nov", eg_budget: "e.g. ฿2,000", tripDetails: "Trip details",
+    noTasks: "No tasks to choose from.",
     maxAdded: (n, text, when) => `Max added #${n}: ${text}${when ? " · " + when : ""}`, maxUpdated: (n) => `Max updated #${n}`,
     maxDone: (n) => `Max marked #${n} done`, maxUndone: (n) => `Max reopened #${n}`,
   },
@@ -71,6 +77,12 @@ const TEXT = {
     notifyBlocked: "การแจ้งเตือนของเว็บนี้ถูกบล็อกอยู่ วิธีเปิด: กดไอคอนซ้ายของช่องที่อยู่เว็บ › การแจ้งเตือน › อนุญาต แล้วโหลดหน้าใหม่",
     notifyNone: "เบราว์เซอร์นี้แสดงการแจ้งเตือนไม่ได้", limitSaved: (n) => `ขีดจำกัด AI ต่อวัน: ${n} โทเคน`,
     sureClear: (n) => `ลบงานที่เสร็จแล้ว ${n} งาน ใช่ไหม?`, yesClear: "ใช่ ลบเลย",
+    askWhich: "หมายถึงงานไหน?", askWhichTask: "งานไหน?", askWhen: (x) => `"${x}" เมื่อไหร่?`,
+    today: "วันนี้", tomorrow: "พรุ่งนี้", pickDate: "เลือกวัน", noDate: "ไม่ระบุวัน", ok: "ตกลง", askDate: "วันไหน?",
+    askDetails: "ขอรายละเอียดสั้นๆ ให้ Max วางแผนได้ดีขึ้น", suggestSteps: "ขอขั้นตอน", skipSuggest: "ข้าม แนะนำเลย",
+    ask_where: "ที่ไหน?", ask_when: "เมื่อไหร่?", ask_budget: "งบเท่าไหร่?",
+    eg_where: "เช่น เชียงใหม่", eg_when: "เช่น 20–22 พ.ย.", eg_budget: "เช่น 2,000 บาท", tripDetails: "รายละเอียดทริป",
+    noTasks: "ยังไม่มีงานให้เลือก",
     maxAdded: (n, text, when) => `Max เพิ่ม #${n}: ${text}${when ? " · " + when : ""} แล้ว`, maxUpdated: (n) => `Max แก้ #${n} แล้ว`,
     maxDone: (n) => `Max ทำเครื่องหมาย #${n} ว่าเสร็จแล้ว`, maxUndone: (n) => `Max เปิด #${n} ใหม่แล้ว`,
   },
@@ -388,9 +400,79 @@ const update = () => { saveTodos(); render(); };
 // warn = true gives the amber warning look (something went wrong), otherwise a calm hint.
 // box: which message box (the one under the command bar, or the one in the Backup menu)
 const showMessage = (msg, warn = false, box = $("cmd-msg")) => {
+  if (openAsk?.box === box) closeAsk(); // a new message replaces an open question
   box.textContent = msg;
   box.className = warn ? "cmd-msg warn" : "cmd-msg";
 };
+
+// ---------- Max asks when unsure ----------
+// One small, reusable question: a line of text, optional short inputs, and answer chips (buttons).
+//   const answer = await askMax("Which one?", [{ label: "#2 Send laundry", value: 2 }, { label: "Cancel", value: null }]);
+// Resolves with { value, values } (values = what was typed in the inputs, by name), or null for
+// Cancel / Escape / when something else replaces the question. Python (server.py) decides WHEN to ask.
+// Made to be reused later (e.g. a "Do it" button or a task chat).
+let openAsk = null; // the question on screen: { box, resolve }
+function closeAsk() {
+  if (!openAsk) return;
+  const { resolve } = openAsk;
+  openAsk = null;
+  resolve(null);
+}
+function askMax(question, choices, { inputs = [], box = $("cmd-msg") } = {}) {
+  closeAsk(); // only one question at a time
+  return new Promise((resolve) => {
+    const q = document.createElement("span");
+    q.className = "ask-q";
+    q.textContent = question; // textContent: task text never runs as HTML
+    const fields = inputs.map((f) => {
+      const label = document.createElement("label");
+      label.className = "ask-field";
+      label.textContent = f.label ? f.label + " " : "";
+      const input = document.createElement("input");
+      input.type = f.type || "text";
+      input.name = f.name;
+      input.placeholder = f.placeholder || "";
+      input.value = f.value || "";
+      input.maxLength = 60;
+      if (!f.label) input.setAttribute("aria-label", question);
+      label.append(input);
+      return label;
+    });
+    const finish = (answer) => {
+      if (openAsk?.resolve !== resolve) return; // already closed
+      openAsk = null;
+      box.replaceChildren();
+      box.className = "cmd-msg";
+      $("todo-input").focus({ preventScroll: true }); // the chip is gone: keep the keyboard in a sensible place
+      resolve(answer);
+    };
+    const chips = document.createElement("span");
+    chips.className = "chips ask-chips";
+    for (const c of choices) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = c.primary ? "chip active" : "chip";
+      b.textContent = c.label;
+      b.addEventListener("click", () => {
+        if (c.value === null) return finish(null); // Cancel
+        const values = {};
+        for (const input of box.querySelectorAll("input")) values[input.name] = input.value.trim();
+        finish({ value: c.value, values });
+      });
+      chips.append(b);
+    }
+    // Keyboard: Escape = cancel; Enter in an input = the main (first highlighted) chip
+    box.onkeydown = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); finish(null); $("todo-input").focus(); }
+      if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); (chips.querySelector(".active") || chips.firstChild)?.click(); }
+    };
+    openAsk = { box, resolve };
+    box.className = "cmd-msg ask";
+    box.replaceChildren(q, ...fields, chips);
+    (box.querySelector("input") || chips.firstChild)?.focus({ preventScroll: true });
+    box.scrollIntoView({ block: "nearest" });
+  });
+}
 $("todo-input").addEventListener("input", () => showMessage(""));
 
 // Ask "Delete #4 …? [Yes] [No]" inside a message box. We don't use confirm(): some browsers
@@ -449,7 +531,12 @@ function simpleCommand(text) {
   else if (/^#\s*\d/.test(low) || (/^(change|modify|move|rename|edit|update|reschedule|postpone)\b|^(เปลี่ยน|แก้|ย้าย|เลื่อน)/.test(low)
     && (num || /\sto\s|เป็น/.test(low)))) action = "update";
   if (!action) return null; // a normal new task
-  return num && action !== "update" ? { action, num: Number(num[1]) } : { action: "offline" };
+  if (num && action !== "update") return { action, num: Number(num[1]) };
+  // "done" / "delete it" with no task named: we can ask which one, even without AI
+  const rest = low.replace(/^(undo|undone|uncheck|unmark|reopen|not done|delete|remove|del|erase|done|mark|tick|finished|completed|ยังไม่เสร็จ|ยกเลิกเสร็จ|ลบ|เสร็จ(แล้ว)?)\s*/, "")
+    .replace(/\s*(done|finished|completed|เสร็จ(แล้ว)?)$/, "").trim();
+  if (action !== "update" && ["", "it", "this", "that", "มัน", "อันนี้", "งานนี้", "นี้"].includes(rest)) return { action, pickTask: true };
+  return { action: "offline" };
 }
 
 // Carry out a command from the server (or simpleCommand). Returns a message to show,
@@ -484,6 +571,108 @@ function applyCommand(cmd) {
   return "";
 }
 
+// Send a sentence to Max (server.py). extra.num: the task the owner picked after "Which one?"
+async function parseWithMax(text, extra = {}) {
+  const now = new Date();
+  const res = await fetch("api/parse", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      text,
+      now: `${now.toLocaleDateString("en-CA")}T${now.toTimeString().slice(0, 5)} ${now.toLocaleDateString("en-US", { weekday: "long" })}`,
+      categories: [...new Set(todos.map((x) => x.cat).filter(Boolean))],
+      tasks: todos.map((x) => ({ num: x.num, text: x.text, due: x.due })), // "#3"/"laundry" can be found; due keeps the time
+      ...extra,
+    }),
+    signal: AbortSignal.timeout(30000), // a stuck AI must not freeze the box forever
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`); // e.g. GitHub Pages sends an HTML error page
+  const data = await res.json();
+  addUsage(data.tokens);
+  return data;
+}
+
+// Do a command and say what happened (keeps the text in the box when it didn't work)
+function finishCommand(cmd) {
+  showMessage("");
+  const msg = applyCommand(cmd);
+  if (msg === "") {
+    $("todo-input").value = ""; // worked: clear the box
+    // Say what was done, also for the simple commands that work without AI ("done #2")
+    const done = { complete: "maxDone", uncomplete: "maxUndone", update: "maxUpdated" }[cmd.action];
+    if (done) showMessage(t(done)(cmd.num));
+  }
+  if (msg) showMessage(msg, !cmd.choices?.length); // "Which one?" is not a warning
+  // A Yes/No question is waiting: put the focus on Yes, so Enter confirms the delete
+  ($("cmd-msg").querySelector("button") || $("todo-input")).focus();
+}
+
+function addTask(task, problem = "") {
+  backup(`before add "${task.text.slice(0, 40)}"`);
+  const num = newNum();
+  todos.push({ id: Date.now() + Math.random(), num, text: task.text, done: false, due: task.due || "", priority: task.priority || "med", cat: task.category || "", notified: false, notes: "", files: [], steps: [] });
+  $("todo-input").value = "";
+  update();
+  flash(num);
+  if (!problem) {
+    const when = task.due ? new Date(task.due).toLocaleString(t("locale"), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+    showMessage(t("maxAdded")(num, task.text, when)); // textContent inside, so task text never runs as HTML
+  }
+}
+
+// Short label for a task chip: "#7 Do laundry"
+const taskLabel = (x) => `#${x.num} ${x.text.length > 40 ? x.text.slice(0, 39) + "…" : x.text}`;
+
+// Several tasks fit ("done laundry") or none was named ("done it"): ask, then do it on the chosen #N
+async function askWhichTask(text, cmd) {
+  const options = cmd.choices?.length
+    ? cmd.choices.map((n) => todos.find((x) => x.num === n)).filter(Boolean)
+    // Newest first; "undo" offers done tasks, everything else the open ones
+    : todos.filter((x) => x.done === (cmd.action === "uncomplete")).sort((a, b) => b.num - a.num);
+  if (!options.length) return showMessage(t("noTasks"), true);
+  const answer = await askMax(t(cmd.choices?.length ? "askWhich" : "askWhichTask"),
+    [...options.slice(0, 4).map((x) => ({ label: taskLabel(x), value: x.num })), { label: t("cancel"), value: null }]);
+  if (!answer) return; // cancelled: the text stays in the box
+  let chosen = { action: cmd.action, num: answer.value };
+  if (cmd.action === "update") {
+    // A change needs Max again to read the new date/name, now for this task
+    showMessage(t("maxThinking"));
+    try {
+      chosen = await parseWithMax(text, { num: answer.value });
+    } catch (err) {
+      console.warn("AI unavailable:", err);
+      return showMessage(t("cmdOffline"), true);
+    }
+  }
+  finishCommand(chosen);
+}
+
+// A meeting/flight/trip… with no day: "When?" Today · Tomorrow · Pick date · No date (= add it as it is)
+async function askWhenThenAdd(task) {
+  const day = (offset) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return d.toLocaleDateString("en-CA"); // YYYY-MM-DD
+  };
+  let answer = await askMax(t("askWhen")(task.text), [
+    { label: t("today"), value: 0 }, { label: t("tomorrow"), value: 1 },
+    { label: t("pickDate"), value: "pick" }, { label: t("noDate"), value: "none" },
+  ]);
+  if (!answer) return; // Escape: nothing added, the text stays in the box
+  let date = "";
+  if (answer.value === "pick") {
+    answer = await askMax(t("askDate"), [{ label: t("ok"), value: "ok", primary: true }, { label: t("cancel"), value: null }],
+      { inputs: [{ name: "date", type: "date", value: day(1) }] });
+    if (!answer) return;
+    date = answer.values.date;
+  } else if (answer.value !== "none") {
+    date = day(answer.value);
+  }
+  // The server sends the time it heard ("at 3pm"), or the owner's morning time
+  const due = /^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(task.time) ? `${date}T${task.time}` : "";
+  addTask({ ...task, due });
+}
+
 $("todo-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = $("todo-input").value.trim();
@@ -494,27 +683,14 @@ $("todo-form").addEventListener("submit", async (e) => {
   button.textContent = t("thinking");
   showMessage(t("maxThinking"));
   let task = { text, due: "", priority: "med", category: "" };
-  let cmd = null;    // set when the sentence is a command for an existing task
-  let problem = "";  // message to show after the box is usable again
+  let cmd = null;       // set when the sentence is a command for an existing task
+  let problem = "";     // message to show after the box is usable again
+  let followUp = null;  // a question for the owner, asked once the box is usable again
   try {
     try {
       if (usageToday() >= settings.aiLimit) throw new Error(t("limitHit"));
       if (!LOCAL) throw new Error("no AI server here (GitHub Pages)"); // straight to the simple fallback
-      const now = new Date();
-      const res = await fetch("api/parse", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          now: `${now.toLocaleDateString("en-CA")}T${now.toTimeString().slice(0, 5)} ${now.toLocaleDateString("en-US", { weekday: "long" })}`,
-          categories: [...new Set(todos.map((x) => x.cat).filter(Boolean))],
-          tasks: todos.map((x) => ({ num: x.num, text: x.text, due: x.due })), // "#3"/"laundry" can be found; due keeps the time
-        }),
-        signal: AbortSignal.timeout(30000), // a stuck AI must not freeze the box forever
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`); // e.g. GitHub Pages sends an HTML error page
-      const data = await res.json();
-      addUsage(data.tokens);
+      const data = await parseWithMax(text);
       if (data.action && data.action !== "add") cmd = data;
       else if (data.text) task = data;
       else throw new Error("AI gave no task");
@@ -530,36 +706,19 @@ $("todo-form").addEventListener("submit", async (e) => {
         return;
       }
     }
-    if (cmd) {
-      showMessage("");
-      const msg = applyCommand(cmd);
-      if (msg === "") {
-        input.value = ""; // worked: clear the box
-        // Say what was done, also for the simple commands that work without AI ("done #2")
-        const done = { complete: "maxDone", uncomplete: "maxUndone", update: "maxUpdated" }[cmd.action];
-        if (done) showMessage(t(done)(cmd.num));
-      }
-      if (msg) showMessage(msg, !cmd.choices?.length); // keep the text so the owner can fix it; "Which one?" is not a warning
-      return;
-    }
-    backup(`before add "${task.text.slice(0, 40)}"`);
-    const num = newNum();
-    todos.push({ id: Date.now() + Math.random(), num, text: task.text, done: false, due: task.due || "", priority: task.priority || "med", cat: task.category || "", notified: false, notes: "", files: [], steps: [] });
-    input.value = "";
-    update();
-    flash(num);
-    if (!problem) {
-      const when = task.due ? new Date(task.due).toLocaleString(t("locale"), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
-      showMessage(t("maxAdded")(num, task.text, when)); // textContent inside, so task text never runs as HTML
-    }
+    // Python (server.py) decided whether Max should ask first
+    if (cmd?.pickTask || cmd?.choices?.length) followUp = () => askWhichTask(text, cmd);
+    else if (cmd) finishCommand(cmd);
+    else if (task.askWhen) followUp = () => askWhenThenAdd(task);
+    else addTask(task, problem);
   } finally {
     // Always give the box back, even if something above went wrong
     button.disabled = input.disabled = false;
     button.textContent = t("add");
-    // A Yes/No question is waiting: put the focus on Yes, so Enter confirms the delete
-    ($("cmd-msg").querySelector("button") || input).focus();
+    if (!followUp) ($("cmd-msg").querySelector("button") || input).focus();
   }
-  if (problem) showMessage(problem, true); // in-page: the owner's browser blocks alert()
+  if (followUp) return followUp();
+  if (problem && !cmd) showMessage(problem, true); // in-page: the owner's browser blocks alert()
 });
 
 // ---------- 5. Clicks inside the list: tick, edit, delete ----------
@@ -630,7 +789,7 @@ $("todo-list").addEventListener("click", async (e) => {
 
 // "Break it down": ask the server's AI for 3-6 small steps and show them as suggestions.
 // Nothing is saved here; the owner picks steps and clicks "Add selected".
-async function breakDown(todo) {
+async function breakDown(todo, skipAsk = false) {
   if (suggest?.loading) return; // one question at a time
   if (!LOCAL) { suggest = { id: todo.id, msg: t("stepsOffline") }; return render(); } // GitHub Pages: no AI server
   if (usageToday() >= settings.aiLimit) { suggest = { id: todo.id, msg: t("limitHit") }; return render(); }
@@ -641,10 +800,16 @@ async function breakDown(todo) {
     const res = await fetch("api/breakdown", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: todo.text, notes: todo.notes, due: todo.due }),
+      body: JSON.stringify({ text: todo.text, notes: todo.notes, due: todo.due, skipAsk }),
       signal: AbortSignal.timeout(60000), // a stuck AI must not leave "Thinking…" forever (server gives up first)
     });
     const data = await res.json();
+    if (res.ok && Array.isArray(data.ask)) {
+      // A trip/event without place or date: Max asks for a few details first (no AI used yet)
+      if (suggest === mine) suggest = null;
+      askTripDetails(todo, data.ask);
+      return;
+    }
     if (!res.ok || !Array.isArray(data.steps) || !data.steps.length) throw new Error(data.error || `HTTP ${res.status}`);
     addUsage(data.tokens);
     if (suggest !== mine) return; // cancelled, or another task was asked meanwhile
@@ -656,6 +821,24 @@ async function breakDown(todo) {
   } finally {
     if (editingId === null) render(); // don't wipe an open edit form
   }
+}
+
+// "Quick details so Max can plan better": Where? When? Budget? (only the missing ones + budget).
+// The answers are saved in the task's notes as one line, so they're remembered and sent to Max.
+async function askTripDetails(todo, missing) {
+  const answer = await askMax(t("askDetails"), [
+    { label: t("suggestSteps"), value: "go", primary: true },
+    { label: t("skipSuggest"), value: "skip" },
+  ], { inputs: missing.map((name) => ({ name, label: t(`ask_${name}`), placeholder: t(`eg_${name}`) })) });
+  if (!answer) return; // Escape: nothing happens
+  const current = todos.find((x) => x.id === todo.id); // the list may have been reloaded meanwhile
+  if (!current) return;
+  const parts = missing.map((name) => answer.values[name]).filter(Boolean);
+  if (answer.value === "go" && parts.length) {
+    current.notes = [current.notes, `${t("tripDetails")}: ${parts.join(" · ")}`].filter(Boolean).join("\n");
+    update();
+  }
+  breakDown(current, true);
 }
 
 // Double-click a task to edit it too
