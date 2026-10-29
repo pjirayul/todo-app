@@ -14,6 +14,7 @@ const TEXT = {
     notFound: (q) => `Couldn't find task "${q}"`, which: (nums) => `Which one? ${nums}`,
     nothing: "Nothing to change. Try e.g. \"move #2 to friday\".", sureDelete: (x) => `Delete ${x}?`, yes: "Yes, delete", no: "No",
     cmdOffline: "Max is offline, so only \"done #2\", \"undo #2\" and \"delete #2\" work right now.",
+    cmdLimit: "Today's AI limit is reached, so Max can't do this one. Use the number instead, e.g. \"done #2\", or click the usage bar to raise the limit.",
     backupMenu: "Backup", backupNow: "Back up now", restore: "Restore…", exportFile: "Export file", importFile: "Import file",
     backupNote: "Your tasks are backed up automatically before changes. File attachments are not included.",
     backupDone: (name) => `Backed up: ${name}`, noBackups: "No backups yet.", tasksN: (n) => `${n} task${n === 1 ? "" : "s"}`,
@@ -29,7 +30,10 @@ const TEXT = {
     morning: "Good morning", afternoon: "Good afternoon", evening: "Good evening", comma: ", ",
     dueToday: (n) => `${n} due today`, overdueN: (n) => `${n} overdue`, nothingDue: "Nothing due today",
     team: "Team", teamWorking: (n) => ` · ${n} working`,
-    maxThinking: "Max is thinking…", maxReady: "Max ready", maxOffline: "Max offline",
+    maxThinking: "Max is thinking…", maxReady: "Max ready", maxOffline: "Max offline", maxChecking: "Max: checking…",
+    notifyBlocked: "Reminders are blocked for this site. To allow them: click the icon left of the address bar › Notifications › Allow, then reload.",
+    notifyNone: "This browser can't show reminders.", limitSaved: (n) => `Daily AI limit: ${n} tokens`,
+    sureClear: (n) => `Delete ${n} done task${n === 1 ? "" : "s"}?`, yesClear: "Yes, delete",
     maxAdded: (n, text, when) => `Max added #${n}: ${text}${when ? " · " + when : ""}`, maxUpdated: (n) => `Max updated #${n}`,
     maxDone: (n) => `Max marked #${n} done`, maxUndone: (n) => `Max reopened #${n}`,
   },
@@ -47,6 +51,7 @@ const TEXT = {
     notFound: (q) => `ไม่พบงาน "${q}"`, which: (nums) => `หมายถึงงานไหน? ${nums}`,
     nothing: "ไม่มีอะไรให้เปลี่ยน ลองพิมพ์ เช่น \"เลื่อน #2 เป็นวันศุกร์\"", sureDelete: (x) => `ลบ ${x} ใช่ไหม?`, yes: "ใช่ ลบเลย", no: "ไม่",
     cmdOffline: "Max ออฟไลน์อยู่ ตอนนี้ใช้ได้แค่ \"เสร็จ #2\", \"undo #2\" และ \"ลบ #2\"",
+    cmdLimit: "ใช้ AI ครบขีดจำกัดวันนี้แล้ว Max จึงทำคำสั่งนี้ไม่ได้ ใช้เลขงานแทน เช่น \"เสร็จ #2\" หรือกดที่แถบเพื่อเพิ่มขีดจำกัด",
     backupMenu: "สำรองข้อมูล", backupNow: "สำรองตอนนี้", restore: "กู้คืน…", exportFile: "ส่งออกไฟล์", importFile: "นำเข้าไฟล์",
     backupNote: "แอปสำรองงานให้อัตโนมัติก่อนทุกการแก้ไข แต่ไม่รวมไฟล์แนบ",
     backupDone: (name) => `สำรองแล้ว: ${name}`, noBackups: "ยังไม่มีข้อมูลสำรอง", tasksN: (n) => `${n} งาน`,
@@ -62,7 +67,10 @@ const TEXT = {
     morning: "สวัสดีตอนเช้า", afternoon: "สวัสดีตอนบ่าย", evening: "สวัสดีตอนเย็น", comma: " ",
     dueToday: (n) => `ครบกำหนดวันนี้ ${n}`, overdueN: (n) => `เลยกำหนด ${n}`, nothingDue: "ไม่มีงานครบกำหนดวันนี้",
     team: "ทีม", teamWorking: (n) => ` · ทำงานอยู่ ${n}`,
-    maxThinking: "Max กำลังคิด…", maxReady: "Max พร้อม", maxOffline: "Max ออฟไลน์",
+    maxThinking: "Max กำลังคิด…", maxReady: "Max พร้อม", maxOffline: "Max ออฟไลน์", maxChecking: "Max: กำลังตรวจสอบ…",
+    notifyBlocked: "การแจ้งเตือนของเว็บนี้ถูกบล็อกอยู่ วิธีเปิด: กดไอคอนซ้ายของช่องที่อยู่เว็บ › การแจ้งเตือน › อนุญาต แล้วโหลดหน้าใหม่",
+    notifyNone: "เบราว์เซอร์นี้แสดงการแจ้งเตือนไม่ได้", limitSaved: (n) => `ขีดจำกัด AI ต่อวัน: ${n} โทเคน`,
+    sureClear: (n) => `ลบงานที่เสร็จแล้ว ${n} งาน ใช่ไหม?`, yesClear: "ใช่ ลบเลย",
     maxAdded: (n, text, when) => `Max เพิ่ม #${n}: ${text}${when ? " · " + when : ""} แล้ว`, maxUpdated: (n) => `Max แก้ #${n} แล้ว`,
     maxDone: (n) => `Max ทำเครื่องหมาย #${n} ว่าเสร็จแล้ว`, maxUndone: (n) => `Max เปิด #${n} ใหม่แล้ว`,
   },
@@ -96,6 +104,10 @@ for (const x of todos) {
 save("nextNum", nextNum);
 save("todos", todos); // keep the new numbers, so a reload doesn't number them again
 const newNum = () => { save("nextNum", nextNum + 1); return nextNum++; };
+
+// Running on this PC with server.py? On GitHub Pages there is no server, so the parts that need it
+// (Max, database, backups, team status) are skipped instead of failing in the console.
+const LOCAL = ["127.0.0.1", "localhost"].includes(location.hostname);
 const firstVisit = load("settings", null) === null;
 let settings = { lang: "en", theme: "light", aiLimit: 20000, ...load("settings", {}) };
 
@@ -280,12 +292,13 @@ function drawGreeting() {
   drawMax(); // "Max ready" in the chosen language
 }
 
-// Team pill: the four agents' status dots from status.json (written by Toto on this PC).
-// On GitHub Pages there is no status.json, so the pill just stays hidden.
-const TEAM = ["Toto", "Kimi", "George", "Lewis"];
+// Team pill: the agents' status dots from status.json (written by Toto on this PC), read via
+// api/status. On GitHub Pages there is no server, so the pill just stays hidden.
+const TEAM = ["Toto", "Kimi", "George", "Lewis", "Bono"];
 async function loadTeam() {
+  if (!LOCAL) return; // stays hidden
   try {
-    const res = await fetch(`status.json?t=${Date.now()}`, { signal: AbortSignal.timeout(5000) });
+    const res = await fetch(`api/status?t=${Date.now()}`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const statusOf = (name) => data.agents?.find((a) => a.name === name)?.status;
@@ -310,10 +323,10 @@ async function loadTeam() {
 
 // Max's status (the AI on this PC): asks server.py, which checks that Ollama is running.
 // On GitHub Pages there is no server, so Max simply shows as offline.
-let maxReady = false;
+let maxReady = LOCAL ? null : false; // null = still checking (don't say "offline" before we know)
 function drawMax() {
-  $("max-status").classList.toggle("ready", maxReady);
-  $("max-text").textContent = t(maxReady ? "maxReady" : "maxOffline");
+  $("max-status").classList.toggle("ready", maxReady === true);
+  $("max-text").textContent = t(maxReady === null ? "maxChecking" : maxReady ? "maxReady" : "maxOffline");
 }
 async function loadMax() {
   if (LOCAL) {
@@ -486,6 +499,7 @@ $("todo-form").addEventListener("submit", async (e) => {
   try {
     try {
       if (usageToday() >= settings.aiLimit) throw new Error(t("limitHit"));
+      if (!LOCAL) throw new Error("no AI server here (GitHub Pages)"); // straight to the simple fallback
       const now = new Date();
       const res = await fetch("api/parse", {
         method: "POST",
@@ -494,7 +508,7 @@ $("todo-form").addEventListener("submit", async (e) => {
           text,
           now: `${now.toLocaleDateString("en-CA")}T${now.toTimeString().slice(0, 5)} ${now.toLocaleDateString("en-US", { weekday: "long" })}`,
           categories: [...new Set(todos.map((x) => x.cat).filter(Boolean))],
-          tasks: todos.map((x) => ({ num: x.num, text: x.text })), // so "#3" or "laundry" can be found
+          tasks: todos.map((x) => ({ num: x.num, text: x.text, due: x.due })), // "#3"/"laundry" can be found; due keeps the time
         }),
         signal: AbortSignal.timeout(30000), // a stuck AI must not freeze the box forever
       });
@@ -505,13 +519,14 @@ $("todo-form").addEventListener("submit", async (e) => {
       else if (data.text) task = data;
       else throw new Error("AI gave no task");
     } catch (err) {
-      console.warn("AI unavailable:", err);
+      if (LOCAL) console.warn("AI unavailable:", err);
       showMessage("");
       problem = err.message === t("limitHit") ? t("limitHit") : t("aiOff");
       cmd = simpleCommand(text);
       if (cmd?.action === "offline") {
-        // A command we can't do without AI: keep the text so nothing is lost
-        showMessage(problem === t("limitHit") ? problem : t("cmdOffline"), true);
+        // A command we can't do without AI: keep the text so nothing is lost.
+        // Not the "task added" message: nothing was added.
+        showMessage(t(problem === t("limitHit") ? "cmdLimit" : "cmdOffline"), true);
         return;
       }
     }
@@ -520,9 +535,9 @@ $("todo-form").addEventListener("submit", async (e) => {
       const msg = applyCommand(cmd);
       if (msg === "") {
         input.value = ""; // worked: clear the box
-        // Say what Max did (only when Max really did it, not the offline fallback)
+        // Say what was done, also for the simple commands that work without AI ("done #2")
         const done = { complete: "maxDone", uncomplete: "maxUndone", update: "maxUpdated" }[cmd.action];
-        if (!problem && done) showMessage(t(done)(cmd.num));
+        if (done) showMessage(t(done)(cmd.num));
       }
       if (msg) showMessage(msg, !cmd.choices?.length); // keep the text so the owner can fix it; "Which one?" is not a warning
       return;
@@ -715,21 +730,59 @@ $("cat-filters").addEventListener("click", (e) => {
 });
 
 $("clear-done").addEventListener("click", () => {
-  if (!todos.some((x) => x.done)) return; // nothing to clear, so no backup needed
-  backup("before clear done", true);
-  todos.filter((x) => x.done).forEach(deleteTaskFiles);
-  todos = todos.filter((x) => !x.done);
-  update();
+  const count = todos.filter((x) => x.done).length;
+  if (!count) return; // nothing to clear, so no backup needed
+  // Ask Yes/No in the page first, like delete (it removes several tasks at once)
+  askYesNo($("foot-msg"), t("sureClear")(count), t("yesClear"), () => {
+    backup("before clear done", true);
+    todos.filter((x) => x.done).forEach(deleteTaskFiles);
+    todos = todos.filter((x) => !x.done);
+    update();
+  });
+  $("foot-msg").querySelector("button").focus();
 });
 
+// Usage bar: change the daily AI limit in a small box under the command bar.
+// Not prompt(): the owner's browser blocks it, and then the limit could never be raised.
 $("usage").addEventListener("click", () => {
-  const answer = prompt(t("limitAsk"), settings.aiLimit);
-  const limit = parseInt(String(answer).replace(/[^\d]/g, ""), 10);
-  if (limit > 0) {
+  const box = $("cmd-msg");
+  const label = document.createElement("label");
+  label.textContent = t("limitAsk") + " ";
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "1";
+  input.step = "1000";
+  input.value = settings.aiLimit;
+  input.style.width = "8em";
+  label.append(input);
+  const ok = document.createElement("button");
+  ok.type = "button";
+  ok.className = "chip active";
+  ok.textContent = t("save");
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "chip";
+  cancel.textContent = t("cancel");
+  const saveLimit = () => {
+    const limit = parseInt(input.value, 10);
+    if (!(limit > 0)) return input.focus(); // keep the box open until the number makes sense
     settings.aiLimit = limit;
     save("settings", settings);
     render();
-  }
+    showMessage(t("limitSaved")(limit.toLocaleString()));
+  };
+  ok.addEventListener("click", saveLimit);
+  cancel.addEventListener("click", () => showMessage(""));
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") saveLimit();
+    if (e.key === "Escape") showMessage("");
+  });
+  const buttons = document.createElement("span");
+  buttons.style.cssText = "display: flex; gap: 6px; flex: none"; // same as the Yes/No buttons
+  buttons.append(ok, cancel);
+  box.className = "cmd-msg";
+  box.replaceChildren(label, buttons);
+  input.select();
 });
 
 $("lang").addEventListener("click", () => {
@@ -762,8 +815,10 @@ $("theme").addEventListener("click", () => {
 // ---------- 8. Reminders ----------
 // Ask permission once; then every 30 seconds check for tasks that just became due.
 $("notify").addEventListener("click", async () => {
-  if (!("Notification" in window)) return alert("This browser doesn't support notifications.");
-  await Notification.requestPermission();
+  if (!("Notification" in window)) return showMessage(t("notifyNone"), true); // in-page, not alert()
+  // Once blocked, the browser no longer asks, so the click looked dead: explain how to allow them
+  const permission = Notification.permission === "denied" ? "denied" : await Notification.requestPermission();
+  if (permission === "denied") showMessage(t("notifyBlocked"), true);
   render();
 });
 
@@ -788,7 +843,6 @@ setInterval(checkReminders, 30000);
 // Tasks only live in this browser, so before changes we send a copy to server.py, which saves
 // it in the backups/ folder. On GitHub Pages there is no server: backups are skipped silently
 // (Export file still works there).
-const LOCAL = ["127.0.0.1", "localhost"].includes(location.hostname);
 const BACKUP_GAP = 2 * 60 * 1000; // at most one automatic backup per 2 minutes...
 let lastBackup = 0;               // ...except "always" ones (delete, clear done, import, restore)
 
@@ -1045,6 +1099,6 @@ startDb().finally(() => { // ...then the database's list (when the server is on)
 });
 loadTeam();
 loadMax();
-setInterval(() => { loadTeam(); loadMax(); }, 30000); // team dots follow status.json; Max follows Ollama
+if (LOCAL) setInterval(() => { loadTeam(); loadMax(); }, 30000); // team dots follow status.json; Max follows Ollama
 // Phone turned or window resized past 480px: swap long/short placeholder
 phone.addEventListener("change", setPlaceholders); // only the hints, so an open edit form is not redrawn

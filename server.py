@@ -19,6 +19,7 @@ import urllib.request
 from datetime import datetime, timedelta
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlsplit
 
 # ---------- Settings: change these to switch AI ----------
 # "Max" is the owner's name for this AI assistant (command bar, dates, Break it down).
@@ -54,6 +55,7 @@ INSTRUCTIONS = (
     "day: day of month for date, else 0. month: month number 1-12 if a month is named, else 0.\n"
     "next_month: true if the sentence says next month / เดือนหน้า.\n"
     "time: 24h HH:MM if a time is said (5pm=17:00, บ่ายสาม=15:00, evening=18:00, morning=09:00, tonight=20:00), else \"\".\n"
+    "Keep words written in CAPITALS (like TEST or ATM) exactly as written.\n"
     "The examples only show the format: never copy their words, use only the words of the sentence."
 )
 
@@ -230,14 +232,112 @@ def fix_date_typos(sentence: str) -> str:
 # Thai words are kept specific ("ตอนเย็น", not "เย็น", which is also in ตู้เย็น = fridge).
 DAY_PARTS = ((r"\btonight\b|คืนนี้", "tonight"), (r"\bevening\b|ตอนเย็น|เย็นนี้|พรุ่งนี้เย็น", "evening"),
              (r"\bafternoon\b|ตอนบ่าย", "afternoon"), (r"\bmorning\b|ตอนเช้า|เช้านี้|พรุ่งนี้เช้า", "morning"))
-CLOCK_TIME = re.compile(r"\d\s*(:\s*\d\d|\.\d\d|am\b|pm\b|น\.|โมง|ทุ่ม)|บ่าย\S*โมง|noon|เที่ยง", re.I)
+# Thai clock words: Python reads them (the AI turned "บ่ายสาม" into 13:00 instead of 15:00).
+# Each pattern gives the hour; "ครึ่ง" right after it means half past.
+THAI_NUMS = {"หนึ่ง": 1, "สอง": 2, "สาม": 3, "สี่": 4, "ห้า": 5, "หก": 6, "เจ็ด": 7, "แปด": 8, "เก้า": 9,
+             "สิบเอ็ด": 11, "สิบสอง": 12, "สิบ": 10}
+_N = r"(?P<n>\d{1,2}|สิบเอ็ด|สิบสอง|สิบ|หนึ่ง|สอง|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า)"
+THAI_TIMES = (
+    (r"เที่ยงคืน", lambda n, w: 0),                                   # midnight
+    (r"เที่ยง(วัน)?", lambda n, w: 12),                                # noon
+    (r"บ่าย\s*(โมง|" + _N + r"\s*(โมง)?)", lambda n, w: 13 if n is None else n + 12 if n < 12 else n),  # บ่ายสาม = 15
+    (_N + r"\s*ทุ่ม|ทุ่ม(นึง|หนึ่ง)", lambda n, w: 18 + (n or 1)),       # สองทุ่ม = 20
+    (r"ตี\s*" + _N, lambda n, w: n),                                  # ตีสอง = 2
+    # "10 โมง" = 10, "5 โมงเย็น" = 17; 1-5 โมง without เช้า is afternoon (สามโมง = 15)
+    (_N + r"\s*โมง\s*(เย็น|เช้า)?",
+     lambda n, w: n if "เช้า" in w or n >= 12 else n + 12 if "เย็น" in w or n <= 5 else n),
+)
+THAI_TIME_ANY = "|".join(p.replace("?P<n>", "?:") for p, _ in THAI_TIMES)  # one pattern for "any Thai time"
+
+
+def thai_time(text: str) -> str:
+    """'บ่ายสามครึ่ง' -> '15:30', 'สองทุ่ม' -> '20:00' ('' if no Thai time word)."""
+    for pattern, hour in THAI_TIMES:
+        m = re.search(r"(?:" + pattern + r")\s*(ครึ่ง)?", text)
+        if m:
+            n = m.groupdict().get("n")
+            h = hour(None if n is None else int(n) if n.isdigit() else THAI_NUMS[n], m.group(0))
+            if 0 <= h <= 23:
+                return f"{h:02d}:{30 if m.group(0).endswith('ครึ่ง') else 0:02d}"
+    return ""
+
+
+CLOCK_TIME = re.compile(r"\d\s*(:\s*\d\d|\.\d\d|am\b|pm\b|น\.|โมง|ทุ่ม)|noon|" + THAI_TIME_ANY, re.I)
 THAI_DATE_WORDS = (r"มะรืนนี้|มะรืน|พรุ่งนี้|วันนี้|คืนนี้|ตอนเช้า|ตอนเย็น|ตอนบ่าย|ด่วน|ไม่รีบ|"
                    r"(วัน)?(จันทร์|อังคาร|พุธ|พฤหัส(บดี)?|ศุกร์|เสาร์|อาทิตย์)(หน้า)?|วันที่\s*\d+|"
-                   r"\d+\s*(โมง|ทุ่ม)|บ่าย\S*โมง|(สัปดาห์|เดือน)หน้า")
+                   r"(" + THAI_TIME_ANY + r")(\s*ครึ่ง)?|\d+\s*(โมง|ทุ่ม)|(สัปดาห์|เดือน)หน้า")
 THAI_LETTERS = re.compile(r"[฀-๿]")
+
+# Weekday names Python reads itself (the AI sometimes says "next week" when nobody did).
+# อาทิตย์ alone also means "week", so Sunday needs "วันอาทิตย์".
+THAI_WEEKDAYS = {"จันทร์": "Monday", "อังคาร": "Tuesday", "พุธ": "Wednesday", "พฤหัส": "Thursday",
+                 "ศุกร์": "Friday", "เสาร์": "Saturday", "วันอาทิตย์": "Sunday"}
+NEXT_WEEK = re.compile(r"\bnext\b|(สัปดาห์|อาทิตย์|จันทร์|อังคาร|พุธ|พฤหัส(บดี)?|ศุกร์|เสาร์)หน้า")
+# "add buy milk" / "เพิ่ม ซื้อนม": the command word itself is not part of the task
+ADD_WORDS = re.compile(r"^(add|create|new task:?)\s+|^เพิ่ม(งาน)?\s*", re.I)
+
+
+def weekday_in(lower: str) -> str:
+    """'call bank friday' / 'ส่งงานวันศุกร์' -> 'Friday' ('' if no weekday is named)."""
+    m = re.search(r"\b(" + "|".join(d.lower() for d in WEEKDAYS) + r")\b", lower)
+    if m:
+        return m.group(1).capitalize()
+    return next((day for thai, day in THAI_WEEKDAYS.items() if thai in lower), "")
+
+
+def keep_capitals(title: str, sentence: str) -> str:
+    """Words the owner typed in CAPITALS ("TEST", "ATM") are on purpose: keep them as typed."""
+    skip = set(DATE_WORDS) | set(SHORTCUTS) | set(SHORT_DAYS) | set(PRIORITY_WORDS) | {"am", "pm"}
+    for word in dict.fromkeys(re.findall(r"\b[A-Z][A-Z0-9]+\b", sentence)):
+        if word.lower() in skip:
+            continue
+        pattern = r"\b" + re.escape(word) + r"\b"
+        if re.search(pattern, title, re.I):
+            title = re.sub(pattern, word, title, flags=re.I)   # "Test water plants" -> "TEST water plants"
+        elif sentence.startswith(word):
+            title = f"{word} {title[:1].lower()}{title[1:]}"  # the AI dropped it: put it back
+        else:
+            title = f"{title} {word}"
+    return title
+
+
+# Small words the AI may leave out of a title without losing anything
+FILLER_WORDS = {"a", "an", "the", "to", "me", "my", "remind", "remember", "please", "i", "need", "must", "should",
+                "have", "for", "and", "of", "with"}
+CAPITALS = re.compile(r"[A-Z][A-Z0-9]+")
+TIME_LIKE = re.compile(r"\d+([:.]\d\d)?(am|pm|st|nd|rd|th|น\.?)?|\d{1,2}/\d{1,2}")
+
+
+def own_words(sentence: str) -> list:
+    """The owner's words without the date/time/priority words Python knows: 'TEST dentist friday 3pm' -> TEST, dentist."""
+    skip = set(DATE_WORDS) | set(SHORTCUTS) | set(SHORT_DAYS) | set(PRIORITY_WORDS) | \
+        {"am", "pm", "at", "on", "by", "in", "next", "this", "after", "day", "days", "noon", "night"}
+    s = re.sub(THAI_DATE_WORDS, " ", sentence)
+    s = re.sub(r"\s(เช้า|เย็น|บ่าย|ค่ำ|ดึก)(\s|$)", " ", " " + s + " ")
+    return [w for w in s.split() if w.lower().strip(",.!?") not in skip and not TIME_LIKE.fullmatch(w.lower().strip(",.!?"))]
+
+
+def keep_own_words(title: str, sentence: str) -> str:
+    """Safety net: the AI sometimes drops real words ("TEST dentist friday 3pm" -> "TEST").
+    If a word the owner typed is missing from the title, use the owner's own words instead."""
+    words = own_words(sentence)
+    title_words = [w.lower().strip(",.!?") for w in title.split()]
+
+    def present(word):
+        low = word.lower().strip(",.!?")
+        if THAI_LETTERS.search(low) or low in FILLER_WORDS or low in title.lower() or CAPITALS.fullmatch(word):
+            return True  # Thai has no spaces: checked by length below; CAPITALS: keep_capitals puts them back
+        # Close enough counts, so the AI's spelling fixes ("lundry" -> "laundry") stay
+        return any(difflib.SequenceMatcher(None, low, t).ratio() >= 0.75 for t in title_words)
+
+    thai_typed = len(THAI_LETTERS.findall(" ".join(words)))
+    if words and (not all(present(w) for w in words) or len(THAI_LETTERS.findall(title)) < thai_typed * 0.6):
+        return " ".join(words)
+    return title
 
 
 def parse_task(sentence: str, now: str, categories: list) -> dict:
+    sentence = ADD_WORDS.sub("", sentence).strip() or sentence
     sentence = fix_date_typos(sentence)
     memory = load_memory()
     known = list(dict.fromkeys(categories + memory["categories"]))[:30]  # existing + the owner's own, no repeats
@@ -246,6 +346,10 @@ def parse_task(sentence: str, now: str, categories: list) -> dict:
     task = parse_with_ollama(prompt) if AI_PROVIDER == "ollama" else parse_with_claude(prompt)
     # Common day words are certain, so they override the AI
     lower = sentence.lower()
+    # A named weekday is certain too: "วันศุกร์" on a Thursday is tomorrow, not next week's Friday
+    day = weekday_in(lower)
+    if day and task.get("when") != "date":
+        task.update(when="weekday", weekday=day, next_week=bool(NEXT_WEEK.search(lower)))
     for words, when in ((("มะรืน", "day after tomorrow"), "day_after_tomorrow"),
                         (("พรุ่งนี้", "tomorrow"), "tomorrow"),
                         (("วันนี้", "today", "tonight", "คืนนี้"), "today")):
@@ -258,6 +362,7 @@ def parse_task(sentence: str, now: str, categories: list) -> dict:
             if re.search(pattern, lower):
                 task["time"] = memory["times"][part]
                 break
+    task["time"] = thai_time(lower) or task.get("time", "")  # "บ่ายสาม" = 15:00, whatever the AI said
     # Small models sometimes slip; keep the result safe for the app
     title = task.get("text") or sentence
     if THAI_LETTERS.search(sentence) and not THAI_LETTERS.search(title):
@@ -267,9 +372,12 @@ def parse_task(sentence: str, now: str, categories: list) -> dict:
         clean = re.sub(THAI_DATE_WORDS, " ", title)
         clean = re.sub(r"\s(เช้า|เย็น|บ่าย|ค่ำ|ดึก)(\s|$)", " ", " " + clean + " ")
         title = " ".join(clean.split()) or title
+    title = keep_own_words(title, sentence)
+    title = keep_capitals(title, sentence)
     return {
         "text": title[:1].upper() + title[1:],  # "pay rent" -> "Pay rent"
         "due": resolve_due(task, datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"), memory["times"]),
+        "time": task.get("time", "") if HHMM.fullmatch(str(task.get("time", ""))) else "",  # used by updates
         "priority": task.get("priority") if task.get("priority") in ("low", "med", "high") else "med",
         "category": task.get("category", ""),
         "tokens": task.get("tokens", 0),
@@ -415,9 +523,32 @@ def find_task(target: str, tasks: list):
     return (close[0], []) if len(close) == 1 else (None, close[:5])
 
 
+# Did the change text name a day, or a clock time? Only then may the task's date/time change.
+DAY_HINTS = re.compile(
+    r"\b(today|tonight|tomorrow|next|week|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+    r"january|february|march|april|may|june|july|august|september|october|november|december|"
+    r"jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec|in \d+ days?|\d{1,2}(st|nd|rd|th))\b|\d{1,2}/\d{1,2}|"
+    r"มะรืน|พรุ่งนี้|วันนี้|คืนนี้|จันทร์|อังคาร|พุธ|พฤหัส|ศุกร์|เสาร์|วันอาทิตย์|วันที่\s*\d+|(สัปดาห์|อาทิตย์|เดือน)หน้า", re.I)
+
+
+def time_said(text: str) -> bool:
+    return bool(CLOCK_TIME.search(text) or any(re.search(p, text) for p, _ in DAY_PARTS))
+
+
+def add_task(s: str, now: str, categories: list) -> dict:
+    task = parse_task(s, now, categories)
+    task.pop("time")  # only updates need it
+    return {"action": "add", **task}
+
+
 def run_command(sentence: str, now: str, categories: list, tasks: list) -> dict:
     """Work out what the sentence wants: add a task, or change/delete/complete an existing one."""
     s = " ".join(sentence.split())
+    # "#9 rename to milk" means the same as "rename #9 to milk": put the action word first
+    number_first = re.match(r"(#\s*\d+)\s*(.+)", s)
+    if number_first and any(re.match(p, number_first.group(2).lower())
+                            for p in (UNDO_WORDS, DELETE_WORDS, DONE_WORDS, UPDATE_WORDS)):
+        s = f"{number_first.group(2)} {number_first.group(1)}"
     low = s.lower()
     if re.search(UNDO_WORDS, low):
         action = "uncomplete"
@@ -428,7 +559,7 @@ def run_command(sentence: str, now: str, categories: list, tasks: list) -> dict:
     elif re.search(UPDATE_WORDS, low) or re.match(r"#\s*\d+", low):
         action = "update"
     else:
-        return {"action": "add", **parse_task(s, now, categories)}
+        return add_task(s, now, categories)
 
     # Remove the action words, keep what's left
     rest = s
@@ -446,7 +577,8 @@ def run_command(sentence: str, now: str, categories: list, tasks: list) -> dict:
     field = "text" if rename else ""
     field_match = re.match(r"(" + "|".join(sorted(FIELD_WORDS, key=len, reverse=True)) + r")\b\s*", rest, flags=re.I) \
         or re.match(r"(หมวดหมู่|หมวด|ความสำคัญ|วันที่|เวลา|ชื่อ)\s*", rest)
-    if action == "update" and field_match:
+    # "rename #3 to date night" is a name, not the date field
+    if action == "update" and field_match and (not rename or FIELD_WORDS[field_match.group(1).lower()] == "text"):
         field = FIELD_WORDS[field_match.group(1).lower()]
         rest = strip_filler(rest[field_match.end():])
 
@@ -456,7 +588,7 @@ def run_command(sentence: str, now: str, categories: list, tasks: list) -> dict:
     elif action == "update":
         parts = re.split(r"\s+to\s+|\s*(?:ให้เป็น|ไปเป็น|เป็น|ไปวัน|ไป)\s*", rest, maxsplit=1)
         if len(parts) < 2:  # "set up the printer" is a new task, not a command
-            return {"action": "add", **parse_task(s, now, categories)}
+            return add_task(s, now, categories)
         target, change = strip_filler(parts[0]), strip_filler(parts[1])
     else:
         target, change = rest, ""
@@ -481,13 +613,28 @@ def run_command(sentence: str, now: str, categories: list, tasks: list) -> dict:
         if priority:
             changes["priority"] = priority
         left = [w for w in words if w not in PRIORITY_WORDS and w != "priority"]
-        if field != "priority" and left:
+        # "change #2 to call mom" = new name (also "#2 call mom"); "move" never renames
+        renaming = not priority and field != "due" and \
+            (re.match(r"(change|modify|edit|update|เปลี่ยน|แก้)", low) or re.match(r"#\s*\d+", low))
+        fixed = fix_date_typos(change).lower()
+        day, clock = bool(DAY_HINTS.search(fixed)), time_said(fixed)
+        if field != "priority" and left and (day or clock or field == "due"):
             parsed = parse_task(change, now, categories)  # the AI reads the date words
             tokens = parsed["tokens"]
-            if parsed["due"]:
-                changes["due"] = parsed["due"]
-            elif not priority and field != "due" and re.match(r"(change|modify|edit|update|เปลี่ยน|แก้)", low):
-                changes["text"] = change[:1].upper() + change[1:]  # "change #2 to call mom" = new name
+            old_due = next((t.get("due", "") for t in tasks if t["num"] == num), "")
+            due = parsed["due"]
+            if clock and not day and parsed["time"]:
+                # Only a time ("move #2 to 5pm"): keep the task's day (today if it had none)
+                due = (old_due[:10] or now[:10]) + "T" + parsed["time"]
+            elif due and not clock and old_due:
+                due = due[:11] + old_due[11:]  # only a day ("move #2 to friday"): keep the task's time
+            if due:
+                changes["due"] = due
+            elif renaming:
+                changes["text"] = change[:1].upper() + change[1:]  # "buy sun cream": not a date after all
+        elif field != "priority" and left and renaming:
+            # No date or time words: a new name only, so the date stays exactly as it was
+            changes["text"] = change[:1].upper() + change[1:]
         if not changes:
             return {"action": action, "num": num, "nothing": True, "tokens": tokens}
     return {"action": action, "num": num, "changes": changes, "tokens": tokens}
@@ -507,7 +654,39 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def host_ok(self) -> bool:
+        # DNS-rebinding protection: a strange website can point its own name at 127.0.0.1, but the
+        # browser still sends that name in the Host header, so we only answer our own names.
+        if self.headers.get("Host") in ALLOWED_HOSTS:
+            return True
+        self.send_error(403, "Unknown host")
+        return False
+
+    def from_our_page(self) -> bool:
+        # Only our own pages may use the POST/PUT endpoints: another website open in the browser
+        # could otherwise send requests to 127.0.0.1. Sends the 403 answer itself when not allowed.
+        if self.headers.get("Origin") in ALLOWED_ORIGINS and "application/json" in self.headers.get("Content-Type", ""):
+            return True
+        self.send_json({"error": "Not allowed"}, 403)
+        return False
+
+    def send_head(self):
+        # Static files: only the app's own public files. The folder also holds private things
+        # (tasks database, backups, status/inbox/memory JSON, server.py, .git, .claude): never served.
+        if urlsplit(self.path).path not in PUBLIC_FILES:
+            self.send_error(404)
+            return None
+        return super().send_head()
+
+    def do_HEAD(self):
+        if self.host_ok():
+            super().do_HEAD()
+
     def do_GET(self):
+        if not self.host_ok():
+            return
+        if self.path.split("?")[0] == "/api/status":
+            return self.send_json(load_status())
         if self.path.split("?")[0] == "/api/inbox":
             return self.send_json(load_inbox())
         if self.path.split("?")[0] == "/api/ideas":
@@ -525,13 +704,14 @@ class Handler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_PUT(self):
+        if not self.host_ok():
+            return
         if self.path == "/api/max/memory":
             return self.put_memory()
         if self.path != "/api/tasks":
             return self.send_error(404)
-        # Same protection as the inbox: only our own pages may change tasks
-        if self.headers.get("Origin") not in ALLOWED_ORIGINS or "application/json" not in self.headers.get("Content-Type", ""):
-            return self.send_json({"error": "Not allowed"}, 403)
+        if not self.from_our_page():
+            return
         try:
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             tasks = clean_tasks(body.get("todos"))
@@ -543,6 +723,8 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
 
     def do_POST(self):
+        if not self.host_ok():
+            return
         if self.path == "/api/inbox":
             return self.post_inbox()
         if self.path == "/api/ideas/status":
@@ -553,12 +735,17 @@ class Handler(SimpleHTTPRequestHandler):
             return self.post_breakdown()
         if self.path != "/api/parse":
             return self.send_error(404)
+        if not self.from_our_page():  # no data changes here, but other sites must not make the PC run the AI
+            return
         try:
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             sentence = str(body.get("text", ""))[:500]
             now = body.get("now") or datetime.now().strftime("%Y-%m-%dT%H:%M %A")
-            # The browser sends its tasks (number + title) so commands can find "#3" or "laundry"
-            tasks = [{"num": int(t["num"]), "text": str(t.get("text", ""))} for t in body.get("tasks", [])[:300]]
+            # The browser sends its tasks (number + title + due) so commands can find "#3" or "laundry",
+            # and "move #2 to friday" can keep #2's time
+            tasks = [{"num": int(t["num"]), "text": str(t.get("text", "")),
+                      "due": t["due"] if isinstance(t.get("due"), str) and DUE_FORMAT.fullmatch(t["due"]) else ""}
+                     for t in body.get("tasks", [])[:300]]
             result, status = run_command(sentence, now, body.get("categories", [])[:20], tasks), 200
         except urllib.error.URLError:
             result, status = {"error": "Ollama isn't running. Start the Ollama app and try again."}, 502
@@ -569,12 +756,12 @@ class Handler(SimpleHTTPRequestHandler):
     def post_inbox(self):
         # Only our own pages may add commands: another website open in the browser
         # could otherwise send requests to 127.0.0.1 and slip commands into the inbox.
-        if self.headers.get("Origin") not in ALLOWED_ORIGINS or "application/json" not in self.headers.get("Content-Type", ""):
-            return self.send_json({"error": "Not allowed"}, 403)
+        if not self.from_our_page():
+            return
         try:
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             to = "Toto" if body.get("to") == "Claude" else body.get("to")  # Claude was renamed Toto
-            to = to if to in ("Toto", "Kimi", "George") else "Toto"
+            to = to if to in ("Toto", "Kimi", "George", "Bono") else "Toto"
             text = str(body.get("text", "")).strip()[:1000]
             if not text:
                 return self.send_json({"error": "Empty command"}, 400)
@@ -596,8 +783,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     def post_idea_status(self):
         # Same protection as the inbox: only our own pages may change ideas
-        if self.headers.get("Origin") not in ALLOWED_ORIGINS or "application/json" not in self.headers.get("Content-Type", ""):
-            return self.send_json({"error": "Not allowed"}, 403)
+        if not self.from_our_page():
+            return
         try:
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             status = body.get("status")
@@ -618,8 +805,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     def put_memory(self):
         # Same protection as the inbox: only our own pages may change what Max remembers
-        if self.headers.get("Origin") not in ALLOWED_ORIGINS or "application/json" not in self.headers.get("Content-Type", ""):
-            return self.send_json({"error": "Not allowed"}, 403)
+        if not self.from_our_page():
+            return
         try:
             size = int(self.headers.get("Content-Length") or 0)
             if size > MEMORY_MAX_BYTES:
@@ -633,8 +820,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     def post_breakdown(self):
         # Same protection as the inbox: only our own pages may use the AI
-        if self.headers.get("Origin") not in ALLOWED_ORIGINS or "application/json" not in self.headers.get("Content-Type", ""):
-            return self.send_json({"error": "Not allowed"}, 403)
+        if not self.from_our_page():
+            return
         try:
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             text = str(body.get("text", "")).strip()[:500]
@@ -654,8 +841,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     def post_backup(self):
         # Same protection as the inbox: only our own pages may write backups
-        if self.headers.get("Origin") not in ALLOWED_ORIGINS or "application/json" not in self.headers.get("Content-Type", ""):
-            return self.send_json({"error": "Not allowed"}, 403)
+        if not self.from_our_page():
+            return
         try:
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             if "todos" in body and not isinstance(body["todos"], list):
@@ -949,7 +1136,22 @@ def max_status() -> dict:
 
 # ---------- Command inbox (Team Status page) ----------
 INBOX_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inbox.json")
-ALLOWED_ORIGINS = ("http://127.0.0.1:8000", "http://localhost:8000")
+# The names this server answers to. To use the app from your phone over Tailscale later,
+# add the PC's Tailscale name here (e.g. "my-pc.tailnet-name.ts.net:8000") and listen on that address.
+ALLOWED_HOSTS = ("127.0.0.1:8000", "localhost:8000")
+ALLOWED_ORIGINS = tuple("http://" + host for host in ALLOWED_HOSTS)
+# The only files the server hands out; everything else in the folder stays private
+PUBLIC_FILES = {"/", "/index.html", "/style.css", "/script.js", "/status.html"}
+STATUS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "status.json")
+
+
+def load_status() -> dict:
+    """Team status for the Team pill and status page (status.json itself is not served)."""
+    try:
+        with open(STATUS_FILE, encoding="utf-8-sig") as f:
+            return json.load(f)
+    except (FileNotFoundError, ValueError):
+        return {"agents": [], "usage": {"windows": []}}
 
 
 def load_inbox() -> list:

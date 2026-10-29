@@ -86,6 +86,7 @@
     .av-kimi { background: linear-gradient(135deg, #ff6b6f, #d03439); }
     .av-george { background: linear-gradient(135deg, #2cc7b2, #0b8576); }
     .av-lewis { background: linear-gradient(135deg, #f6a53c, #c4650a); }
+    .av-bono { background: linear-gradient(135deg, #38bdf8, #0369a1); } /* sky blue: Bono, tester */
     .mini { width: 24px; height: 24px; flex: none; border-radius: 50%; display: inline-grid; place-items: center; color: #fff; font-size: .68rem; font-weight: 700; }
     .mini:not([class*="av-"]) { background: linear-gradient(135deg, #9a97ab, #6d6a80); }
     .name { font-weight: 600; font-size: 1.05rem; }
@@ -180,6 +181,7 @@
     <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9.5 18h5M10.5 21h3"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2v.1h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="M21 3L10 14"/><path d="M21 3l-6.5 18-4-7.5L3 9.5z"/></symbol>
     <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></symbol>
+    <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></symbol>
     <symbol id="i-team" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c2 .7 3.2 2.5 3.5 5.2"/></symbol>
   </svg>
   <div class="wrap">
@@ -224,6 +226,7 @@
 
     <h2><svg class="i" aria-hidden="true"><use href="#i-bulb"/></svg>Ideas from Lewis</h2>
     <div id="ideas"></div>
+    <p class="hint" id="ideas-msg" role="status"></p>
 
     <h2>Send a command</h2>
     <form id="cmd" class="card cmd">
@@ -231,11 +234,15 @@
         <button type="button" data-to="Toto" class="on"><span class="mini av-toto" aria-hidden="true">T</span>Toto</button>
         <button type="button" data-to="Kimi"><span class="mini av-kimi" aria-hidden="true">K</span>Kimi</button>
         <button type="button" data-to="George"><span class="mini av-george" aria-hidden="true">G</span>George</button>
+        <button type="button" data-to="Bono"><span class="mini av-bono" aria-hidden="true">B</span>Bono</button>
       </div>
       <textarea id="cmd-text" placeholder="e.g. Kimi, add a weekly summary of done tasks" required></textarea>
       <button type="submit" class="send"><svg class="i sm" aria-hidden="true"><use href="#i-send"/></svg>Send to inbox</button>
       <p class="hint">Toto reads the inbox when you message him in the Claude app (say "check inbox"). Works only on this PC.</p>
+      <p class="hint" id="cmd-msg" role="status"></p>
     </form>
+    <!-- GitHub Pages: no server, so sending commands can't work there -->
+    <div class="card empty" id="pc-only" hidden>Sending commands and About me only work on your PC (http://127.0.0.1:8000 with server.py running).</div>
     <div id="inbox"></div>
 
     <h2>Claude usage (<span id="plan">…</span> plan)</h2>
@@ -250,7 +257,7 @@
 
   <script>
     // Each builder: a gradient circle with the initial, plus a small role icon
-    const ROLE_ICON = { Toto: "compass", Kimi: "code", George: "palette", Lewis: "bulb" };
+    const ROLE_ICON = { Toto: "compass", Kimi: "code", George: "palette", Lewis: "bulb", Bono: "check-circle" };
     const avatar = (name) => {
       const n = String(name ?? "");
       const icon = ROLE_ICON[n] ? `<span class="role-ic"><svg class="i"><use href="#i-${ROLE_ICON[n]}"/></svg></span>` : "";
@@ -261,6 +268,8 @@
       return `<span class="mini ${ROLE_ICON[n] ? "av-" + n.toLowerCase() : ""}" aria-hidden="true">${esc(n.charAt(0).toUpperCase())}</span>`;
     };
     const LABELS = { working: "Working", done: "Done", idle: "Idle", new: "Waiting" };
+    // On this PC with server.py? GitHub Pages has no server, so nothing is fetched there.
+    const LOCAL = ["127.0.0.1", "localhost"].includes(location.hostname);
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
     function timeAgo(iso) {
@@ -274,8 +283,13 @@
     }
 
     async function refresh() {
+      if (!LOCAL) {
+        document.getElementById("updated").textContent = "Team status is only on your PC.";
+        return;
+      }
       try {
-        const data = await (await fetch(`status.json?t=${Date.now()}`)).json();
+        // status.json itself is private; the server hands it out through api/status
+        const data = await (await fetch(`api/status?t=${Date.now()}`)).json();
         const old = Date.now() - new Date(data.updated) > 30 * 60000;
         const upd = document.getElementById("updated");
         upd.textContent = `Updated ${timeAgo(data.updated)}`;
@@ -334,6 +348,7 @@
       e.preventDefault();
       const box = document.getElementById("cmd-text");
       const btn = e.target.querySelector(".send");
+      const msg = document.getElementById("cmd-msg");
       btn.disabled = true;
       try {
         const res = await fetch("api/inbox", {
@@ -343,9 +358,10 @@
         });
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.status);
         box.value = "";
+        msg.textContent = "";
         loadInbox();
       } catch (err) {
-        alert("Couldn't send. The inbox only works on this PC at http://127.0.0.1:8000 with server.py running.\n" + err.message);
+        msg.textContent = `Couldn't send: ${err.message}. The inbox only works on this PC with server.py running.`;
       } finally {
         btn.disabled = false;
       }
@@ -418,6 +434,10 @@
     }
 
     async function loadIdeas() {
+      if (!LOCAL) {
+        document.getElementById("ideas").innerHTML = `<div class="card empty">Lewis's ideas are only on your PC.</div>`;
+        return;
+      }
       try {
         ideas = await (await fetch(`api/ideas?t=${Date.now()}`)).json();
       } catch {
@@ -443,6 +463,7 @@
       }
       const b = e.target.closest("button[data-send], button[data-skip]");
       if (!b) return;
+      document.getElementById("ideas-msg").textContent = "";
       const idea = ideas[b.dataset.send ?? b.dataset.skip];
       b.disabled = true;
       try {
@@ -462,7 +483,8 @@
         loadIdeas();
       } catch (err) {
         b.disabled = false;
-        alert("Couldn't save. This only works on this PC at http://127.0.0.1:8000 with server.py running.\n" + err.message);
+        document.getElementById("ideas-msg").textContent =
+          `Couldn't save: ${err.message}. This only works on this PC with server.py running.`;
       }
     });
 
@@ -471,6 +493,7 @@
       const badge = document.getElementById("max-badge");
       const brains = document.getElementById("max-brains");
       try {
+        if (!LOCAL) throw new Error("no server here");
         const data = await (await fetch(`api/max/status?t=${Date.now()}`, { signal: AbortSignal.timeout(5000) })).json();
         badge.className = `badge ${data.ready ? "done" : "idle"}`;
         badge.textContent = data.ready ? "Ready" : "Offline";
@@ -519,11 +542,18 @@
     });
 
     refresh();
-    loadInbox();
     loadIdeas();
     loadMax();
-    loadMemory();
-    setInterval(() => { refresh(); loadInbox(); loadIdeas(); loadMax(); }, 10000);
+    if (LOCAL) {
+      loadInbox();
+      loadMemory();
+      setInterval(() => { refresh(); loadInbox(); loadIdeas(); loadMax(); }, 10000);
+    } else {
+      // GitHub Pages: About me and the inbox need the server on the PC
+      document.getElementById("about").hidden = true;
+      document.getElementById("cmd").hidden = true;
+      document.getElementById("pc-only").hidden = false;
+    }
   </script>
 </body>
 </html>
