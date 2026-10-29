@@ -568,6 +568,15 @@ def add_task(s: str, now: str, categories: list) -> dict:
     return {"action": "add", **task}
 
 
+def add_without_ai(s: str) -> dict:
+    """At the daily AI limit: the task as typed, but Python still asks "When?" for meetings/trips."""
+    text = ADD_WORDS.sub("", " ".join(s.split())).strip() or s
+    result = {"action": "add", "text": text[:1].upper() + text[1:], "due": "", "priority": "med", "category": "", "tokens": 0}
+    if ask_words(text):
+        result.update(askWhen=True, time=thai_time(text.lower()) or load_memory()["times"]["morning"])
+    return result
+
+
 def breakdown_questions(text: str, notes: str, due: str) -> list:
     """Before Break it down on a trip/event task: which details are missing? [] = just suggest."""
     if not ask_words(text) or TRIP_DETAILS.search(notes):
@@ -641,7 +650,10 @@ def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: 
     elif not num_match and target.lower() in PRONOUNS:
         return {"action": action, "pickTask": True}  # no task named: the page asks "Which task?"
     else:
-        num, choices = find_task(target, tasks)
+        # By name, "undo" can only mean a done task and "done" an open one (a #number is always exact)
+        wanted = {"uncomplete": True, "complete": False}.get(action)
+        pool = tasks if num_match or wanted is None else [t for t in tasks if t.get("done") is wanted]
+        num, choices = find_task(target, pool)
     if num is None:
         return {"action": action, "missing": target, "choices": choices}
     if action != "update":
@@ -792,10 +804,12 @@ class Handler(SimpleHTTPRequestHandler):
             now = body.get("now") or datetime.now().strftime("%Y-%m-%dT%H:%M %A")
             # The browser sends its tasks (number + title + due) so commands can find "#3" or "laundry",
             # and "move #2 to friday" can keep #2's time
-            tasks = [{"num": int(t["num"]), "text": str(t.get("text", "")),
+            tasks = [{"num": int(t["num"]), "text": str(t.get("text", "")), "done": t.get("done") is True,
                       "due": t["due"] if isinstance(t.get("due"), str) and DUE_FORMAT.fullmatch(t["due"]) else ""}
                      for t in body.get("tasks", [])[:300]]
             chosen = body.get("num") if isinstance(body.get("num"), int) else None  # picked after "Which one?"
+            if body.get("noAI"):  # the page's daily AI limit is reached: words only, no AI
+                return self.send_json(add_without_ai(sentence))
             result, status = run_command(sentence, now, body.get("categories", [])[:20], tasks, chosen), 200
         except urllib.error.URLError:
             result, status = {"error": "Ollama isn't running. Start the Ollama app and try again."}, 502
@@ -1000,11 +1014,16 @@ def open_db():
         sort INTEGER NOT NULL DEFAULT 0,     -- position in "My order"
         created TEXT NOT NULL,
         updated TEXT NOT NULL,
-        steps TEXT NOT NULL DEFAULT '[]')""")  # checklist as JSON: [{"text": "...", "done": false}]
+        steps TEXT NOT NULL DEFAULT '[]',     -- checklist as JSON: [{"text": "...", "done": false}]
+        details_asked INTEGER NOT NULL DEFAULT 0)""")  # Max already asked the trip details (or the owner skipped)
     # Databases made before "Break it down" have no steps column yet: add it (existing tasks get [])
     columns = [row[1] for row in con.execute("PRAGMA table_info(tasks)")]
     if "steps" not in columns:
         con.execute("ALTER TABLE tasks ADD COLUMN steps TEXT NOT NULL DEFAULT '[]'")
+        con.commit()
+    # Same for "Max asks when unsure": existing tasks get 0 (not asked yet)
+    if "details_asked" not in columns:
+        con.execute("ALTER TABLE tasks ADD COLUMN details_asked INTEGER NOT NULL DEFAULT 0")
         con.commit()
     con.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")  # nextNum, version
     return con
@@ -1018,11 +1037,11 @@ def get_meta(con, key, default):
 def load_tasks() -> dict:
     con = open_db()
     try:
-        rows = con.execute("SELECT id, num, text, done, due, priority, cat, notified, notes, files, steps "
+        rows = con.execute("SELECT id, num, text, done, due, priority, cat, notified, notes, files, steps, details_asked "
                            "FROM tasks ORDER BY sort").fetchall()
         todos = [{"id": r[0], "num": r[1], "text": r[2], "done": bool(r[3]), "due": r[4], "priority": r[5],
                   "cat": r[6], "notified": bool(r[7]), "notes": r[8], "files": json.loads(r[9]),
-                  "steps": json.loads(r[10])} for r in rows]
+                  "steps": json.loads(r[10]), "detailsAsked": bool(r[11])} for r in rows]
         return {"todos": todos, "nextNum": get_meta(con, "nextNum", 1), "version": get_meta(con, "version", 0)}
     finally:
         con.close()
@@ -1055,6 +1074,7 @@ def clean_tasks(todos):
             "files": [{"id": str(f.get("id")), "name": str(f.get("name"))} for f in files if isinstance(f, dict)],
             "steps": [{"text": s["text"][:200], "done": s.get("done") is True}
                       for s in steps if isinstance(s, dict) and isinstance(s.get("text"), str)][:30],
+            "detailsAsked": t.get("detailsAsked") is True,
         })
     return clean
 
@@ -1076,17 +1096,18 @@ def _save_tasks(tasks: list, next_num, base_version):
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             # Keep each task's created time, and only touch "updated" when the task really changed
             old = {r[0]: r[1:] for r in con.execute(
-                "SELECT num, id, text, done, due, priority, cat, notes, files, notified, steps, created, updated FROM tasks")}
+                "SELECT num, id, text, done, due, priority, cat, notes, files, notified, steps, details_asked, created, updated FROM tasks")}
             con.execute("DELETE FROM tasks")
             for sort, t in enumerate(tasks):
                 values = (t["id"], t["text"], int(t["done"]), t["due"], t["priority"], t["cat"], t["notes"],
                           json.dumps(t["files"], ensure_ascii=False), int(t["notified"]),
-                          json.dumps(t["steps"], ensure_ascii=False))
+                          json.dumps(t["steps"], ensure_ascii=False), int(t["detailsAsked"]))
                 before = old.get(t["num"])
                 created = before[-2] if before else now
                 updated = before[-1] if before and tuple(before[:-2]) == values else now
-                con.execute("INSERT INTO tasks (id, text, done, due, priority, cat, notes, files, notified, steps, num, sort, created, updated) "
-                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", values + (t["num"], sort, created, updated))
+                con.execute("INSERT INTO tasks (id, text, done, due, priority, cat, notes, files, notified, steps, details_asked, "
+                            "num, sort, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            values + (t["num"], sort, created, updated))
             next_num = max([int(next_num) if isinstance(next_num, int) else 1, get_meta(con, "nextNum", 1)]
                            + [t["num"] + 1 for t in tasks])  # numbers are never reused
             con.execute("INSERT OR REPLACE INTO meta VALUES ('nextNum', ?)", (str(next_num),))

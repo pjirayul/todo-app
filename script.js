@@ -39,7 +39,8 @@ const TEXT = {
     askDetails: "Quick details so Max can plan better", suggestSteps: "Suggest steps", skipSuggest: "Skip, just suggest",
     ask_where: "Where?", ask_when: "When?", ask_budget: "Budget?",
     eg_where: "e.g. Chiang Mai", eg_when: "e.g. 20–22 Nov", eg_budget: "e.g. ฿2,000", tripDetails: "Trip details",
-    noTasks: "No tasks to choose from.",
+    noTasks: "No tasks to choose from.", notDoneYet: (n) => `#${n} isn't done yet, so there is nothing to undo.`,
+    alreadyDone: (n) => `#${n} is already done.`,
     maxAdded: (n, text, when) => `Max added #${n}: ${text}${when ? " · " + when : ""}`, maxUpdated: (n) => `Max updated #${n}`,
     maxDone: (n) => `Max marked #${n} done`, maxUndone: (n) => `Max reopened #${n}`,
   },
@@ -82,7 +83,8 @@ const TEXT = {
     askDetails: "ขอรายละเอียดสั้นๆ ให้ Max วางแผนได้ดีขึ้น", suggestSteps: "ขอขั้นตอน", skipSuggest: "ข้าม แนะนำเลย",
     ask_where: "ที่ไหน?", ask_when: "เมื่อไหร่?", ask_budget: "งบเท่าไหร่?",
     eg_where: "เช่น เชียงใหม่", eg_when: "เช่น 20–22 พ.ย.", eg_budget: "เช่น 2,000 บาท", tripDetails: "รายละเอียดทริป",
-    noTasks: "ยังไม่มีงานให้เลือก",
+    noTasks: "ยังไม่มีงานให้เลือก", notDoneYet: (n) => `#${n} ยังไม่เสร็จ จึงไม่มีอะไรให้ยกเลิก`,
+    alreadyDone: (n) => `#${n} เสร็จไปแล้ว`,
     maxAdded: (n, text, when) => `Max เพิ่ม #${n}: ${text}${when ? " · " + when : ""} แล้ว`, maxUpdated: (n) => `Max แก้ #${n} แล้ว`,
     maxDone: (n) => `Max ทำเครื่องหมาย #${n} ว่าเสร็จแล้ว`, maxUndone: (n) => `Max เปิด #${n} ใหม่แล้ว`,
   },
@@ -101,8 +103,8 @@ const save = (key, value) => {
 
 // A task looks like: { id, num, text, done, due, priority, cat, notified, notes, files, steps }
 // steps is the task's checklist from "Break it down": [{ text, done }]
-// Older saved tasks get defaults for the new fields
-let todos = load("todos", []).map((x) => ({ due: "", priority: "med", cat: "", notified: false, notes: "", files: [], steps: [], ...x }));
+// detailsAsked: Max already asked the trip details for Break it down (answered or skipped), so not again
+let todos = load("todos", []).map((x) => ({ due: "", priority: "med", cat: "", notified: false, notes: "", files: [], steps: [], detailsAsked: false, ...x }));
 
 // Every task gets a number (#1, #2…) to refer to it in commands. Numbers never change and are
 // never reused, even after a delete, so "#3" always means the same task.
@@ -554,6 +556,8 @@ function applyCommand(cmd) {
     return null;
   }
   if (cmd.action === "complete" || cmd.action === "uncomplete") {
+    // Nothing to change: say so instead of "Max reopened #4" for a task that was never done
+    if (todo.done === (cmd.action === "complete")) return t(todo.done ? "alreadyDone" : "notDoneYet")(todo.num);
     backup(`before ${cmd.action === "complete" ? "done" : "undo"} #${todo.num}`);
     todo.done = cmd.action === "complete";
   } else {
@@ -581,7 +585,7 @@ async function parseWithMax(text, extra = {}) {
       text,
       now: `${now.toLocaleDateString("en-CA")}T${now.toTimeString().slice(0, 5)} ${now.toLocaleDateString("en-US", { weekday: "long" })}`,
       categories: [...new Set(todos.map((x) => x.cat).filter(Boolean))],
-      tasks: todos.map((x) => ({ num: x.num, text: x.text, due: x.due })), // "#3"/"laundry" can be found; due keeps the time
+      tasks: todos.map((x) => ({ num: x.num, text: x.text, due: x.due, done: x.done })), // "#3"/"laundry" can be found; due keeps the time
       ...extra,
     }),
     signal: AbortSignal.timeout(30000), // a stuck AI must not freeze the box forever
@@ -610,7 +614,7 @@ function finishCommand(cmd) {
 function addTask(task, problem = "") {
   backup(`before add "${task.text.slice(0, 40)}"`);
   const num = newNum();
-  todos.push({ id: Date.now() + Math.random(), num, text: task.text, done: false, due: task.due || "", priority: task.priority || "med", cat: task.category || "", notified: false, notes: "", files: [], steps: [] });
+  todos.push({ id: Date.now() + Math.random(), num, text: task.text, done: false, due: task.due || "", priority: task.priority || "med", cat: task.category || "", notified: false, notes: "", files: [], steps: [], detailsAsked: false });
   $("todo-input").value = "";
   update();
   flash(num);
@@ -669,7 +673,13 @@ async function askWhenThenAdd(task) {
     date = day(answer.value);
   }
   // The server sends the time it heard ("at 3pm"), or the owner's morning time
-  const due = /^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(task.time) ? `${date}T${task.time}` : "";
+  let due = /^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(task.time) ? `${date}T${task.time}` : "";
+  if (due && new Date(due) <= new Date()) {
+    // That time already passed today (it would be overdue at once): use the next full hour instead
+    const next = new Date();
+    next.setHours(next.getHours() + 1, 0, 0, 0);
+    due = next.toLocaleDateString("en-CA") === date ? `${date}T${String(next.getHours()).padStart(2, "0")}:00` : `${date}T23:59`;
+  }
   addTask({ ...task, due });
 }
 
@@ -699,6 +709,13 @@ $("todo-form").addEventListener("submit", async (e) => {
       showMessage("");
       problem = err.message === t("limitHit") ? t("limitHit") : t("aiOff");
       cmd = simpleCommand(text);
+      if (!cmd && LOCAL && problem === t("limitHit")) {
+        // A new task at the AI limit: Python can still ask "When?" for a meeting/trip (no AI used)
+        try {
+          const data = await parseWithMax(text, { noAI: true });
+          if (data.text) task = data;
+        } catch {} // server off: add as plain text
+      }
       if (cmd?.action === "offline") {
         // A command we can't do without AI: keep the text so nothing is lost.
         // Not the "task added" message: nothing was added.
@@ -800,7 +817,7 @@ async function breakDown(todo, skipAsk = false) {
     const res = await fetch("api/breakdown", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: todo.text, notes: todo.notes, due: todo.due, skipAsk }),
+      body: JSON.stringify({ text: todo.text, notes: todo.notes, due: todo.due, skipAsk: skipAsk || todo.detailsAsked }),
       signal: AbortSignal.timeout(60000), // a stuck AI must not leave "Thinking…" forever (server gives up first)
     });
     const data = await res.json();
@@ -836,8 +853,9 @@ async function askTripDetails(todo, missing) {
   const parts = missing.map((name) => answer.values[name]).filter(Boolean);
   if (answer.value === "go" && parts.length) {
     current.notes = [current.notes, `${t("tripDetails")}: ${parts.join(" · ")}`].filter(Boolean).join("\n");
-    update();
   }
+  current.detailsAsked = true; // answered or skipped: Max doesn't ask again for this task
+  update();
   breakDown(current, true);
 }
 
@@ -1079,6 +1097,7 @@ function cleanTodos(list) {
     steps: Array.isArray(x.steps)
       ? x.steps.filter((s) => s && typeof s.text === "string").map((s) => ({ text: s.text, done: s.done === true }))
       : [],
+    detailsAsked: x.detailsAsked === true,
   }));
 }
 
