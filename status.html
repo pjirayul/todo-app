@@ -256,6 +256,68 @@
   </div>
 
   <script>
+    // ---------- Thai / English ----------
+    // The app (index.html) saves the language in localStorage "settings". We read the same setting.
+    let LANG = "en";
+    try { LANG = (JSON.parse(localStorage.getItem("settings")) || {}).lang === "th" ? "th" : "en"; } catch {}
+    document.documentElement.lang = LANG;
+    // English text -> Thai text. L("...") gives the Thai text in Thai mode and the same text otherwise.
+    const TH = {
+      "Team Status": "สถานะทีม", "Back": "กลับ", "Team": "ทีม", "Loading…": "กำลังโหลด…",
+      "Your assistant": "ผู้ช่วยของคุณ", "· Your assistant": "· ผู้ช่วยของคุณ", "Checking…": "กำลังตรวจสอบ…",
+      "About me": "เกี่ยวกับฉัน",
+      "Max reads this to understand you better. Never put passwords or other secrets here.": "Max อ่านส่วนนี้เพื่อเข้าใจคุณมากขึ้น อย่าใส่รหัสผ่านหรือความลับอื่นๆ ที่นี่",
+      "Your name": "ชื่อของคุณ", "Morning": "เช้า", "Afternoon": "บ่าย", "Evening": "เย็น", "Tonight": "คืนนี้",
+      "People you often mention (comma between names)": "คนที่คุณพูดถึงบ่อย (คั่นชื่อด้วยจุลภาค)",
+      "Your categories (comma between)": "หมวดหมู่ของคุณ (คั่นด้วยจุลภาค)", "Notes for Max": "บันทึกถึง Max",
+      "Save": "บันทึก", "Builder team": "ทีมผู้สร้าง", "Ideas from Lewis": "ไอเดียจาก Lewis",
+      "Send a command": "ส่งคำสั่ง", "Send to inbox": "ส่งเข้ากล่องข้อความ",
+      "Toto reads the inbox when you message him in the Claude app (say \"check inbox\"). Works only on this PC.": "Toto จะอ่านกล่องข้อความเมื่อคุณคุยกับเขาในแอป Claude (พิมพ์ \"check inbox\") ใช้ได้เฉพาะในเครื่องนี้",
+      "Sending commands and About me only work on your PC (http://127.0.0.1:8000 with server.py running).": "การส่งคำสั่งและ \"เกี่ยวกับฉัน\" ใช้ได้เฉพาะบนเครื่องของคุณ (http://127.0.0.1:8000 ขณะที่ server.py ทำงานอยู่)",
+      "Claude usage (": "การใช้ Claude (", "plan)": "แพ็กเกจ)",
+      "This page checks for new data every 10 seconds. Toto writes the data while he's working in your session, so when Toto is idle the usage numbers stay at the \"Checked\" time shown above.": "หน้านี้ตรวจข้อมูลใหม่ทุก 10 วินาที Toto เป็นคนเขียนข้อมูลขณะทำงานในเซสชันของคุณ ดังนั้นเมื่อ Toto ว่าง ตัวเลขการใช้งานจะค้างที่เวลา \"ตรวจเมื่อ\" ด้านบน",
+      // used by the code below
+      "Team status is only on your PC.": "สถานะทีมมีเฉพาะบนเครื่องของคุณ", "No status data yet": "ยังไม่มีข้อมูลสถานะ",
+      "Working": "กำลังทำ", "Done": "เสร็จแล้ว", "Idle": "ว่าง", "Waiting": "รอคิว",
+      "just now": "เมื่อสักครู่", "Updated": "อัปเดต", "Checked": "ตรวจเมื่อ",
+      "These numbers may be out of date — ask Toto \"show my usage\" to refresh.": "ตัวเลขเหล่านี้อาจเก่าแล้ว บอก Toto ว่า \"show my usage\" เพื่อรีเฟรช",
+      "not started": "ยังไม่เริ่ม", "reset — ask Toto to refresh": "รีเซ็ตแล้ว บอก Toto ให้รีเฟรช", "unknown": "ไม่ทราบ",
+      "used": "ใช้ไปแล้ว", "left": "เหลือ", "resets in": "รีเซ็ตใน",
+      "Small": "เล็ก", "Medium": "กลาง", "Large": "ใหญ่", "Effort:": "ความยาก:", "Source": "แหล่งที่มา",
+      "Sent to inbox": "ส่งแล้ว", "Skipped": "ข้ามแล้ว", "Skip": "ข้าม",
+      "Lewis posts 3 new ideas every morning at 08:00.": "Lewis โพสต์ไอเดียใหม่ 3 ข้อทุกเช้า 08:00",
+      "Lewis's ideas are only on your PC.": "ไอเดียของ Lewis มีเฉพาะบนเครื่องของคุณ",
+      "Hide older": "ซ่อนของเก่า", "Show older": "แสดงของเก่า", "day": "วัน", "days": "วัน",
+      "Ready": "พร้อม", "Offline": "ออฟไลน์",
+      "Turns what you say into tasks, steps and reminders.": "เปลี่ยนสิ่งที่คุณพูดให้เป็นงาน ขั้นตอน และการเตือน",
+      "Max is resting. Start the Ollama app and he'll be ready.": "Max กำลังพัก เปิดแอป Ollama แล้วเขาจะพร้อม",
+      "Max runs on your PC, so he's offline here.": "Max ทำงานบนเครื่องของคุณ จึงออฟไลน์ที่นี่",
+      "Saved. Max will use this from now on.": "บันทึกแล้ว Max จะใช้ข้อมูลนี้ต่อจากนี้",
+      "Couldn't send:": "ส่งไม่สำเร็จ:", "Couldn't save:": "บันทึกไม่สำเร็จ:", "to": "ถึง",
+      "The inbox only works on this PC with server.py running.": "กล่องข้อความใช้ได้เฉพาะบนเครื่องนี้ขณะที่ server.py ทำงานอยู่",
+      "This only works on this PC with server.py running.": "ใช้ได้เฉพาะบนเครื่องนี้ขณะที่ server.py ทำงานอยู่",
+      "e.g. Kimi, add a weekly summary of done tasks": "เช่น Kimi เพิ่มสรุปรายสัปดาห์ของงานที่เสร็จ",
+    };
+    const L = (s) => (LANG === "th" && TH[s]) || s;
+    // Translate the fixed words in the page once: every piece of text, the tab title and the hint inside the box
+    function translatePage() {
+      if (LANG !== "th") return;
+      document.title = L(document.title);
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        // Long paragraphs spread over several lines are matched with single spaces
+        const key = node.nodeValue.replace(/\s+/g, " ").trim();
+        if (TH[key]) node.nodeValue = node.nodeValue.replace(node.nodeValue.trim(), TH[key]);
+      }
+      document.querySelectorAll("[placeholder]").forEach((el) => { el.placeholder = L(el.placeholder); });
+    }
+    translatePage();
+    // The language was switched in the app's tab: reload so everything changes
+    addEventListener("storage", (e) => {
+      if (e.key !== "settings") return;
+      try { if (((JSON.parse(e.newValue) || {}).lang === "th" ? "th" : "en") !== LANG) location.reload(); } catch {}
+    });
+
     // Each builder: a gradient circle with the initial, plus a small role icon
     const ROLE_ICON = { Toto: "compass", Kimi: "code", George: "palette", Lewis: "bulb", Bono: "check-circle" };
     const avatar = (name) => {
@@ -267,24 +329,26 @@
       const n = String(name ?? "");
       return `<span class="mini ${ROLE_ICON[n] ? "av-" + n.toLowerCase() : ""}" aria-hidden="true">${esc(n.charAt(0).toUpperCase())}</span>`;
     };
-    const LABELS = { working: "Working", done: "Done", idle: "Idle", new: "Waiting" };
+    const LABELS = { working: L("Working"), done: L("Done"), idle: L("Idle"), new: L("Waiting") };
     // On this PC with server.py? GitHub Pages has no server, so nothing is fetched there.
     const LOCAL = ["127.0.0.1", "localhost"].includes(location.hostname);
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
     function timeAgo(iso) {
       const min = Math.round((Date.now() - new Date(iso)) / 60000);
+      if (LANG === "th") return min < 1 ? L("just now") : min < 60 ? `${min} นาทีที่แล้ว` : `${Math.round(min / 60)} ชม.ที่แล้ว`;
       return min < 1 ? "just now" : min < 60 ? `${min} min ago` : `${Math.round(min / 60)} h ago`;
     }
     function resetsIn(iso) {
       const min = Math.max(0, Math.round((new Date(iso) - Date.now()) / 60000));
       const d = Math.floor(min / 1440), h = Math.floor((min % 1440) / 60), m = min % 60;
-      return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
+      const [D, H, M] = LANG === "th" ? ["วัน", "ชม.", "นาที"] : ["d", "h", "m"];
+      return d ? `${d}${D} ${h}${H}` : h ? `${h}${H} ${m}${M}` : `${m}${M}`;
     }
 
     async function refresh() {
       if (!LOCAL) {
-        document.getElementById("updated").textContent = "Team status is only on your PC.";
+        document.getElementById("updated").textContent = L("Team status is only on your PC.");
         return;
       }
       try {
@@ -292,7 +356,7 @@
         const data = await (await fetch(`api/status?t=${Date.now()}`)).json();
         const old = Date.now() - new Date(data.updated) > 30 * 60000;
         const upd = document.getElementById("updated");
-        upd.textContent = `Updated ${timeAgo(data.updated)}`;
+        upd.textContent = `${L("Updated")} ${timeAgo(data.updated)}`;
         upd.classList.toggle("stale", old);
 
         document.getElementById("agents").innerHTML = data.agents.map((a) => `
@@ -310,29 +374,29 @@
         const checkedAt = data.usage.checkedAt || data.updated;
         const usageOld = !(Date.now() - new Date(checkedAt) <= 15 * 60000);  // also true if the date is broken
         const chk = document.getElementById("checked");
-        chk.textContent = `Checked ${timeAgo(checkedAt)}`;
+        chk.textContent = `${L("Checked")} ${timeAgo(checkedAt)}`;
         chk.classList.toggle("stale", usageOld);
 
         document.getElementById("plan").textContent = data.usage.plan;
         const warning = usageOld ? `
-          <div class="card new">These numbers may be out of date — ask Toto "show my usage" to refresh.</div>` : "";
+          <div class="card new">${L('These numbers may be out of date — ask Toto "show my usage" to refresh.')}</div>` : "";
         document.getElementById("usage").innerHTML = warning + data.usage.windows.map((w) => {
           const pct = Number(w.percentUsed) || 0;
           const resetDate = w.resetsAt ? new Date(w.resetsAt) : null;
           // The window already reset after Toto checked: the old percent no longer means anything
           const wasReset = resetDate && resetDate <= Date.now();
           let cls = pct >= 90 ? "full" : pct >= 70 ? "warn" : "";
-          let when = resetDate ? `resets in ${resetsIn(w.resetsAt)}` : "not started";
-          if (wasReset) { cls = "unknown"; when = "reset — ask Toto to refresh"; }
+          let when = resetDate ? `${L("resets in")} ${resetsIn(w.resetsAt)}` : L("not started");
+          if (wasReset) { cls = "unknown"; when = L("reset — ask Toto to refresh"); }
           return `
           <div class="card">
-            <div class="meter-top"><span>${esc(w.label)}</span><b>${wasReset ? "unknown" : `${pct}% used`}</b></div>
+            <div class="meter-top"><span>${esc(w.label)}</span><b>${wasReset ? L("unknown") : `${pct}% ${L("used")}`}</b></div>
             <div class="bar"><div class="fill ${cls}" style="width:${wasReset ? 100 : Math.min(100, pct)}%"></div></div>
-            <div class="resets">${wasReset ? "" : `${100 - pct}% left · `}${esc(when)}</div>
+            <div class="resets">${wasReset ? "" : `${100 - pct}% ${L("left")} · `}${esc(when)}</div>
           </div>`;
         }).join("");
       } catch (err) {
-        document.getElementById("updated").textContent = "No status data yet";
+        document.getElementById("updated").textContent = L("No status data yet");
       }
     }
     // ---------- Command inbox ----------
@@ -361,7 +425,7 @@
         msg.textContent = "";
         loadInbox();
       } catch (err) {
-        msg.textContent = `Couldn't send: ${err.message}. The inbox only works on this PC with server.py running.`;
+        msg.textContent = `${L("Couldn't send:")} ${err.message}. ${L("The inbox only works on this PC with server.py running.")}`;
       } finally {
         btn.disabled = false;
       }
@@ -372,7 +436,7 @@
         const items = await (await fetch(`api/inbox?t=${Date.now()}`)).json();
         document.getElementById("inbox").innerHTML = items.slice().reverse().slice(0, 15).map((m) => `
           <div class="card">
-            <div class="msg-head">${mini(m.to)} to <b>${esc(m.to)}</b> · ${esc(m.created)}
+            <div class="msg-head">${mini(m.to)} ${L("to")} <b>${esc(m.to)}</b> · ${esc(m.created)}
               <span class="badge ${esc(m.status)}">${LABELS[m.status] || esc(m.status)}</span></div>
             <div class="msg-text">${esc(m.text)}</div>
             ${m.reply ? `<div class="reply">${esc(m.reply)}</div>` : ""}
@@ -385,7 +449,7 @@
     // ---------- Ideas from Lewis ----------
     let ideas = [];
     let showOlder = false;
-    const EFFORT = { S: "Small", M: "Medium", L: "Large" };
+    const EFFORT = { S: L("Small"), M: L("Medium"), L: L("Large") };
 
     // Only real web links; blocks things like "javascript:" in a source
     function safeUrl(u) {
@@ -405,15 +469,15 @@
           <div class="idea-title">${esc(idea.title)}</div>
           <div class="idea-why">${esc(idea.why)}</div>
           <div class="tags">
-            ${idea.effort ? `<span class="tag">Effort: ${esc(EFFORT[idea.effort] || idea.effort)}</span>` : ""}
+            ${idea.effort ? `<span class="tag">${L("Effort:")} ${esc(EFFORT[idea.effort] || idea.effort)}</span>` : ""}
             ${idea.who ? `<span class="tag">${esc(idea.who)}</span>` : ""}
-            ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">Source<svg class="i sm" aria-hidden="true"><use href="#i-external"/></svg></a>` : ""}
+            ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${L("Source")}<svg class="i sm" aria-hidden="true"><use href="#i-external"/></svg></a>` : ""}
           </div>
           <div class="idea-actions">
-            ${sent ? `<span class="badge done">Sent to inbox</span>`
-              : skipped ? `<span class="badge idle">Skipped</span>`
-              : `<button type="button" class="go" data-send="${i}"><svg class="i sm" aria-hidden="true"><use href="#i-send"/></svg>Send to inbox</button>
-                 <button type="button" data-skip="${i}">Skip</button>`}
+            ${sent ? `<span class="badge done">${L("Sent to inbox")}</span>`
+              : skipped ? `<span class="badge idle">${L("Skipped")}</span>`
+              : `<button type="button" class="go" data-send="${i}"><svg class="i sm" aria-hidden="true"><use href="#i-send"/></svg>${L("Send to inbox")}</button>
+                 <button type="button" data-skip="${i}">${L("Skip")}</button>`}
           </div>
         </div>`;
     }
@@ -421,7 +485,7 @@
     function renderIdeas() {
       const box = document.getElementById("ideas");
       if (!ideas.length) {
-        box.innerHTML = `<div class="card empty">Lewis posts 3 new ideas every morning at 08:00.</div>`;
+        box.innerHTML = `<div class="card empty">${L("Lewis posts 3 new ideas every morning at 08:00.")}</div>`;
         return;
       }
       // Newest day first; the 3 latest days show, older ones hide behind a button
@@ -430,12 +494,12 @@
       box.innerHTML = visible.map((day) => `
         <div class="idea-day">${esc(day)}</div>
         ${ideas.map((idea, i) => idea.date === day ? ideaCard(idea, i) : "").join("")}`).join("")
-        + (days.length > 3 ? `<button type="button" class="more" id="older">${showOlder ? "Hide older" : `Show older (${days.length - 3} ${days.length === 4 ? "day" : "days"})`}</button>` : "");
+        + (days.length > 3 ? `<button type="button" class="more" id="older">${showOlder ? L("Hide older") : `${L("Show older")} (${days.length - 3} ${L(days.length === 4 ? "day" : "days")})`}</button>` : "");
     }
 
     async function loadIdeas() {
       if (!LOCAL) {
-        document.getElementById("ideas").innerHTML = `<div class="card empty">Lewis's ideas are only on your PC.</div>`;
+        document.getElementById("ideas").innerHTML = `<div class="card empty">${L("Lewis's ideas are only on your PC.")}</div>`;
         return;
       }
       try {
@@ -484,7 +548,7 @@
       } catch (err) {
         b.disabled = false;
         document.getElementById("ideas-msg").textContent =
-          `Couldn't save: ${err.message}. This only works on this PC with server.py running.`;
+          `${L("Couldn't save:")} ${err.message}. ${L("This only works on this PC with server.py running.")}`;
       }
     });
 
@@ -496,14 +560,14 @@
         if (!LOCAL) throw new Error("no server here");
         const data = await (await fetch(`api/max/status?t=${Date.now()}`, { signal: AbortSignal.timeout(5000) })).json();
         badge.className = `badge ${data.ready ? "done" : "idle"}`;
-        badge.textContent = data.ready ? "Ready" : "Offline";
+        badge.textContent = data.ready ? L("Ready") : L("Offline");
         brains.textContent = data.ready
-          ? "Turns what you say into tasks, steps and reminders."
-          : "Max is resting. Start the Ollama app and he'll be ready.";
+          ? L("Turns what you say into tasks, steps and reminders.")
+          : L("Max is resting. Start the Ollama app and he'll be ready.");
       } catch {
         badge.className = "badge idle";
-        badge.textContent = "Offline";
-        brains.textContent = "Max runs on your PC, so he's offline here.";
+        badge.textContent = L("Offline");
+        brains.textContent = L("Max runs on your PC, so he's offline here.");
       }
     }
 
@@ -534,10 +598,10 @@
                                  categories: list(field("categories").value), notes: field("notes").value }),
         });
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.status);
-        msg.textContent = "Saved. Max will use this from now on.";
+        msg.textContent = L("Saved. Max will use this from now on.");
         loadMemory(); // show what was really saved (the server trims and checks it)
       } catch (err) {
-        msg.textContent = `Couldn't save: ${err.message}`;
+        msg.textContent = `${L("Couldn't save:")} ${err.message}`;
       }
     });
 

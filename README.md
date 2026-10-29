@@ -23,7 +23,11 @@ JavaScript plus a small Python server — my first learning project.
 Try things safely: `python server.py --test` opens a separate test copy at **http://127.0.0.1:8001** (own database, red TEST MODE badge).
 Run the automatic tests with `python -m unittest` (no AI needed).
 
-Your tasks are saved in `data/tasks.db` (plus a copy in the browser). Backups go to `backups/`.
+**Start script:** `tools\start-just-say-it.cmd` starts Ollama and the server (minimized), but only the ones not already running.
+To run it at login: press Win+R, type `shell:startup`, and put a shortcut to that .cmd file there.
+Delete the shortcut to turn it off again. (Nothing is set up automatically.)
+
+Your tasks are saved in `data/tasks.db` (plus a copy in the browser). Backups go to `backups/`; once a day the newest copies are also copied to your OneDrive folder `JustSayIt-backups` (see `OFFSITE_BACKUP_DIR` in server.py).
 These, and the other private files (status, inbox, About me), stay on your PC: they are not uploaded
 and the server never hands them out.
 

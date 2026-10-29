@@ -278,6 +278,14 @@ THAI_WEEKDAYS = {"จันทร์": "Monday", "อังคาร": "Tuesday"
 NEXT_WEEK = re.compile(r"\bnext\b|(สัปดาห์|อาทิตย์|จันทร์|อังคาร|พุธ|พฤหัส(บดี)?|ศุกร์|เสาร์)หน้า")
 # "add buy milk" / "เพิ่ม ซื้อนม": the command word itself is not part of the task
 ADD_WORDS = re.compile(r"^(add|create|new task:?)\s+|^เพิ่ม(งาน)?\s*", re.I)
+# "remind me to call mom" / "เตือนให้โทรหาแม่" / "อย่าลืมซื้อนม": the lead-in is not part of the title
+LEAD_INS = re.compile(r"^(please\s+)?(remind\s+me(\s+(to|about|of))?|remember\s+to|don'?t\s+forget(\s+to)?)\s+"
+                      r"|^(เตือน(ฉัน|ผม|เรา)?ให้|เตือน(ฉัน|ผม|เรา)|อย่าลืม)\s*", re.I)
+
+
+def strip_lead_in(text: str) -> str:
+    """'remind me to call mom tomorrow' -> 'call mom tomorrow' (the rest of the owner's words stay)."""
+    return LEAD_INS.sub("", text.strip(), count=1).strip() or text.strip()
 
 
 def weekday_in(lower: str) -> str:
@@ -339,8 +347,39 @@ def keep_own_words(title: str, sentence: str) -> str:
     return title
 
 
+# The category names the AI prompt uses. Keywords (lowercase English, Thai) that point to each one,
+# checked in this order, so "pay rent" is Home (rent) before it is Money (pay).
+DEFAULT_CATEGORIES = ["Work", "Home", "Shopping", "Health", "Study", "Money", "Personal"]
+CATEGORY_HINTS = (
+    ("Health", r"\b(gym|run|running|jog|jogging|workout|exercise|yoga|doctor|dentist|dental|hospital|clinic|medicine|"
+               r"pharmacy|check-?up|vitamins?)\b|ออกกำลัง|วิ่ง|ฟิตเนส|โยคะ|หมอ|ฟัน|โรงพยาบาล|คลินิก|กินยา|ซื้อยา|ตรวจสุขภาพ"),
+    ("Home", r"\b(rent|bills?|clean|cleaning|laundry|groceries|grocery|dishes|trash|garbage|repaint|repair)\b|"
+             r"ค่าเช่า|ค่าน้ำ|ค่าไฟ|ทำความสะอาด|ซักผ้า|ล้างจาน|ทิ้งขยะ|ซ่อม|ซื้อของเข้าบ้าน|ตลาด"),
+    ("Study", r"\b(study|homework|exam|class|course|lecture|assignment)\b|เรียน|การบ้าน|สอบ|อ่านหนังสือ"),
+    ("Money", r"\b(pay|tax|bank|salary|budget|invoice|transfer|insurance)\b|ภาษี|ธนาคาร|โอนเงิน|เงินเดือน|ประกัน|จ่าย"),
+    ("Shopping", r"\b(buy|shopping|order|purchase)\b|ซื้อ|สั่งของ"),
+    ("Work", r"\b(meeting|report|email|client|project|deadline|boss|presentation)\b|ประชุม|รายงาน|ลูกค้า|โปรเจกต์|พรีเซนต์"),
+)
+
+
+def pick_category(ai_category: str, sentence: str, known: list) -> str:
+    """Keep the AI's category when it is one we know; when it gave none or an odd one, use keyword hints.
+    Only existing category names are used (the owner's own spelling wins: 'health' -> 'Health')."""
+    names = {c.lower(): c for c in DEFAULT_CATEGORIES + list(known)}
+    ai_category = (ai_category or "").strip()
+    # The small AI over-uses "Work" and "Personal": for those, a clear keyword ("gym") is more reliable
+    if ai_category.lower() in names and ai_category.lower() not in ("work", "personal"):
+        return names[ai_category.lower()]
+    lower = sentence.lower()
+    for name, pattern in CATEGORY_HINTS:
+        if re.search(pattern, lower):
+            return names.get(name.lower(), name)
+    return names.get(ai_category.lower(), ai_category)  # no hint: whatever the AI said (may be empty)
+
+
 def parse_task(sentence: str, now: str, categories: list) -> dict:
     sentence = ADD_WORDS.sub("", sentence).strip() or sentence
+    sentence = strip_lead_in(sentence)
     sentence = fix_date_typos(sentence)
     memory = load_memory()
     known = list(dict.fromkeys(categories + memory["categories"]))[:30]  # existing + the owner's own, no repeats
@@ -371,7 +410,7 @@ def parse_task(sentence: str, now: str, categories: list) -> dict:
     if not DAY_HINTS.search(lower):
         task["when"] = "today" if time_said(lower) else "none"
     # Small models sometimes slip; keep the result safe for the app
-    title = task.get("text") or sentence
+    title = strip_lead_in(task.get("text") or sentence)  # the AI may put "Remind me to" back
     if THAI_LETTERS.search(sentence) and not THAI_LETTERS.search(title):
         title = sentence  # a Thai sentence got an English title: keep the owner's own words
     if THAI_LETTERS.search(title):
@@ -386,7 +425,7 @@ def parse_task(sentence: str, now: str, categories: list) -> dict:
         "due": resolve_due(task, datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"), memory["times"]),
         "time": task.get("time", "") if HHMM.fullmatch(str(task.get("time", ""))) else "",  # used by updates
         "priority": task.get("priority") if task.get("priority") in ("low", "med", "high") else "med",
-        "category": task.get("category", ""),
+        "category": pick_category(task.get("category", ""), sentence, known),
         "tokens": task.get("tokens", 0),
     }
 
@@ -1121,7 +1160,52 @@ def _save_tasks(tasks: list, next_num, base_version):
     return {"ok": True, "version": version + 1, "nextNum": next_num}, 200
 
 
+# Off-PC backup: a cloud-synced folder (OneDrive), so a dead disk does not take the tasks with it.
+# Only used when the OneDrive folder itself exists. Never used in --test mode.
+OFFSITE_BACKUP_DIR = r"C:\Users\Locha\OneDrive\JustSayIt-backups"
+KEEP_OFFSITE = 14  # newest copies of each kind kept there
+offsite_logged = False  # log "skipped" only once per server run
+
+
+def offsite_backup():
+    """Once a day: copy the newest task backup + newest daily DB copy to OFFSITE_BACKUP_DIR.
+    Older files are deleted ONLY inside that offsite folder; backups/ is only read."""
+    global offsite_logged
+    if TEST_MODE:
+        return
+    if not os.path.isdir(os.path.dirname(OFFSITE_BACKUP_DIR)):  # no OneDrive here: skip quietly
+        if not offsite_logged:
+            print(f"Offsite backup skipped: {os.path.dirname(OFFSITE_BACKUP_DIR)} not found")
+            offsite_logged = True
+        return
+    marker = os.path.join(DATA_DIR, "offsite-last.txt")  # remembers the last day we copied
+    today = datetime.now().strftime("%Y-%m-%d")
+    try:
+        if os.path.exists(marker) and open(marker, encoding="utf-8").read().strip() == today:
+            return
+        os.makedirs(OFFSITE_BACKUP_DIR, exist_ok=True)
+        copied = []
+        for pattern in (BACKUP_NAME, DB_COPY_NAME):
+            names = sorted(n for n in os.listdir(BACKUP_DIR) if pattern.fullmatch(n))
+            if names:  # newest of this kind
+                shutil.copy2(os.path.join(BACKUP_DIR, names[-1]), os.path.join(OFFSITE_BACKUP_DIR, names[-1]))
+                copied.append(names[-1])
+            for old in sorted(n for n in os.listdir(OFFSITE_BACKUP_DIR) if pattern.fullmatch(n))[:-KEEP_OFFSITE]:
+                os.remove(os.path.join(OFFSITE_BACKUP_DIR, old))
+        with open(marker, "w", encoding="utf-8") as f:
+            f.write(today)
+        print(f"Offsite backup copied: {', '.join(copied) or 'nothing to copy'}")
+    except OSError as e:  # OneDrive busy or full: never break saving tasks because of it
+        print(f"Offsite backup failed: {e}")
+
+
 def daily_db_copy():
+    """Once a day: the local database copy, then the off-PC copy."""
+    make_db_copy()
+    offsite_backup()
+
+
+def make_db_copy():
     """Once a day, copy tasks.db to backups/tasks-db-YYYYMMDD-HHMMSS.db."""
     if not os.path.exists(DB_FILE):
         return
@@ -1288,6 +1372,7 @@ def use_test_mode():
 if __name__ == "__main__":
     if TEST_MODE:
         use_test_mode()
+    daily_db_copy()  # also at start-up, so a day without edits still gets its backups
     print(f"To-do app {'TEST MODE ' if TEST_MODE else ''}running at http://127.0.0.1:{PORT}  (AI: {AI_PROVIDER})")
     here = os.path.dirname(os.path.abspath(__file__))
     ThreadingHTTPServer(("127.0.0.1", PORT), partial(Handler, directory=here)).serve_forever()

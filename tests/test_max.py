@@ -6,6 +6,7 @@ No AI, no Ollama, no server and no real data are used:
 - About me (load_memory) is replaced by the default times,
 - "now" is frozen to Wednesday 28 Oct 2026, 10:00, so the tests never depend on today's date.
 """
+import pathlib
 import re
 import unittest
 from datetime import datetime
@@ -293,3 +294,102 @@ class AskWhenUnsure(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def ai_dropping_dates(title, category=""):
+    """A fake AI that answers with the given title/category (like a model that tidied the sentence)."""
+    return lambda prompt, *a, **k: {"text": title, "when": "none", "time": "", "priority": "med",
+                                    "category": category, "tokens": 0}
+
+
+class LeadIns(unittest.TestCase):
+    def test_remind_me_to_is_stripped(self):
+        self.assertEqual(server.strip_lead_in("remind me to call mom tomorrow"), "call mom tomorrow")
+        self.assertEqual(server.strip_lead_in("Remind me call mom"), "call mom")
+        self.assertEqual(server.strip_lead_in("don't forget to buy milk"), "buy milk")
+        self.assertEqual(server.strip_lead_in("เตือนให้โทรหาแม่"), "โทรหาแม่")
+        self.assertEqual(server.strip_lead_in("อย่าลืมซื้อนม"), "ซื้อนม")
+
+    def test_other_words_are_kept(self):
+        self.assertEqual(server.strip_lead_in("call the reminder office"), "call the reminder office")
+        self.assertEqual(server.strip_lead_in("remind me"), "remind me")  # nothing left: keep as typed
+
+    def test_title_of_a_remind_command(self):
+        result = ask("remind me to call mom tomorrow", ai=ai_dropping_dates("Remind me to call mom"))
+        self.assertEqual(result["text"], "Call mom")
+        self.assertEqual(result["due"], "2026-10-29T09:00")
+
+
+class CategoryHints(unittest.TestCase):
+    def test_hints_when_ai_gives_none(self):
+        pick = server.pick_category
+        self.assertEqual(pick("", "gym at 7am", []), "Health")
+        self.assertEqual(pick("", "dentist friday", []), "Health")
+        self.assertEqual(pick("", "pay rent", []), "Home")        # rent is Home, not Money
+        self.assertEqual(pick("", "buy groceries", []), "Home")
+        self.assertEqual(pick("", "clean the kitchen", []), "Home")
+        self.assertEqual(pick("", "ไปฟิตเนส", []), "Health")
+        self.assertEqual(pick("", "นัดหมอฟัน", []), "Health")
+        self.assertEqual(pick("", "ซักผ้า", []), "Home")
+        self.assertEqual(pick("", "something else", []), "")
+
+    def test_odd_ai_category_is_replaced(self):
+        self.assertEqual(server.pick_category("Fitnessy", "go to the gym", []), "Health")
+        self.assertEqual(server.pick_category("Stuff", "no hint here", []), "Stuff")  # nothing better: keep
+
+    def test_good_ai_category_is_kept(self):
+        self.assertEqual(server.pick_category("Shopping", "gym", []), "Shopping")
+        self.assertEqual(server.pick_category("Work", "team meeting", []), "Work")
+        self.assertEqual(server.pick_category("Work", "gym", []), "Health")      # the AI over-uses Work
+        self.assertEqual(server.pick_category("Personal", "something", []), "Personal")  # no hint: kept
+        self.assertEqual(server.pick_category("health", "x", []), "Health")
+        self.assertEqual(server.pick_category("Family", "gym", ["Family"]), "Family")  # the owner's own
+
+    def test_owner_spelling_wins(self):
+        self.assertEqual(server.pick_category("", "gym", ["HEALTH"]), "HEALTH")
+
+    def test_command_bar_uses_hints(self):
+        self.assertEqual(ask("gym tomorrow 7am")["category"], "Health")
+
+
+class OffsiteBackup(unittest.TestCase):
+    def test_copies_newest_and_keeps_14(self):
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            local, cloud = os.path.join(tmp, "backups"), os.path.join(tmp, "cloud", "JustSayIt")
+            os.makedirs(local)
+            os.makedirs(os.path.join(tmp, "cloud"))
+            for day in range(1, 21):
+                for name in (f"tasks-202610{day:02d}-120000.json", f"tasks-db-202610{day:02d}-120000.db"):
+                    pathlib.Path(os.path.join(local, name)).write_text("x")
+            with mock.patch.object(server, "BACKUP_DIR", local), mock.patch.object(server, "OFFSITE_BACKUP_DIR", cloud), \
+                 mock.patch.object(server, "DATA_DIR", tmp), mock.patch.object(server, "TEST_MODE", False):
+                server.offsite_backup()
+                self.assertEqual(sorted(os.listdir(cloud))[-1], "tasks-db-20261020-120000.db")
+                self.assertIn("tasks-20261020-120000.json", os.listdir(cloud))
+                # a second call on the same day does nothing
+                os.remove(os.path.join(cloud, "tasks-20261020-120000.json"))
+                server.offsite_backup()
+                self.assertNotIn("tasks-20261020-120000.json", os.listdir(cloud))
+                # many days of copies: only the newest 14 of each kind stay in the cloud folder
+                for day in range(1, 20):
+                    pathlib.Path(os.path.join(cloud, f"tasks-202609{day:02d}-120000.json")).write_text("x")
+                os.remove(os.path.join(tmp, "offsite-last.txt"))
+                server.offsite_backup()
+                kinds = [n for n in os.listdir(cloud) if n.startswith("tasks-2")]
+                self.assertEqual(len(kinds), 14)
+            self.assertEqual(len(os.listdir(local)), 40)  # local backups untouched
+
+    def test_skipped_without_onedrive_and_in_test_mode(self):
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = os.path.join(tmp, "nope", "JustSayIt")
+            with mock.patch.object(server, "OFFSITE_BACKUP_DIR", missing), mock.patch.object(server, "TEST_MODE", False):
+                server.offsite_backup()
+                self.assertFalse(os.path.exists(os.path.dirname(missing)))
+            cloud = os.path.join(tmp, "JustSayIt")
+            with mock.patch.object(server, "OFFSITE_BACKUP_DIR", cloud), mock.patch.object(server, "TEST_MODE", True):
+                server.offsite_backup()
+                self.assertFalse(os.path.exists(cloud))

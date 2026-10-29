@@ -41,7 +41,7 @@ const TEXT = {
     eg_where: "e.g. Chiang Mai", eg_when: "e.g. 20–22 Nov", eg_budget: "e.g. ฿2,000", tripDetails: "Trip details",
     noTasks: "No tasks to choose from.", notDoneYet: (n) => `#${n} isn't done yet, so there is nothing to undo.`,
     alreadyDone: (n) => `#${n} is already done.`,
-    maxAdded: (n, text, when) => `Max added #${n}: ${text}${when ? " · " + when : ""}`, maxUpdated: (n) => `Max updated #${n}`,
+    maxAdded: (n, text, when) => `Max added #${n}: ${text}${when ? " · " + when : ""}`, maxUpdated: (n) => `Max updated #${n}`, deleted: (n) => `Deleted #${n}`,
     maxDone: (n) => `Max marked #${n} done`, maxUndone: (n) => `Max reopened #${n}`,
   },
   th: {
@@ -85,7 +85,7 @@ const TEXT = {
     eg_where: "เช่น เชียงใหม่", eg_when: "เช่น 20–22 พ.ย.", eg_budget: "เช่น 2,000 บาท", tripDetails: "รายละเอียดทริป",
     noTasks: "ยังไม่มีงานให้เลือก", notDoneYet: (n) => `#${n} ยังไม่เสร็จ จึงไม่มีอะไรให้ยกเลิก`,
     alreadyDone: (n) => `#${n} เสร็จไปแล้ว`,
-    maxAdded: (n, text, when) => `Max เพิ่ม #${n}: ${text}${when ? " · " + when : ""} แล้ว`, maxUpdated: (n) => `Max แก้ #${n} แล้ว`,
+    maxAdded: (n, text, when) => `Max เพิ่ม #${n}: ${text}${when ? " · " + when : ""} แล้ว`, maxUpdated: (n) => `Max แก้ #${n} แล้ว`, deleted: (n) => `ลบ #${n} แล้ว`,
     maxDone: (n) => `Max ทำเครื่องหมาย #${n} ว่าเสร็จแล้ว`, maxUndone: (n) => `Max เปิด #${n} ใหม่แล้ว`,
   },
 };
@@ -516,6 +516,7 @@ function askDelete(todo) {
     update();
     $("todo-input").value = "";
     $("todo-input").focus();
+    showMessage(t("deleted")(todo.num)); // confirm it is really gone
   }, () => $("todo-input").focus());
 }
 
@@ -778,6 +779,7 @@ $("todo-list").addEventListener("click", async (e) => {
     deleteTaskFiles(todo);
     todos = todos.filter((x) => x !== todo);
     update();
+    showMessage(t("deleted")(todo.num));
   } else if (e.target.classList.contains("step-check")) {
     // Tick or untick one step of the checklist
     const todo = findTodo(e.target);
