@@ -1515,6 +1515,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(load_inbox())
         if self.path.split("?")[0] == "/api/ideas":
             return self.send_json(load_ideas())
+        if self.path.split("?")[0] == "/api/decisions":
+            return self.send_json(load_decisions())
         if self.path.split("?")[0] == "/api/backups":
             return self.send_json(list_backups())
         if self.path.split("?")[0] == "/api/tasks":
@@ -1553,6 +1555,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.post_inbox()
         if self.path == "/api/ideas/status":
             return self.post_idea_status()
+        if self.path.startswith("/api/decisions/"):
+            return self.post_decision(self.path[len("/api/decisions/"):])
         if self.path == "/api/max/mistake":
             return self.post_mistake()
         if self.path == "/api/backup":
@@ -1645,6 +1649,20 @@ class Handler(SimpleHTTPRequestHandler):
             with open(IDEAS_FILE, "w", encoding="utf-8") as f:
                 json.dump(ideas, f, ensure_ascii=False, indent=2)
             self.send_json({"ok": True})
+        except Exception as e:
+            self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
+
+    def post_decision(self, id_text):
+        # Same protection as the inbox: only our own pages may answer decisions
+        if not self.from_our_page():
+            return
+        try:
+            size = int(self.headers.get("Content-Length") or 0)
+            if size > 2000:
+                return self.send_json({"error": "Too long"}, 413)
+            body = json.loads(self.rfile.read(size))
+            result, status = answer_decision(id_text, body.get("answer"), body.get("note", ""))
+            self.send_json(result, status)
         except Exception as e:
             self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
 
@@ -2143,6 +2161,36 @@ def load_ideas() -> list:
         return []
 
 
+# ---------- Decisions for the owner (Team Status page) ----------
+DECISIONS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "decisions.json")
+
+
+def load_decisions() -> list:
+    try:
+        with open(DECISIONS_FILE, encoding="utf-8-sig") as f:
+            items = json.load(f)
+        return items if isinstance(items, list) else []
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def answer_decision(id_text, answer, note) -> tuple:
+    """Save Go / No-go on one OPEN decision. Returns (json answer, http status)."""
+    if answer not in ("Go", "No-go"):
+        return {"error": "Answer must be Go or No-go"}, 400
+    items = load_decisions()
+    found = [d for d in items if isinstance(d, dict) and str(d.get("id")) == id_text]
+    if not found:
+        return {"error": "Decision not found"}, 404
+    if found[0].get("status") == "answered":
+        return {"error": "Already answered"}, 409  # the first answer stays
+    found[0].update({"status": "answered", "answer": answer, "note": str(note or "").strip()[:500],
+                     "answeredAt": datetime.now().strftime("%Y-%m-%d %H:%M")})
+    with open(DECISIONS_FILE, "w", encoding="utf-8") as f:
+        json.dump(items, f, ensure_ascii=False, indent=2)
+    return {"ok": True}, 200
+
+
 # ---------- Test mode: python server.py --test ----------
 # A second copy of the server on port 8001 with its own data files, so testing never touches the
 # owner's real tasks. Only the file names change; all the code is the same.
@@ -2164,7 +2212,7 @@ def warm_up_ollama():
 def use_test_mode():
     """Point every private file at a test copy and allow port 8001. Called only for --test."""
     global PORT, ALLOWED_HOSTS, ALLOWED_ORIGINS, DATA_DIR, DB_FILE, BACKUP_DIR
-    global MEMORY_FILE, STATUS_FILE, INBOX_FILE, IDEAS_FILE, MISTAKES_FILE
+    global MEMORY_FILE, STATUS_FILE, INBOX_FILE, IDEAS_FILE, MISTAKES_FILE, DECISIONS_FILE
     here = os.path.dirname(os.path.abspath(__file__))
     PORT = 8001
     ALLOWED_HOSTS = make_allowed_hosts(8001)
@@ -2177,6 +2225,7 @@ def use_test_mode():
     copies = {"max-memory.json": "MEMORY_FILE", "status.json": "STATUS_FILE",
               "inbox.json": "INBOX_FILE", "ideas.json": "IDEAS_FILE"}
     MISTAKES_FILE = os.path.join(DATA_DIR, "test-max-mistakes.json")  # starts empty, never a copy
+    DECISIONS_FILE = os.path.join(DATA_DIR, "test-decisions.json")  # starts empty, never a copy
     os.makedirs(DATA_DIR, exist_ok=True)
     for real_name, variable in copies.items():
         test_file = os.path.join(DATA_DIR, "test-" + real_name)

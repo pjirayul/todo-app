@@ -145,6 +145,11 @@ svg.i.sm { width: 15px; height: 15px; }
   font-size: .82rem; font-weight: 600; white-space: nowrap; transition: border-color .2s, box-shadow .2s;
 }
 .team[hidden] { display: none; }
+/* Amber dot when decisions wait for the owner (script.js loadDecisionDot) */
+.team { position: relative; }
+.team-dot { position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: #e08a00; box-shadow: 0 0 0 2px var(--card); }
+[data-theme="dark"] .team-dot { background: #f5a524; }
+.team-dot[hidden] { display: none; }
 .team small { color: var(--muted); font-weight: 500; font-size: inherit; }
 .avs { display: flex; }
 .av {

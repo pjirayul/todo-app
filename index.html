@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
   <!-- ?v= makes browsers fetch the new file after an update (raise it on each release) -->
-  <link rel="stylesheet" href="style.css?v=30">
+  <link rel="stylesheet" href="style.css?v=31">
 </head>
 <body>
   <!-- Line icons, drawn once and reused with <use href="#i-..."> -->
@@ -54,7 +54,7 @@
           </div>
           <!-- Team pill: filled from status.json; stays hidden where there is none (GitHub Pages) -->
           <a href="status.html" class="team" id="team" title="Team status" aria-label="Team status" hidden>
-            <span class="avs" id="team-avs"></span><span data-i18n="team">Team</span><small id="team-working"></small>
+            <span class="avs" id="team-avs"></span><span data-i18n="team">Team</span><small id="team-working"></small><span class="team-dot" id="team-dot" hidden></span>
           </a>
           <button id="more" class="ib only-phone" title="More" aria-label="More" aria-expanded="false" aria-controls="quick"><svg class="i"><use href="#i-dots"/></svg></button>
         </div>
@@ -160,6 +160,6 @@
   </div>
 
   <script src="hints.js?v=1"></script>
-  <script src="script.js?v=36"></script>
+  <script src="script.js?v=37"></script>
 </body>
 </html>

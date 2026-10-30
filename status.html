@@ -28,7 +28,9 @@
       --bg-grad: radial-gradient(circle at 15% 0%, #e7e3ff 0, transparent 45%), radial-gradient(circle at 90% 10%, #ffe9dc 0, transparent 40%);
       --ok-soft: #e3f6ec; --busy-soft: #fff4dd; --new-bg: #fff3dc; --new-text: #a16207;
     }
+    :root { --dec-amber: #b45309; --dec-amber-soft: #fdf0d9; --dec-dot: #e08a00; --dec-ok: #1a7f4b; }  /* Decisions card (George's mockup) */
     :root[data-theme="dark"] {
+      --dec-amber: #f5b94d; --dec-amber-soft: #3a2d12; --dec-dot: #f5a524; --dec-ok: #5fd39a;
       --bg: #121119; --card: #1c1b26; --text: #ecebf5; --muted: #8f8ca3; --border: #2c2a3a; --accent: #8b7fff; --accent-soft: #2a2647;
       --glass: rgba(34, 32, 48, .66); --glass-hi: rgba(255, 255, 255, .06); --chip-on-line: rgba(139, 127, 255, .6);
       --ai-grad: linear-gradient(120deg, #8b7fff 0%, #a98bfa 50%, #c99af2 100%); --ai-glow: rgba(139, 127, 255, .28);
@@ -151,6 +153,36 @@
     /* Max's card */
     .max-avatar { background: var(--ai-grad); box-shadow: 0 4px 14px var(--ai-glow), inset 0 1px 0 rgba(255, 255, 255, .35); }
     .max-avatar svg.i { width: 24px; height: 24px; stroke: #fff; stroke-width: 2.2; }
+    /* Decisions card: collapsed by default, amber "N new" badge */
+    .dec { margin-top: 18px; background: var(--card); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; }
+    .dec[hidden] { display: none; }
+    .dec button { font: inherit; color: inherit; cursor: pointer; }
+    .dec-h { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 8px 14px; background: none; border: 0; text-align: left; }
+    .dec-ic { width: 34px; height: 34px; flex: none; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; }
+    .dec-t { flex: 1; min-width: 0; font-weight: 600; }
+    .dec-t small { display: block; font-weight: 400; color: var(--muted); font-size: .8rem; }
+    .dec-badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--dec-amber-soft); color: var(--dec-amber); font-size: .78rem; font-weight: 600; white-space: nowrap; }
+    .dec-badge i { width: 7px; height: 7px; border-radius: 50%; background: var(--dec-dot); }
+    .dec .chev { transition: transform .2s; color: var(--muted); }
+    .dec [aria-expanded="true"] > .chev { transform: rotate(180deg); }
+    .dec-body { padding: 2px 12px 14px; display: grid; gap: 10px; }
+    .dec-item { border: 1px solid var(--border); border-radius: 14px; padding: 12px; background: var(--bg); }
+    .dec-item h3 { margin: 0 0 4px; font-size: .95rem; }
+    .dec-item p { margin: 0 0 6px; color: var(--muted); font-size: .86rem; white-space: pre-wrap; word-break: break-word; }
+    .dec-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+    .dec-chip { font-size: .78rem; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+    .dec-chip.pick { color: var(--accent); background: var(--accent-soft); border-color: transparent; font-weight: 600; }
+    .dec-note { width: 100%; min-height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: inherit; font: inherit; padding: 10px 12px; resize: vertical; }
+    .dec-act { display: flex; gap: 8px; margin-top: 8px; }
+    .dec-act button { flex: 1; min-height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); font-weight: 600; }
+    .dec-act button:disabled { opacity: .6; cursor: wait; }
+    .dec-act .go { background: var(--ai-grad); color: var(--on-accent); border: 0; }
+    .dec-hist { width: 100%; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 6px; background: none; border: 0; color: var(--muted); font-size: .86rem; }
+    .dec-hl { padding: 0 6px 4px; font-size: .84rem; color: var(--muted); }
+    .dec-hl div { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); }
+    .dec-hl .ok { color: var(--dec-ok); white-space: nowrap; }
+    .dec-msg { margin: 0; font-size: .84rem; color: var(--red); }
+    @media (prefers-reduced-motion: reduce) { .dec .chev { transition: none; } }
     button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   </style>
 </head>
@@ -167,6 +199,9 @@
     <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></symbol>
     <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></symbol>
     <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9.5 18h5M10.5 21h3"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2v.1h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-decide" viewBox="0 0 24 24"><path d="M12 3v6M12 9l-6 5v7M12 9l6 5v7"/></symbol>
+    <symbol id="i-hist" viewBox="0 0 24 24"><path d="M4 12a8 8 0 108-8 8 8 0 00-6 2.7M4 4v4h4M12 8v4l3 2"/></symbol>
     <symbol id="i-team" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c2 .7 3.2 2.5 3.5 5.2"/></symbol>
   </svg>
   <div class="wrap">
@@ -179,6 +214,9 @@
     </header>
     <h1 class="greet">Team</h1>
     <p class="updated" id="updated">Loading…</p>
+
+    <!-- Decisions for the owner (decisions.json): filled by loadDecisions(), hidden on GitHub Pages -->
+    <section class="dec" id="dec" hidden></section>
 
     <h2>Your assistant</h2>
     <!-- Max is the AI inside the app (not one of the builders below) -->
@@ -248,6 +286,10 @@
       "These numbers may be out of date — ask Toto \"show my usage\" to refresh.": "ตัวเลขเหล่านี้อาจเก่าแล้ว บอก Toto ว่า \"show my usage\" เพื่อรีเฟรช",
       "not started": "ยังไม่เริ่ม", "reset — ask Toto to refresh": "รีเซ็ตแล้ว บอก Toto ให้รีเฟรช", "unknown": "ไม่ทราบ",
       "used": "ใช้ไปแล้ว", "left": "เหลือ", "resets in": "รีเซ็ตใน",
+      "Decisions": "การตัดสินใจ", "Waiting for your Go / No-go": "รอคุณกด ไป / ไม่ไป", "Nothing waiting for you": "ไม่มีอะไรรอคุณ",
+      "new": "ใหม่", "Cost:": "ค่าใช้จ่าย:", "Toto's pick": "ตัวเลือกของโทโท", "History": "ประวัติ",
+      "Add a note (optional)": "เพิ่มโน้ต (ไม่บังคับ)", "Go": "ไป", "No-go": "ไม่ไป",
+      "Couldn't save the answer:": "บันทึกคำตอบไม่สำเร็จ:",
       "Ready": "พร้อม", "Offline": "ออฟไลน์",
       "Turns what you say into tasks, steps and reminders.": "เปลี่ยนสิ่งที่คุณพูดให้เป็นงาน ขั้นตอน และการเตือน",
       "Max is resting. Start the Ollama app and he'll be ready.": "Max กำลังพัก เปิดแอป Ollama แล้วเขาจะพร้อม",
@@ -429,11 +471,86 @@
       }
     }
 
+    // ---------- Decisions (Go / No-go) ----------
+    let decOpen = false, decHistOpen = false, decShown = "", decError = "";
+    const decNotes = {};  // text typed in a note box, kept when the card is redrawn
+    async function loadDecisions() {
+      const box = document.getElementById("dec");
+      try {
+        const items = await (await fetch(`api/decisions?t=${Date.now()}`, { signal: AbortSignal.timeout(5000) })).json();
+        if (!Array.isArray(items) || !items.length) { box.hidden = true; return; }
+        const sig = JSON.stringify(items);
+        if (sig === decShown) return;  // nothing changed: leave the note boxes alone
+        decShown = sig;
+        drawDecisions(items);
+      } catch { box.hidden = true; }
+    }
+    function drawDecisions(items) {
+      const box = document.getElementById("dec");
+      const open = items.filter((d) => d.status !== "answered");
+      const done = items.filter((d) => d.status === "answered").reverse();
+      const badge = open.length ? `<span class="dec-badge"><i></i>${open.length} ${L("new")}</span>` : "";
+      // Everything from the file goes through esc(): never run it as HTML
+      const cards = open.map((d) => `
+        <article class="dec-item" data-id="${esc(d.id)}">
+          <h3>${esc(d.title)}</h3>
+          ${d.detail ? `<p>${esc(d.detail)}</p>` : ""}
+          <div class="dec-meta">
+            ${d.cost ? `<span class="dec-chip">${L("Cost:")} ${esc(d.cost)}</span>` : ""}
+            ${d.recommend ? `<span class="dec-chip pick">${L("Toto's pick")}: ${esc(L(d.recommend))}</span>` : ""}
+          </div>
+          <textarea class="dec-note" rows="1" aria-label="${esc(L("Add a note (optional)"))}" placeholder="${esc(L("Add a note (optional)"))}">${esc(decNotes[d.id] || "")}</textarea>
+          <div class="dec-act"><button type="button" class="go" data-answer="Go">${L("Go")}</button><button type="button" data-answer="No-go">${L("No-go")}</button></div>
+        </article>`).join("");
+      const hist = done.length ? `
+        <button type="button" class="dec-hist" aria-expanded="${decHistOpen}" id="dec-hb"><svg class="i"><use href="#i-hist"/></svg>${L("History")} (${done.length})<svg class="i chev" style="margin-left:auto"><use href="#i-chev"/></svg></button>
+        ${decHistOpen ? `<div class="dec-hl">${done.map((d) => `<div><span>${esc(d.title)}</span><span class="${d.answer === "Go" ? "ok" : ""}">${esc(L(d.answer))}</span></div>`).join("")}</div>` : ""}` : "";
+      box.innerHTML = `
+        <button type="button" class="dec-h" aria-expanded="${decOpen}" id="dec-hd">
+          <span class="dec-ic"><svg class="i"><use href="#i-decide"/></svg></span>
+          <span class="dec-t">${L("Decisions")}<small>${L(open.length ? "Waiting for your Go / No-go" : "Nothing waiting for you")}</small></span>
+          ${badge}<svg class="i chev"><use href="#i-chev"/></svg>
+        </button>
+        ${decOpen ? `<div class="dec-body">${cards}${decError ? `<p class="dec-msg" role="alert">${esc(decError)}</p>` : ""}${hist}</div>` : ""}`;
+      box.hidden = false;
+    }
+    document.getElementById("dec").addEventListener("click", async (e) => {
+      if (e.target.closest("#dec-hd")) { decOpen = !decOpen; decShown = ""; return loadDecisions(); }
+      if (e.target.closest("#dec-hb")) { decHistOpen = !decHistOpen; decShown = ""; return loadDecisions(); }
+      const btn = e.target.closest("button[data-answer]");
+      if (!btn) return;
+      const item = btn.closest(".dec-item");
+      const buttons = item.querySelectorAll("button");
+      buttons.forEach((b) => { b.disabled = true; });
+      try {
+        const res = await fetch(`api/decisions/${encodeURIComponent(item.dataset.id)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answer: btn.dataset.answer, note: item.querySelector("textarea").value }),
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.status);
+        delete decNotes[item.dataset.id];
+        decError = "";
+      } catch (err) {
+        decError = `${L("Couldn't save the answer:")} ${err.message}`;
+      } finally {
+        buttons.forEach((b) => { b.disabled = false; });  // the card always recovers
+      }
+      decShown = ""; loadDecisions();
+    });
+    // Remember half-typed notes so the 10-second refresh can't lose them
+    document.getElementById("dec").addEventListener("input", (e) => {
+      const item = e.target.closest(".dec-item");
+      if (item) decNotes[item.dataset.id] = e.target.value;
+    });
+
     refresh();
     loadMax();
     if (LOCAL) {
       loadInbox();
-      setInterval(() => { refresh(); loadInbox(); loadMax(); }, 10000);
+      loadDecisions();
+      setInterval(() => { refresh(); loadInbox(); loadMax(); loadDecisions(); }, 10000);
     } else {
       // GitHub Pages: the inbox needs the server on the PC
       document.getElementById("cmd").hidden = true;

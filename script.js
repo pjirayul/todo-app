@@ -32,7 +32,7 @@ const TEXT = {
     stepsPick: "Max suggests these steps. Pick the ones to add:", removeStep: "Remove step",
     morning: "Good morning", afternoon: "Good afternoon", evening: "Good evening", comma: ", ",
     dueToday: (n) => `${n} due today`, overdueN: (n) => `${n} overdue`, nothingDue: "Nothing due today",
-    team: "Team", teamWorking: (n) => ` · ${n} working`,
+    team: "Team", teamWorking: (n) => ` · ${n} working`, decWaiting: (n) => `${n} decision${n === 1 ? "" : "s"} waiting`,
     maxThinking: "Max is thinking…", maxReady: "Max ready", maxOffline: "Max offline", maxChecking: "Max: checking…",
     notifyBlocked: "Reminders are blocked for this site. To allow them: click the icon left of the address bar › Notifications › Allow, then reload.",
     notifyNone: "This browser can't show reminders.", limitSaved: (n) => `Daily AI limit: ${n} tokens`,
@@ -102,7 +102,7 @@ const TEXT = {
     stepsPick: "Max แนะนำขั้นตอนเหล่านี้ เลือกที่จะเพิ่ม:", removeStep: "ลบขั้นตอน",
     morning: "สวัสดีตอนเช้า", afternoon: "สวัสดีตอนบ่าย", evening: "สวัสดีตอนเย็น", comma: " ",
     dueToday: (n) => `ครบกำหนดวันนี้ ${n}`, overdueN: (n) => `เลยกำหนด ${n}`, nothingDue: "ไม่มีงานครบกำหนดวันนี้",
-    team: "ทีม", teamWorking: (n) => ` · ทำงานอยู่ ${n}`,
+    team: "ทีม", teamWorking: (n) => ` · ทำงานอยู่ ${n}`, decWaiting: (n) => `รอการตัดสินใจ ${n} เรื่อง`,
     maxThinking: "Max กำลังคิด…", maxReady: "Max พร้อม", maxOffline: "Max ออฟไลน์", maxChecking: "Max: กำลังตรวจสอบ…",
     notifyBlocked: "การแจ้งเตือนของเว็บนี้ถูกบล็อกอยู่ วิธีเปิด: กดไอคอนซ้ายของช่องที่อยู่เว็บ › การแจ้งเตือน › อนุญาต แล้วโหลดหน้าใหม่",
     notifyNone: "เบราว์เซอร์นี้แสดงการแจ้งเตือนไม่ได้", limitSaved: (n) => `ขีดจำกัด AI ต่อวัน: ${n} โทเคน`,
@@ -394,6 +394,20 @@ async function loadTeam() {
     $("team").hidden = false;
   } catch {
     $("team").hidden = true; // quietly: no team data here
+  }
+}
+
+// Amber dot on the Team pill while decisions wait for the owner. Quietly nothing on GitHub Pages / on errors.
+async function loadDecisionDot() {
+  if (!LOCAL) return;
+  try {
+    const res = await fetch(`api/decisions?t=${Date.now()}`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const open = (await res.json()).filter((d) => d.status !== "answered").length;
+    $("team-dot").hidden = !open;
+    $("team-dot").title = t("decWaiting")(open);
+  } catch {
+    $("team-dot").hidden = true;
   }
 }
 
@@ -1304,6 +1318,7 @@ $("lang").addEventListener("click", () => {
   hideAnswer(); // its words are in the old language
   render();
   loadTeam(); // "· 2 working" in the new language
+  loadDecisionDot(); // tooltip language
   commandHints.refresh(); // example hints in the new language
 });
 
@@ -1785,7 +1800,8 @@ startDb().finally(() => { // ...then the database's list (when the server is on)
 });
 const commandHints = smartHints($("todo-input"), "command", () => settings.lang); // rotating examples
 loadTeam();
+loadDecisionDot();
 loadMax();
-if (LOCAL) setInterval(() => { loadTeam(); loadMax(); }, 30000); // team dots follow status.json; Max follows Ollama
+if (LOCAL) setInterval(() => { loadTeam(); loadDecisionDot(); loadMax(); }, 30000); // team dots follow status.json; Max follows Ollama
 // Phone turned or window resized past 480px: swap long/short placeholder
 phone.addEventListener("change", setPlaceholders); // only the hints, so an open edit form is not redrawn
