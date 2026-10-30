@@ -61,6 +61,7 @@ const TEXT = {
     ansMore: (n) => `+${n} more`, ansShowAll: "Show all in list", ansFiltered: "Filtered:", ansClear: "Clear filter", ansClose: "Close",
     ansMoveTomorrow: "Move all to tomorrow", sureMoveAll: (n) => `Move ${n} overdue task${n === 1 ? "" : "s"} to tomorrow? The times stay the same.`,
     yesMove: "Yes, move", movedN: (n) => `Moved ${n} task${n === 1 ? "" : "s"} to tomorrow`,
+    greetReply: "Hi! Tell me a task, or ask 'what is due today?'",
     ansOffline: "Max is offline, so I can only answer simple questions here: today, tomorrow, this week, overdue, high priority, or how many are left.",
   },
   th: {
@@ -123,6 +124,7 @@ const TEXT = {
     ansMore: (n) => `และอีก ${n} งาน`, ansShowAll: "แสดงทั้งหมดในรายการ", ansFiltered: "กรองอยู่:", ansClear: "ล้างตัวกรอง", ansClose: "ปิด",
     ansMoveTomorrow: "ย้ายทั้งหมดไปพรุ่งนี้", sureMoveAll: (n) => `ย้าย ${n} งานที่เลยกำหนดไปพรุ่งนี้? เวลาเดิมคงไว้`,
     yesMove: "ใช่ ย้ายเลย", movedN: (n) => `ย้าย ${n} งานไปพรุ่งนี้แล้ว`,
+    greetReply: "สวัสดี! บอกงานที่ต้องทำได้เลย หรือถามว่า 'วันนี้มีอะไรบ้าง'",
     ansOffline: "Max ออฟไลน์ ตอบได้เฉพาะคำถามง่าย ๆ ที่นี่: วันนี้ พรุ่งนี้ สัปดาห์นี้ เลยกำหนด งานสำคัญ หรือเหลือกี่งาน",
   },
 };
@@ -553,9 +555,38 @@ function askYesNo(box, questionText, yesText, onYes, onNo) {
   box.replaceChildren(question, buttons);
 }
 
+// Learning loop: remember the tasks Max just added. If the owner deletes one within 10 minutes, Max probably
+// misunderstood, so the server saves it in data/max-mistakes.json (on this PC only) for the team to learn from.
+const MADE_KEY = "maxMade";
+const MISTAKE_MS = 10 * 60 * 1000;
+function readMade() {
+  try { return JSON.parse(localStorage.getItem(MADE_KEY)) || {}; } catch { return {}; }
+}
+function rememberMade(num, text) {
+  const made = readMade();
+  for (const n in made) if (Date.now() - made[n].at > MISTAKE_MS) delete made[n]; // forget old ones
+  made[num] = { text, at: Date.now() };
+  try { localStorage.setItem(MADE_KEY, JSON.stringify(made)); } catch {}
+}
+function noteIfMistake(todo) {
+  const made = readMade();
+  const m = made[todo.num];
+  if (!m) return;
+  delete made[todo.num];
+  try { localStorage.setItem(MADE_KEY, JSON.stringify(made)); } catch {}
+  if (!LOCAL || Date.now() - m.at > MISTAKE_MS) return; // no server on GitHub Pages
+  fetch("api/max/mistake", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: m.text, action: "add", created: new Date(m.at).toISOString(), deletedAt: new Date().toISOString() }),
+    signal: AbortSignal.timeout(5000),
+  }).catch(() => {}); // never slow down or block the delete
+}
+
 function askDelete(todo) {
   askYesNo($("cmd-msg"), t("sureDelete")(`#${todo.num} "${todo.text}"`), t("yes"), () => {
     backup(`before delete #${todo.num}`, true);
+    noteIfMistake(todo);
     deleteTaskFiles(todo);
     todos = todos.filter((x) => x !== todo);
     update();
@@ -579,7 +610,7 @@ function flash(num) {
 
 // Without AI we only understand "done #2", "undo #2" and "delete #2" (same words as server.py)
 function simpleCommand(text) {
-  const low = text.toLowerCase();
+  const low = stripGreeting(text).toLowerCase();
   const num = low.match(/#\s*(\d+)/);
   let action = "";
   if (/^(undo|undone|uncheck|unmark|reopen|not done)\b|ยังไม่เสร็จ|ยกเลิกเสร็จ/.test(low)) action = "uncomplete";
@@ -673,6 +704,7 @@ function addTask(task, problem = "") {
   $("todo-input").value = "";
   update();
   flash(num);
+  rememberMade(num, task.text);
   if (!problem) {
     const when = task.due ? new Date(task.due).toLocaleString(t("locale"), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
     showMessage(t("maxAdded")(num, task.text, when)); // textContent inside, so task text never runs as HTML
@@ -683,7 +715,12 @@ function addTask(task, problem = "") {
 // Max (server.py) recognises the question and does the counting; this draws the answer card.
 // Questions never add a task. Offline (GitHub Pages, server off, AI limit) localQuestion() below
 // answers the simple ones (today / tomorrow / this week / overdue / priority / done) by itself.
-const QUESTION_WORDS = /^(what|what's|whats|which|show|list|how many|how much|anything|any|is there|are there|do i have|have i got|tell me|give me)\b|มีอะไร|อะไรบ้าง|กี่งาน|งานอะไร|งานค้าง|เลยกำหนด|เกินกำหนด|^แสดง/;
+const QUESTION_WORDS = /^(what|what's|whats|which|show|list|how many|how much|anything|any|is there|are there|do i have|have i got|tell me|give me)\b|มีอะไร|อะไรบ้าง|กี่งาน|งานอะไร|งานค้าง|เลยกำหนด|เกินกำหนด|^แสดง|ทำอะไรดี|ต้องทำ|ทำอะไร|\bwhat (to do|should i|shall i|do i (have|need|got)|am i (doing|supposed)|have i got|else)\b|\bwhat(')?s? (is )?(my|on|the plan)\b|^my (tasks?|to-?dos?|plan|day|schedule)\b/;
+// Same as GREETING in server.py: "Hi max, what to do today" -> "what to do today". Max (server) strips it too.
+const GREETING = /^\s*(?:(?:hi|hey|hello|yo|ok|okay)(?=[\s,!.]|$)[\s,!.]*(?:max(?=[\s,!.:]|$)[\s,!.:]*)?|max\s*[,:!]\s*|(?:สวัสดี|หวัดดี|โอเค)(?:ครับ|ค่ะ|คะ)?\s*(?:max|แม็กซ์|แม็ก)?\s*(?:ครับ|ค่ะ|คะ)?[\s,!]*|(?:แม็กซ์|แม็ก)(?:ครับ|ค่ะ|คะ)?\s*[,:!]?\s*)/i;
+const stripGreeting = (text) => text.replace(GREETING, "").trim() || text;
+// "hi max" alone: nothing is left after the greeting, so it is not a task
+const isGreetingOnly = (text) => GREETING.test(text) && !text.replace(GREETING, "").trim();
 const ANSWER_ROWS = 8; // tasks listed in the card; the rest are "+N more"
 const dateKey = (d) => d.toLocaleDateString("en-CA"); // YYYY-MM-DD
 const shortDate = (due) => new Date(due).toLocaleString(t("locale"), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -712,7 +749,7 @@ function matchesFilter(x, f) {
 
 // A small offline copy of the server's question reader. null = not a question, or too tricky for here.
 function localQuestion(text) {
-  const low = text.toLowerCase().trim();
+  const low = stripGreeting(text).toLowerCase().trim();
   if (!(QUESTION_WORDS.test(low) || low.endsWith("?")) || /#\s*\d/.test(low)) return null;
   if (/monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d(st|nd|rd|th)\b|จันทร์|อังคาร|พุธ|พฤหัส|ศุกร์|เสาร์|วันอาทิตย์|วันที่|มะรืน/.test(low)) return null;
   const f = { when: "", date: "", priority: "", cat: "", status: "open", text: "" };
@@ -730,7 +767,9 @@ function localQuestion(text) {
   const taskWord = /\b(tasks?|to-?dos?|left|remaining|pending|outstanding|open|have)\b|งาน/.test(low);
   const strong = f.priority || f.cat || f.when === "overdue";
   const something = strong || f.when || f.text || f.status === "done";
-  if (!(/^(show|list|tell me|give me)\b/.test(low) ? taskWord || strong : something || taskWord)) return null;
+  // "what should I do": no filter words, so the answer is the whole open list
+  const natural = /what (to do|should i|shall i|do i (have|need|got)|am i (doing|supposed)|have i got|else)|what('s| is) (my|on|the plan)|^my (tasks?|to-?dos?|plan|day|schedule)|ทำอะไร|ต้องทำ/.test(low);
+  if (!(/^(show|list|tell me|give me)\b/.test(low) ? taskWord || strong : something || taskWord || natural)) return null;
   const found = todos.filter((x) => matchesFilter(x, f)).sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999") || a.num - b.num);
   return { action: "answer", filter: f, nums: found.map((x) => x.num) };
 }
@@ -895,12 +934,17 @@ $("todo-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = $("todo-input").value.trim();
   if (!text) return;
+  if (isGreetingOnly(text)) { // just "hi max": say hello, add nothing
+    $("todo-input").value = "";
+    return showMessage(t("greetReply"));
+  }
   const button = $("add-btn");
   const input = $("todo-input");
   button.disabled = input.disabled = true;
   button.textContent = t("thinking");
   showMessage(t("maxThinking"));
-  let task = { text, due: "", priority: "med", category: "" };
+  const plain = stripGreeting(text); // offline "hey max buy milk" adds "Buy milk" (the server strips it too)
+  let task = { text: plain[0].toUpperCase() + plain.slice(1), due: "", priority: "med", category: "" };
   let cmd = null;       // set when the sentence is a command for an existing task
   let problem = "";     // message to show after the box is usable again
   let followUp = null;  // a question for the owner, asked once the box is usable again
@@ -920,7 +964,7 @@ $("todo-form").addEventListener("submit", async (e) => {
       showMessage("");
       problem = err.message === t("limitHit") ? t("limitHit") : t("aiOff");
       answer = localQuestion(text); // simple questions need no AI
-      if (!answer && !QUESTION_WORDS.test(text.toLowerCase())) cmd = simpleCommand(text);
+      if (!answer && !QUESTION_WORDS.test(stripGreeting(text).toLowerCase())) cmd = simpleCommand(text);
       if (!answer && !cmd && LOCAL && problem === t("limitHit")) {
         // A new task at the AI limit: Python can still ask "When?" for a meeting/trip (no AI used),
         // and still answers questions (the tricky ones: a weekday, a category)
@@ -931,7 +975,7 @@ $("todo-form").addEventListener("submit", async (e) => {
         } catch {} // server off: add as plain text
       }
       if (answer) problem = "";
-      else if (!cmd && QUESTION_WORDS.test(text.toLowerCase()) && /tasks?|due|overdue|left|งาน|วันนี้|พรุ่งนี้/.test(text.toLowerCase())) {
+      else if (!cmd && QUESTION_WORDS.test(stripGreeting(text).toLowerCase()) && /tasks?|due|overdue|left|งาน|วันนี้|พรุ่งนี้/.test(text.toLowerCase())) {
         // Looks like a question we can't answer here: say so (and don't add it as a task)
         showMessage(t("ansOffline"), true);
         return;
@@ -990,6 +1034,7 @@ $("todo-list").addEventListener("click", async (e) => {
   } else if (e.target.classList.contains("delete")) {
     const todo = findTodo(e.target);
     backup(`before delete #${todo.num}`, true);
+    noteIfMistake(todo);
     deleteTaskFiles(todo);
     todos = todos.filter((x) => x !== todo);
     update();

@@ -658,6 +658,18 @@ def breakdown_questions(text: str, notes: str, due: str) -> list:
 # The tools below (list_tasks, count_tasks) are small on purpose: a future Max agent can call them by name.
 QUESTION_START = re.compile(r"^(what|what's|whats|which|show|list|how many|how much|anything|any|is there|are there|"
                             r"do i have|have i got|tell me|give me)\b")
+# "Hi max, what to do today" / "hey max add milk": a greeting or "Max," in front is not part of the sentence.
+# "max" alone only counts with a comma/colon ("Max birthday gift" is a task). \b is not used for Thai words.
+GREETING = re.compile(r"^\s*(?:(?:hi|hey|hello|yo|ok|okay)(?=[\s,!.]|$)[\s,!.]*(?:max(?=[\s,!.:]|$)[\s,!.:]*)?"
+                      r"|max\s*[,:!]\s*"
+                      r"|(?:สวัสดี|หวัดดี|โอเค)(?:ครับ|ค่ะ|คะ)?\s*(?:max|แม็กซ์|แม็ก)?\s*(?:ครับ|ค่ะ|คะ)?[\s,!]*"
+                      r"|(?:แม็กซ์|แม็ก)(?:ครับ|ค่ะ|คะ)?\s*[,:!]?\s*)", re.I)
+# Natural ways to ask about the day that have no task word in them
+NATURAL_Q = re.compile(r"\bwhat (?:to do|should i|shall i|do i (?:have|need|got)|am i (?:doing|supposed)|have i got|else)\b"
+                       r"|\bwhat(?:'s| is) (?:my|on|the plan)\b|\bwhats (?:my|on)\b"
+                       r"|^my (?:tasks?|to-?dos?|plan|day|schedule)\b|ทำอะไรดี|ต้องทำ|ทำอะไร")
+# The loose "maybe a question" gate: a question word anywhere, a "?", or a greeting. Only then is the AI asked.
+QUESTION_WORD_ANYWHERE = re.compile(r"\b(what|how|which|should|when|where|who|why|anything)\b|อะไร|ไหม|มั้ย|กี่|ยังไง|ไร")
 ORDER_START = re.compile(r"^(show|list|tell me|give me)\b")  # also normal verbs ("show Tom the report"): stricter
 QUESTION_TH = re.compile(r"มีอะไร|อะไรบ้าง|กี่งาน|งานอะไร|งานค้าง|เลยกำหนด|เกินกำหนด|^แสดง")
 TASK_WORDS = re.compile(r"\b(tasks?|to-?dos?|left|remaining|pending|outstanding|open|have)\b|งาน")
@@ -678,7 +690,8 @@ QUESTION_SCHEMA = {
 }
 QUESTION_INSTRUCTIONS = (
     "You sort a sentence typed in a to-do app. is_question is true only if the user asks about their own tasks "
-    "(what is due, what is late, how many are left). A new task to remember is NOT a question. "
+    "(what is due, what is late, how many are left) or asks what to do or which to do first. "
+    "A new task to remember is NOT a question; a sentence that tells what to do, buy or pay is a task. "
     "when: today, tomorrow, week (this week), nextweek, overdue, nodate (tasks without a date), or none. "
     "priority: high, low or any. status: open (default) or done. Never answer the question."
 )
@@ -739,12 +752,18 @@ def question_filter(low: str, now: datetime, categories: list) -> dict:
     return f
 
 
+def strip_greeting(sentence: str):
+    """('Hi max, what to do today') -> ('what to do today', True). Only a greeting alone is kept as it is."""
+    rest = GREETING.sub("", sentence, count=1).strip()
+    return (rest, True) if rest and rest != sentence.strip() else (sentence, False)
+
+
 def parse_question(sentence: str, now: str, categories: list):
     """The filter if the sentence is a question about the tasks, else None (then it is a normal command)."""
-    raw = " ".join(sentence.split()).lower()
+    raw = " ".join(strip_greeting(sentence)[0].split()).lower()
     if re.search(r"#\s*\d", raw):
         return None  # "#3" always means a command
-    if not (QUESTION_START.match(raw) or raw.endswith("?") or QUESTION_TH.search(raw)):
+    if not (QUESTION_START.match(raw) or raw.endswith("?") or QUESTION_TH.search(raw) or NATURAL_Q.search(raw)):
         return None
     # Typos are fixed only for the filter ("tomorow"); the fixer would turn "many" into "may"
     low = fix_date_typos(raw)
@@ -753,11 +772,19 @@ def parse_question(sentence: str, now: str, categories: list):
     if ORDER_START.match(low):
         # "show Tom the report tomorrow" is a task; "show high priority work" is a question
         return f if TASK_WORDS.search(raw) or f["priority"] or f["cat"] or f["when"] == "overdue" else None
-    return f if something or TASK_WORDS.search(raw) else None
+    return f if something or TASK_WORDS.search(raw) or NATURAL_Q.search(raw) else None
 
 
-def ai_question_filter(sentence: str):
-    """Fallback for an unclear question: the small AI only sorts it into the filter (checked here)."""
+def maybe_question(low: str, greeted: bool) -> bool:
+    """The loose gate: worth one AI call to decide? Clear commands and clear tasks ("pay rent on the 5th") are not."""
+    if re.search(r"#\s*\d", low) or any(re.search(p, low) for p in (UNDO_WORDS, DELETE_WORDS, DONE_WORDS, UPDATE_WORDS)):
+        return False
+    return greeted or low.endswith("?") or bool(QUESTION_WORD_ANYWHERE.search(low))
+
+
+def ai_question_filter(sentence: str, rules: dict = None):
+    """Fallback for an unclear question: the small AI only sorts it into the filter (checked here).
+    rules: what Python's own word rules found; the AI never overrides those."""
     try:
         r = parse_with_ollama(f"Sentence: {sentence}", QUESTION_INSTRUCTIONS, QUESTION_SCHEMA, timeout=20)
     except Exception:
@@ -765,10 +792,18 @@ def ai_question_filter(sentence: str):
     if r.get("is_question") is not True:
         return None
     f = dict(EMPTY_FILTER)
-    f["when"] = {"today": "today", "tomorrow": "tomorrow", "week": "week", "nextweek": "nextweek",
-                 "overdue": "overdue", "nodate": "none"}.get(r.get("when"), "")
-    f["priority"] = r.get("priority") if r.get("priority") in ("high", "low") else ""
-    f["status"] = "done" if r.get("status") == "done" else "open"
+    f.update(rules or {})
+    ai_when = {"today": "today", "tomorrow": "tomorrow", "week": "week", "nextweek": "nextweek",
+               "overdue": "overdue", "nodate": "none"}.get(r.get("when"), "")
+    # Python checks the AI's guess: a day or priority the owner never hinted at is dropped (the 3B model invents them)
+    said = sentence.lower()
+    if not re.search(r"today|tonight|tomorrow|week|overdue|late|forgot|missed|behind|date|วัน|สัปดาห์|อาทิตย์|ค้าง", said):
+        ai_when = ""
+    ai_priority = r.get("priority") if r.get("priority") in ("high", "low") and \
+        re.search(r"urgent|important|high|low|priority|asap|ด่วน|สำคัญ|ไม่รีบ", said) else ""
+    f["when"] = f["when"] or ai_when  # Python's own reading wins
+    f["priority"] = f["priority"] or ai_priority
+    f["status"] = "done" if f["status"] == "done" or r.get("status") == "done" else "open"
     f["tokens"] = r.get("tokens", 0)
     return f
 
@@ -824,10 +859,12 @@ TOOLS = {"list_tasks": list_tasks, "count_tasks": count_tasks}
 
 def question_answer(sentence: str, now: str, categories: list, tasks: list, use_ai: bool = True):
     """The answer-card data if the sentence is a question, else None. Questions never add tasks."""
-    f = parse_question(sentence, now, categories)
-    low = sentence.strip().lower()
-    if f is None and use_ai and (QUESTION_START.match(low) or low.endswith("?")) and not re.search(r"#\s*\d", low):
-        f = ai_question_filter(sentence)
+    plain, greeted = strip_greeting(sentence)
+    f = parse_question(plain, now, categories)
+    low = " ".join(plain.split()).lower()
+    if f is None and use_ai and maybe_question(low, greeted):
+        # Python's own reading of the words (filter only) is kept; the AI just decides "question or not"
+        f = ai_question_filter(plain, question_filter(fix_date_typos(low), datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"), categories))
     if f is None:
         return None
     tokens = f.pop("tokens", 0)
@@ -842,6 +879,9 @@ def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: 
     answer = question_answer(s, now, categories, tasks)  # a question about the tasks: answer it, add nothing
     if answer:
         return answer
+    if GREETING.match(s) and not GREETING.sub("", s, count=1).strip():
+        return {"action": "greeting"}  # just "hi max": the page says hello, no task is added
+    s = strip_greeting(s)[0]  # "hey max add milk tomorrow" is the command "add milk tomorrow"
     # "#9 rename to milk" means the same as "rename #9 to milk": put the action word first
     number_first = re.match(r"(#\s*\d+)\s*(.+)", s)
     if number_first and any(re.match(p, number_first.group(2).lower())
@@ -1009,7 +1049,7 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path.split("?")[0] == "/api/tasks":
             return self.send_json(load_tasks())
         if self.path.split("?")[0] == "/api/max/status":
-            return self.send_json({**max_status(), "testMode": TEST_MODE})  # the page shows a TEST MODE badge
+            return self.send_json({**max_status(), "testMode": TEST_MODE, "mistakes": len(load_mistakes())})  # the page shows a TEST MODE badge
         if self.path.split("?")[0] == "/api/max/memory":
             return self.send_json(load_memory())
         if self.path.startswith("/api/backups/"):
@@ -1042,6 +1082,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.post_inbox()
         if self.path == "/api/ideas/status":
             return self.post_idea_status()
+        if self.path == "/api/max/mistake":
+            return self.post_mistake()
         if self.path == "/api/backup":
             return self.post_backup()
         if self.path == "/api/breakdown":
@@ -1064,7 +1106,7 @@ class Handler(SimpleHTTPRequestHandler):
             chosen = body.get("num") if isinstance(body.get("num"), int) else None  # picked after "Which one?"
             if body.get("noAI"):  # the page's daily AI limit is reached: words only, no AI
                 answer = question_answer(sentence, now, body.get("categories", [])[:20], tasks, use_ai=False)
-                return self.send_json(answer or add_without_ai(sentence))
+                return self.send_json(answer or add_without_ai(strip_greeting(" ".join(sentence.split()))[0]))
             result, status = run_command(sentence, now, body.get("categories", [])[:20], tasks, chosen), 200
         except urllib.error.URLError:
             result, status = {"error": "Ollama isn't running. Start the Ollama app and try again."}, 502
@@ -1099,6 +1141,19 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
 
+
+    def post_mistake(self):
+        # Same protection as the inbox: only our own pages may write to Max's mistakes file
+        if not self.from_our_page():
+            return
+        try:
+            size = int(self.headers.get("Content-Length") or 0)
+            if size > 2000:
+                return self.send_json({"error": "Too long"}, 413)
+            ok = add_mistake(json.loads(self.rfile.read(size)))
+            self.send_json({"ok": True} if ok else {"error": "Not a mistake record"}, 200 if ok else 400)
+        except Exception as e:
+            self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
 
     def post_idea_status(self):
         # Same protection as the inbox: only our own pages may change ideas
@@ -1511,6 +1566,35 @@ def max_status() -> dict:
     return data
 
 
+# ---------- Learning loop: tasks Max added that the owner deleted a few minutes later ----------
+# Private and local only (data/ is gitignored). Toto reads it to turn mistakes into rules and tests.
+MISTAKES_FILE = os.path.join(DATA_DIR, "max-mistakes.json")
+MISTAKES_MAX = 500  # keep the newest ones
+
+
+def load_mistakes() -> list:
+    try:
+        with open(MISTAKES_FILE, encoding="utf-8-sig") as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def add_mistake(body: dict) -> bool:
+    """Save {text, action, created, deletedAt} from the page. False if it is not a usable record."""
+    text = str(body.get("text", "")).strip()[:200]
+    if not text or body.get("action") != "add":
+        return False
+    entry = {"text": text, "action": "add",
+             "created": str(body.get("created", ""))[:30], "deletedAt": str(body.get("deletedAt", ""))[:30]}
+    mistakes = (load_mistakes() + [entry])[-MISTAKES_MAX:]
+    os.makedirs(os.path.dirname(MISTAKES_FILE), exist_ok=True)
+    with open(MISTAKES_FILE, "w", encoding="utf-8") as f:
+        json.dump(mistakes, f, ensure_ascii=False, indent=2)
+    return True
+
+
 # ---------- Command inbox (Team Status page) ----------
 INBOX_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inbox.json")
 # The names this server answers to (without the port). To add another device or name, add one line here.
@@ -1585,7 +1669,7 @@ PORT = 8000
 def use_test_mode():
     """Point every private file at a test copy and allow port 8001. Called only for --test."""
     global PORT, ALLOWED_HOSTS, ALLOWED_ORIGINS, DATA_DIR, DB_FILE, BACKUP_DIR
-    global MEMORY_FILE, STATUS_FILE, INBOX_FILE, IDEAS_FILE
+    global MEMORY_FILE, STATUS_FILE, INBOX_FILE, IDEAS_FILE, MISTAKES_FILE
     here = os.path.dirname(os.path.abspath(__file__))
     PORT = 8001
     ALLOWED_HOSTS = make_allowed_hosts(8001)
@@ -1597,6 +1681,7 @@ def use_test_mode():
     # live on their own. The real file is only ever read here, never written.
     copies = {"max-memory.json": "MEMORY_FILE", "status.json": "STATUS_FILE",
               "inbox.json": "INBOX_FILE", "ideas.json": "IDEAS_FILE"}
+    MISTAKES_FILE = os.path.join(DATA_DIR, "test-max-mistakes.json")  # starts empty, never a copy
     os.makedirs(DATA_DIR, exist_ok=True)
     for real_name, variable in copies.items():
         test_file = os.path.join(DATA_DIR, "test-" + real_name)

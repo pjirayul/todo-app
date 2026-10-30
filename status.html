@@ -117,7 +117,7 @@
       color: var(--text); text-decoration: none; font-size: .82rem; font-weight: 600; transition: border-color .2s;
     }
     .back:hover { border-color: var(--chip-on-line); }
-    @media (prefers-reduced-motion: reduce) { .back, .to button, .send, .idea-actions button { transition: none; } }
+    @media (prefers-reduced-motion: reduce) { .back, .to button, .send { transition: none; } }
     .cmd { display: grid; gap: 10px; }
     .to { display: flex; gap: 8px; flex-wrap: wrap; }
     .to button, .send { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit; cursor: pointer; transition: border-color .2s, filter .2s; }
@@ -125,13 +125,13 @@
     .to button:hover { border-color: var(--chip-on-line); }
     .to button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
     #cmd-text { min-height: 80px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--text); font: inherit; resize: vertical; }
-    .send, .idea-actions .go {
+    .send {
       display: inline-flex; align-items: center; gap: 8px;
       background: var(--ai-grad); border: none; color: var(--on-accent); font-weight: 600;
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), 0 4px 14px var(--ai-glow);
     }
     .send { justify-self: start; }
-    .send:hover, .idea-actions .go:hover { filter: brightness(1.06); }
+    .send:hover { filter: brightness(1.06); }
     .send:disabled { opacity: .6; cursor: wait; }
     .hint { margin: 0; color: var(--muted); font-size: .85rem; }
     #inbox { margin-top: 10px; }
@@ -139,35 +139,11 @@
     .msg-text { margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
     .reply { margin-top: 8px; padding: 8px 12px; border-radius: 10px; background: var(--accent-soft); font-size: .92rem; white-space: pre-wrap; }
     .new { background: var(--new-bg); color: var(--new-text); }
-    /* Ideas from Lewis */
-    .idea-day { margin: 14px 0 6px; color: var(--muted); font-size: .85rem; font-weight: 600; }
-    .idea-title { font-weight: 600; }
-    .idea-why { margin-top: 4px; font-size: .95rem; word-break: break-word; }
-    .tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; font-size: .85rem; }
-    .tag { padding: 2px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-    .tags a { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 4px; font-weight: 600; text-decoration: none; }
-    .tags a:hover { text-decoration: underline; }
-    .idea-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
-    .idea-actions button, .more { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit; cursor: pointer; transition: border-color .2s, filter .2s; }
-    .idea-actions button:not(.go):hover, .more:hover { border-color: var(--chip-on-line); }
-    .idea-actions button:disabled { opacity: .6; cursor: wait; }
-    .idea-actions .badge { margin-left: 0; }
-    .idea.skipped { opacity: .5; }
-    .more { margin-top: 10px; }
     .empty { color: var(--muted); }
-    /* Max's card and the About me form (plain; George polishes) */
+    /* Max's card */
     .max-avatar { background: var(--ai-grad); box-shadow: 0 4px 14px var(--ai-glow), inset 0 1px 0 rgba(255, 255, 255, .35); }
     .max-avatar svg.i { width: 24px; height: 24px; stroke: #fff; stroke-width: 2.2; }
-    .about { display: grid; gap: 12px; margin-top: 10px; }
-    .about > .name { display: flex; align-items: center; gap: 8px; }
-    .about > .name svg.i { color: var(--accent); }
-    .about label { display: grid; gap: 4px; font-size: .85rem; font-weight: 600; color: var(--muted); }
-    .about input, .about textarea { min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--text); font: inherit; font-weight: 400; transition: border-color .2s, box-shadow .2s; }
-    .about input:focus, .about textarea:focus, #cmd-text:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
     button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .about textarea { min-height: 70px; resize: vertical; }
-    .about .times { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
-    .about .hint { margin: 0; }
   </style>
 </head>
 <body>
@@ -178,10 +154,10 @@
     <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></symbol>
     <symbol id="i-code" viewBox="0 0 24 24"><path d="M8.5 7L3.5 12l5 5M15.5 7l5 5-5 5M13.5 4.5l-3 15"/></symbol>
     <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.3 0 2-.9 2-2 0-.6-.3-1-.6-1.4-.4-.4-.6-.8-.6-1.4 0-1.1.9-2 2-2h2.3A3.9 3.9 0 0 0 21 10.4C21 6.3 17 3 12 3z"/><circle cx="7.5" cy="11.5" r=".9"/><circle cx="10" cy="7.5" r=".9"/><circle cx="14.5" cy="7.5" r=".9"/></symbol>
-    <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9.5 18h5M10.5 21h3"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2v.1h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="M21 3L10 14"/><path d="M21 3l-6.5 18-4-7.5L3 9.5z"/></symbol>
     <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></symbol>
     <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></symbol>
+    <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9.5 18h5M10.5 21h3"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2v.1h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></symbol>
     <symbol id="i-team" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c2 .7 3.2 2.5 3.5 5.2"/></symbol>
   </svg>
   <div class="wrap">
@@ -202,31 +178,12 @@
       <div class="max-body">
         <div class="name">Max <span class="role">· Your assistant</span></div>
         <div class="job" id="max-brains">Checking…</div>
+        <div class="job" id="max-mistakes"></div>
       </div>
       <span class="badge idle" id="max-badge">…</span>
     </div>
-    <form class="card about" id="about">
-      <div class="name">About me</div>
-      <p class="hint">Max reads this to understand you better. Never put passwords or other secrets here.</p>
-      <label>Your name <input id="m-name" maxlength="60"></label>
-      <div class="times">
-        <label>Morning <input type="time" id="m-morning"></label>
-        <label>Afternoon <input type="time" id="m-afternoon"></label>
-        <label>Evening <input type="time" id="m-evening"></label>
-        <label>Tonight <input type="time" id="m-tonight"></label>
-      </div>
-      <label>People you often mention (comma between names) <input id="m-people" maxlength="1000"></label>
-      <label>Your categories (comma between) <input id="m-categories" maxlength="600"></label>
-      <label>Notes for Max <textarea id="m-notes" maxlength="500"></textarea></label>
-      <div class="idea-actions"><button type="submit" class="go">Save</button><span class="hint" id="m-msg" role="status"></span></div>
-    </form>
-
     <h2><svg class="i" aria-hidden="true"><use href="#i-team"/></svg>Builder team</h2>
     <div id="agents"></div>
-
-    <h2><svg class="i" aria-hidden="true"><use href="#i-bulb"/></svg>Ideas from Lewis</h2>
-    <div id="ideas"></div>
-    <p class="hint" id="ideas-msg" role="status"></p>
 
     <h2>Send a command</h2>
     <form id="cmd" class="card cmd">
@@ -242,7 +199,7 @@
       <p class="hint" id="cmd-msg" role="status"></p>
     </form>
     <!-- GitHub Pages: no server, so sending commands can't work there -->
-    <div class="card empty" id="pc-only" hidden>Sending commands and About me only work on your PC (http://127.0.0.1:8000 with server.py running).</div>
+    <div class="card empty" id="pc-only" hidden>Sending commands only works on your PC (http://127.0.0.1:8000 with server.py running).</div>
     <div id="inbox"></div>
 
     <h2>Claude usage (<span id="plan">…</span> plan)</h2>
@@ -265,15 +222,10 @@
     const TH = {
       "Team Status": "สถานะทีม", "Back": "กลับ", "Team": "ทีม", "Loading…": "กำลังโหลด…",
       "Your assistant": "ผู้ช่วยของคุณ", "· Your assistant": "· ผู้ช่วยของคุณ", "Checking…": "กำลังตรวจสอบ…",
-      "About me": "เกี่ยวกับฉัน",
-      "Max reads this to understand you better. Never put passwords or other secrets here.": "Max อ่านส่วนนี้เพื่อเข้าใจคุณมากขึ้น อย่าใส่รหัสผ่านหรือความลับอื่นๆ ที่นี่",
-      "Your name": "ชื่อของคุณ", "Morning": "เช้า", "Afternoon": "บ่าย", "Evening": "เย็น", "Tonight": "คืนนี้",
-      "People you often mention (comma between names)": "คนที่คุณพูดถึงบ่อย (คั่นชื่อด้วยจุลภาค)",
-      "Your categories (comma between)": "หมวดหมู่ของคุณ (คั่นด้วยจุลภาค)", "Notes for Max": "บันทึกถึง Max",
-      "Save": "บันทึก", "Builder team": "ทีมผู้สร้าง", "Ideas from Lewis": "ไอเดียจาก Lewis",
+      "Builder team": "ทีมผู้สร้าง", "day": "วัน", "days": "วัน",
       "Send a command": "ส่งคำสั่ง", "Send to inbox": "ส่งเข้ากล่องข้อความ",
       "Toto reads the inbox when you message him in the Claude app (say \"check inbox\"). Works only on this PC.": "Toto จะอ่านกล่องข้อความเมื่อคุณคุยกับเขาในแอป Claude (พิมพ์ \"check inbox\") ใช้ได้เฉพาะในเครื่องนี้",
-      "Sending commands and About me only work on your PC (http://127.0.0.1:8000 with server.py running).": "การส่งคำสั่งและ \"เกี่ยวกับฉัน\" ใช้ได้เฉพาะบนเครื่องของคุณ (http://127.0.0.1:8000 ขณะที่ server.py ทำงานอยู่)",
+      "Sending commands only works on your PC (http://127.0.0.1:8000 with server.py running).": "การส่งคำสั่งใช้ได้เฉพาะบนเครื่องของคุณ (http://127.0.0.1:8000 ขณะที่ server.py ทำงานอยู่)",
       "Claude usage (": "การใช้ Claude (", "plan)": "แพ็กเกจ)",
       "This page checks for new data every 10 seconds. Toto writes the data while he's working in your session, so when Toto is idle the usage numbers stay at the \"Checked\" time shown above.": "หน้านี้ตรวจข้อมูลใหม่ทุก 10 วินาที Toto เป็นคนเขียนข้อมูลขณะทำงานในเซสชันของคุณ ดังนั้นเมื่อ Toto ว่าง ตัวเลขการใช้งานจะค้างที่เวลา \"ตรวจเมื่อ\" ด้านบน",
       // used by the code below
@@ -283,16 +235,11 @@
       "These numbers may be out of date — ask Toto \"show my usage\" to refresh.": "ตัวเลขเหล่านี้อาจเก่าแล้ว บอก Toto ว่า \"show my usage\" เพื่อรีเฟรช",
       "not started": "ยังไม่เริ่ม", "reset — ask Toto to refresh": "รีเซ็ตแล้ว บอก Toto ให้รีเฟรช", "unknown": "ไม่ทราบ",
       "used": "ใช้ไปแล้ว", "left": "เหลือ", "resets in": "รีเซ็ตใน",
-      "Small": "เล็ก", "Medium": "กลาง", "Large": "ใหญ่", "Effort:": "ความยาก:", "Source": "แหล่งที่มา",
-      "Sent to inbox": "ส่งแล้ว", "Skipped": "ข้ามแล้ว", "Skip": "ข้าม",
-      "Lewis posts 3 new ideas every morning at 08:00.": "Lewis โพสต์ไอเดียใหม่ 3 ข้อทุกเช้า 08:00",
-      "Lewis's ideas are only on your PC.": "ไอเดียของ Lewis มีเฉพาะบนเครื่องของคุณ",
-      "Hide older": "ซ่อนของเก่า", "Show older": "แสดงของเก่า", "day": "วัน", "days": "วัน",
       "Ready": "พร้อม", "Offline": "ออฟไลน์",
       "Turns what you say into tasks, steps and reminders.": "เปลี่ยนสิ่งที่คุณพูดให้เป็นงาน ขั้นตอน และการเตือน",
       "Max is resting. Start the Ollama app and he'll be ready.": "Max กำลังพัก เปิดแอป Ollama แล้วเขาจะพร้อม",
       "Max runs on your PC, so he's offline here.": "Max ทำงานบนเครื่องของคุณ จึงออฟไลน์ที่นี่",
-      "Saved. Max will use this from now on.": "บันทึกแล้ว Max จะใช้ข้อมูลนี้ต่อจากนี้",
+      "Mistakes to learn from:": "ข้อผิดพลาดที่ต้องเรียนรู้:",
       "Couldn't send:": "ส่งไม่สำเร็จ:", "Couldn't save:": "บันทึกไม่สำเร็จ:", "to": "ถึง",
       "The inbox only works on this PC with server.py running.": "กล่องข้อความใช้ได้เฉพาะบนเครื่องนี้ขณะที่ server.py ทำงานอยู่",
       "This only works on this PC with server.py running.": "ใช้ได้เฉพาะบนเครื่องนี้ขณะที่ server.py ทำงานอยู่",
@@ -448,113 +395,7 @@
       }
     }
 
-    // ---------- Ideas from Lewis ----------
-    let ideas = [];
-    let showOlder = false;
-    const EFFORT = { S: L("Small"), M: L("Medium"), L: L("Large") };
-
-    // Only real web links; blocks things like "javascript:" in a source
-    function safeUrl(u) {
-      try {
-        const url = new URL(u);
-        return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
-      } catch {
-        return "";
-      }
-    }
-
-    function ideaCard(idea, i) {
-      const url = safeUrl(idea.source);
-      const sent = idea.status === "sent", skipped = idea.status === "skipped";
-      return `
-        <div class="card idea ${skipped ? "skipped" : ""}">
-          <div class="idea-title">${esc(idea.title)}</div>
-          <div class="idea-why">${esc(idea.why)}</div>
-          <div class="tags">
-            ${idea.effort ? `<span class="tag">${L("Effort:")} ${esc(EFFORT[idea.effort] || idea.effort)}</span>` : ""}
-            ${idea.who ? `<span class="tag">${esc(idea.who)}</span>` : ""}
-            ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${L("Source")}<svg class="i sm" aria-hidden="true"><use href="#i-external"/></svg></a>` : ""}
-          </div>
-          <div class="idea-actions">
-            ${sent ? `<span class="badge done">${L("Sent to inbox")}</span>`
-              : skipped ? `<span class="badge idle">${L("Skipped")}</span>`
-              : `<button type="button" class="go" data-send="${i}"><svg class="i sm" aria-hidden="true"><use href="#i-send"/></svg>${L("Send to inbox")}</button>
-                 <button type="button" data-skip="${i}">${L("Skip")}</button>`}
-          </div>
-        </div>`;
-    }
-
-    function renderIdeas() {
-      const box = document.getElementById("ideas");
-      if (!ideas.length) {
-        box.innerHTML = `<div class="card empty">${L("Lewis posts 3 new ideas every morning at 08:00.")}</div>`;
-        return;
-      }
-      // Newest day first; the 3 latest days show, older ones hide behind a button
-      const days = [...new Set(ideas.map((x) => x.date))].sort().reverse();
-      const visible = showOlder ? days : days.slice(0, 3);
-      box.innerHTML = visible.map((day) => `
-        <div class="idea-day">${esc(day)}</div>
-        ${ideas.map((idea, i) => idea.date === day ? ideaCard(idea, i) : "").join("")}`).join("")
-        + (days.length > 3 ? `<button type="button" class="more" id="older">${showOlder ? L("Hide older") : `${L("Show older")} (${days.length - 3} ${L(days.length === 4 ? "day" : "days")})`}</button>` : "");
-    }
-
-    async function loadIdeas() {
-      if (!LOCAL) {
-        document.getElementById("ideas").innerHTML = `<div class="card empty">${L("Lewis's ideas are only on your PC.")}</div>`;
-        return;
-      }
-      try {
-        ideas = await (await fetch(`api/ideas?t=${Date.now()}`)).json();
-      } catch {
-        ideas = [];
-      }
-      renderIdeas();
-    }
-
-    async function setIdeaStatus(idea, status) {
-      const res = await fetch("api/ideas/status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: idea.title, date: idea.date, status }),
-      });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.status);
-    }
-
-    // One listener for all idea buttons (cards are re-drawn every 10 s)
-    document.getElementById("ideas").addEventListener("click", async (e) => {
-      if (e.target.id === "older") {
-        showOlder = !showOlder;
-        return renderIdeas();
-      }
-      const b = e.target.closest("button[data-send], button[data-skip]");
-      if (!b) return;
-      document.getElementById("ideas-msg").textContent = "";
-      const idea = ideas[b.dataset.send ?? b.dataset.skip];
-      b.disabled = true;
-      try {
-        if (b.dataset.send !== undefined) {
-          const to = String(idea.who).includes("Kimi") ? "Kimi" : "George";
-          const res = await fetch("api/inbox", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ to, text: `Idea from Lewis: ${idea.title} — ${idea.why}` }),
-          });
-          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.status);
-          await setIdeaStatus(idea, "sent");
-          loadInbox();
-        } else {
-          await setIdeaStatus(idea, "skipped");
-        }
-        loadIdeas();
-      } catch (err) {
-        b.disabled = false;
-        document.getElementById("ideas-msg").textContent =
-          `${L("Couldn't save:")} ${err.message}. ${L("This only works on this PC with server.py running.")}`;
-      }
-    });
-
-    // ---------- Max: status and About me ----------
+    // ---------- Max: status ----------
     async function loadMax() {
       const badge = document.getElementById("max-badge");
       const brains = document.getElementById("max-brains");
@@ -566,57 +407,23 @@
         brains.textContent = data.ready
           ? L("Turns what you say into tasks, steps and reminders.")
           : L("Max is resting. Start the Ollama app and he'll be ready.");
+        // Learning loop: tasks Max added that you deleted within 10 minutes (kept on this PC only)
+        document.getElementById("max-mistakes").textContent = `${L("Mistakes to learn from:")} ${Number(data.mistakes) || 0}`;
       } catch {
+        document.getElementById("max-mistakes").textContent = "";
         badge.className = "badge idle";
         badge.textContent = L("Offline");
         brains.textContent = L("Max runs on your PC, so he's offline here.");
       }
     }
 
-    const field = (id) => document.getElementById(`m-${id}`);
-    const list = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
-    async function loadMemory() {
-      try {
-        const m = await (await fetch(`api/max/memory?t=${Date.now()}`, { signal: AbortSignal.timeout(5000) })).json();
-        field("name").value = m.name;
-        for (const k of ["morning", "afternoon", "evening", "tonight"]) field(k).value = m.times[k];
-        field("people").value = m.people.join(", ");
-        field("categories").value = m.categories.join(", ");
-        field("notes").value = m.notes;
-      } catch {
-        document.getElementById("about").hidden = true; // no server here (e.g. GitHub Pages)
-      }
-    }
-    document.getElementById("about").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const msg = document.getElementById("m-msg");
-      const times = {};
-      for (const k of ["morning", "afternoon", "evening", "tonight"]) times[k] = field(k).value;
-      try {
-        const res = await fetch("api/max/memory", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: field("name").value, times, people: list(field("people").value),
-                                 categories: list(field("categories").value), notes: field("notes").value }),
-        });
-        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.status);
-        msg.textContent = L("Saved. Max will use this from now on.");
-        loadMemory(); // show what was really saved (the server trims and checks it)
-      } catch (err) {
-        msg.textContent = `${L("Couldn't save:")} ${err.message}`;
-      }
-    });
-
     refresh();
-    loadIdeas();
     loadMax();
     if (LOCAL) {
       loadInbox();
-      loadMemory();
-      setInterval(() => { refresh(); loadInbox(); loadIdeas(); loadMax(); }, 10000);
+      setInterval(() => { refresh(); loadInbox(); loadMax(); }, 10000);
     } else {
-      // GitHub Pages: About me and the inbox need the server on the PC
-      document.getElementById("about").hidden = true;
+      // GitHub Pages: the inbox needs the server on the PC
       document.getElementById("cmd").hidden = true;
       document.getElementById("pc-only").hidden = false;
     }

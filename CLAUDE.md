@@ -1,6 +1,6 @@
 # To-do app — team rules
 
-Team: Toto (lead/coordinator), Kimi (developer), George (designer), Lewis (researcher), Bono (tester).
+Team: Toto (lead/coordinator), Kimi (developer), George (designer), Lewis (researcher), Bono (tester), GP (architect — weekly code-health review, refactor planning; never edits app code).
 Max is the owner's in-app AI assistant (server.py + Ollama), not a team member.
 The owner is a beginner builder; keep code simple, readable, and explained.
 

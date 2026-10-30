@@ -508,6 +508,124 @@ class AskMax(unittest.TestCase):
         self.assertEqual([t["num"] for t in server.TOOLS["list_tasks"](QTASKS, dict(f, priority="high"), NOW)], [1])
 
 
+class GreetingsAndGate(unittest.TestCase):
+    """Greetings in front, natural question forms, the loose AI gate and the mistakes log."""
+    YES = lambda *a, **k: {"is_question": True, "when": "none", "priority": "any", "status": "open", "tokens": 3}
+    NO = lambda *a, **k: {"is_question": False, "when": "none", "priority": "any", "status": "open", "tokens": 3}
+
+    def nums(self, sentence, ai=no_ai):
+        answer = question(sentence, ai=ai)
+        self.assertIsNotNone(answer, sentence)
+        return answer["nums"]
+
+    def test_strip_greeting(self):
+        for text, rest in [("Hi max, what to do today", "what to do today"), ("hey max add milk", "add milk"),
+                           ("Hello, what is due", "what is due"), ("ok max what's overdue", "what's overdue"),
+                           ("max, done #2", "done #2"), ("สวัสดีครับ max วันนี้ทำอะไรดี", "วันนี้ทำอะไรดี"),
+                           ("แม็กซ์ พรุ่งนี้มีอะไร", "พรุ่งนี้มีอะไร"), ("สวัสดีค่ะ แม็กซ์ วันนี้ต้องทำอะไร", "วันนี้ต้องทำอะไร")]:
+            self.assertEqual(server.strip_greeting(text), (rest, True), text)
+        # not greetings: a task that merely starts like one, or only a greeting
+        for text in ["Max birthday gift", "hi-vis vest tomorrow", "okra soup for dinner", "Hi max", "Buy milk"]:
+            self.assertEqual(server.strip_greeting(text), (text, False), text)
+
+    def test_greeting_then_question_is_not_a_task(self):
+        self.assertEqual(self.nums("Hi max, what to do today"), [1, 2])    # the owner's bug (task #116)
+        self.assertEqual(self.nums("hey max what's due tomorrow?"), [3])
+        answer = ask("Hi max, what to do today", QTASKS)
+        self.assertEqual((answer["action"], answer["nums"]), ("answer", [1, 2]))
+
+    def test_natural_question_forms(self):
+        self.assertEqual(self.nums("what to do today"), [1, 2])
+        self.assertEqual(self.nums("what to do tomorrow"), [3])
+        self.assertEqual(self.nums("what to do this week"), [1, 2, 3, 4])
+        self.assertEqual(self.nums("what should i do"), [5, 1, 2, 3, 4, 8, 9, 6])
+        self.assertEqual(self.nums("what do i have"), [5, 1, 2, 3, 4, 8, 9, 6])
+        self.assertEqual(self.nums("what's my plan today"), [1, 2])
+        self.assertEqual(self.nums("what's my day"), [5, 1, 2, 3, 4, 8, 9, 6])
+        self.assertEqual(self.nums("my tasks today"), [1, 2])
+
+    def test_natural_thai(self):
+        self.assertEqual(self.nums("วันนี้ทำอะไรดี"), [1, 2])
+        self.assertEqual(self.nums("วันนี้ต้องทำอะไร"), [1, 2])
+        self.assertEqual(self.nums("ต้องทำอะไรบ้าง"), [5, 1, 2, 3, 4, 8, 9, 6])
+        self.assertEqual(self.nums("พรุ่งนี้มีอะไร"), [3])
+        self.assertEqual(self.nums("สวัสดีครับ แม็กซ์ วันนี้ทำอะไรดี"), [1, 2])
+
+    def test_greeting_keeps_commands_commands(self):
+        add = ask("hey max add milk tomorrow", QTASKS)
+        self.assertEqual(add["action"], "add")
+        self.assertEqual(add["text"], "Milk tomorrow")  # no "hey max", no "add" (the fake AI keeps the date words)
+        self.assertEqual(ask("Hi max, done #2", QTASKS)["action"], "complete")
+        self.assertEqual(ask("ok max, delete #3", QTASKS)["action"], "delete")
+        self.assertEqual(ask("hello move #3 to friday", QTASKS)["action"], "update")
+        self.assertEqual(ask("สวัสดีครับ max ลบ #3", QTASKS)["action"], "delete")
+
+    def test_greeting_alone_is_not_a_task(self):
+        # no_ai: the greeting alone must not even cost an AI call
+        for text in ["hi max", "Hello", "hey max!", "สวัสดี แม็กซ์", "สวัสดีครับ"]:
+            self.assertEqual(ask(text, QTASKS, ai=no_ai), {"action": "greeting"}, text)
+        self.assertEqual(ask("hey max buy milk", QTASKS)["action"], "add")
+
+    def test_clear_tasks_skip_the_ai(self):
+        # no_ai() raises if the AI is asked: a clear task or command must not cost the extra step
+        for text in ["pay rent on the 5th", "call mom 6pm", "Buy milk", "ซื้อนมพรุ่งนี้", "done #2", "delete laundry"]:
+            self.assertIsNone(question(text), text)
+
+    def test_loose_gate_asks_the_ai(self):
+        # question word anywhere, a "?", or a greeting -> the AI decides; it can say no
+        for text in ["can you tell me how it goes", "do I owe anything this month", "Call mom?", "hi max, buy milk",
+                     "ซื้อนมไหม", "ทำยังไงดี"]:
+            calls = []
+            def spy(*a, **k):
+                calls.append(1)
+                return self.NO()
+            self.assertIsNone(question(text, ai=spy), text)
+            self.assertEqual(len(calls), 1, text)
+        self.assertEqual(self.nums("hi max, anything urgent for me?", ai=self.YES), [1, 3, 4])  # "urgent" is Python's filter
+
+    def test_python_filter_wins_over_the_ai(self):
+        # the AI says "overdue" but the owner typed "tomorrow": Python's reading stays
+        fake = lambda *a, **k: {"is_question": True, "when": "overdue", "priority": "any", "status": "open", "tokens": 1}
+        self.assertEqual(self.nums("could there be something I should know tomorrow", ai=fake), [3])
+
+    def test_ai_offline_means_rules_only(self):
+        broken = lambda *a, **k: (_ for _ in ()).throw(OSError("Ollama is off"))
+        self.assertIsNone(question("hi max, buy milk", ai=broken))
+        self.assertIsNone(question("hi max, buy milk", use_ai=False))
+        self.assertEqual(question("hi max, what to do today", use_ai=False)["nums"], [1, 2])  # rules still answer
+
+
+class MistakesLog(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.dir = tempfile.TemporaryDirectory()
+        patcher = mock.patch.object(server, "MISTAKES_FILE", self.dir.name + "/max-mistakes.json")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self.dir.cleanup)
+
+    def test_logs_a_deleted_add(self):
+        self.assertEqual(server.load_mistakes(), [])
+        ok = server.add_mistake({"text": "Hi max, what to do today", "action": "add",
+                                 "created": "2026-10-30T15:03:00Z", "deletedAt": "2026-10-30T15:04:00Z"})
+        self.assertTrue(ok)
+        ok = server.add_mistake({"text": "ซื้อนม", "action": "add", "created": "a", "deletedAt": "b"})
+        saved = server.load_mistakes()
+        self.assertEqual([m["text"] for m in saved], ["Hi max, what to do today", "ซื้อนม"])  # Thai survives
+        self.assertEqual(set(saved[0]), {"text", "action", "created", "deletedAt"})
+
+    def test_rejects_bad_records_and_caps_size(self):
+        self.assertFalse(server.add_mistake({"text": "", "action": "add"}))
+        self.assertFalse(server.add_mistake({"text": "x", "action": "delete"}))
+        self.assertEqual(server.load_mistakes(), [])
+        server.add_mistake({"text": "y" * 999, "action": "add"})
+        self.assertEqual(len(server.load_mistakes()[0]["text"]), 200)
+
+    def test_test_mode_uses_its_own_file(self):
+        self.assertIn("max-mistakes", server.MISTAKES_FILE)
+        self.assertTrue(server.__dict__["use_test_mode"].__doc__)
+
+
 class TailscaleAccessTests(unittest.TestCase):
     def test_client_ip(self):
         for ip in ("127.0.0.1", "::1", "100.66.1.68", "100.103.242.114", "fd7a:115c:a1e0::1"):
