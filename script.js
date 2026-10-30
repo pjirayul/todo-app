@@ -47,7 +47,7 @@ const TEXT = {
     maxAdded: (n, text, when) => `Max added #${n}: ${text}${when ? " · " + when : ""}`, maxUpdated: (n) => `Max updated #${n}`, deleted: (n) => `Deleted #${n}`,
     maxDone: (n) => `Max marked #${n} done`, maxUndone: (n) => `Max reopened #${n}`,
     // Ask Max (answers to questions): the filter is turned into words by filterBits() below
-    whenLabel: { today: "due today", tomorrow: "due tomorrow", week: "due this week", nextweek: "due next week", overdue: "overdue", none: "with no date" },
+    whenLabel: { today: "due today", tomorrow: "due tomorrow", week: "due this week", nextweek: "due next week", weekend: "this weekend", overdue: "overdue", none: "with no date" },
     dateLabel: (d) => `due ${d}`, priLabel: { high: "high priority", low: "low priority" }, catLabel: (c) => c,
     ansDone: "done", ansAbout: (x) => `about "${x}"`,
     ansCount: (n, b) => {
@@ -116,7 +116,7 @@ const TEXT = {
     alreadyDone: (n) => `#${n} เสร็จไปแล้ว`,
     maxAdded: (n, text, when) => `Max เพิ่ม #${n}: ${text}${when ? " · " + when : ""} แล้ว`, maxUpdated: (n) => `Max แก้ #${n} แล้ว`, deleted: (n) => `ลบ #${n} แล้ว`,
     maxDone: (n) => `Max ทำเครื่องหมาย #${n} ว่าเสร็จแล้ว`, maxUndone: (n) => `Max เปิด #${n} ใหม่แล้ว`,
-    whenLabel: { today: "วันนี้", tomorrow: "พรุ่งนี้", week: "สัปดาห์นี้", nextweek: "สัปดาห์หน้า", overdue: "ที่เลยกำหนด", none: "ที่ไม่มีวันที่" },
+    whenLabel: { today: "วันนี้", tomorrow: "พรุ่งนี้", week: "สัปดาห์นี้", nextweek: "สัปดาห์หน้า", weekend: "สุดสัปดาห์นี้", overdue: "ที่เลยกำหนด", none: "ที่ไม่มีวันที่" },
     dateLabel: (d) => `วันที่ ${d}`, priLabel: { high: "สำคัญ", low: "ไม่รีบ" }, catLabel: (c) => `หมวด ${c}`,
     ansDone: "ที่เสร็จแล้ว", ansAbout: (x) => `เกี่ยวกับ "${x}"`,
     ansCount: (n, b, f) => {
