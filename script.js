@@ -25,6 +25,7 @@ const TEXT = {
     badFile: "That file isn't a task export from this app.",
     changedElsewhere: "Your tasks were changed in another window, so the latest list is shown. This window's last change was saved as a backup (Backup › Restore).",
     focusStart: "Focus 25 min", focusPause: "Pause", focusResume: "Resume", focusStop: "Stop focus", focusPlus: "+5 min",
+    remindMore: (n) => `+${n} more`, repeatTitle: (m) => (m ? `Remind again every ${m} min` : "Remind again: off"), snoozeBtn: "Snooze", snooze10: "10 min", snooze60: "1 hour", snoozeTomorrow: "Tomorrow", remindClose: "Dismiss",
     focusPaused: "Paused", focusNice: (n) => `Nice focus! Mark #${n} done?`, focusDone: "Done", focusNotYet: "Not yet", focusBody: "Focus time is over",
     breakdown: "Break it down", stepsThinking: "Max is thinking of steps…", addSelected: "Add selected",
     stepsOffline: "Break it down needs Max, the AI server on your PC.", stepsFail: "Max couldn't come up with steps right now. Is Ollama running? Try again.",
@@ -94,6 +95,7 @@ const TEXT = {
     badFile: "ไฟล์นี้ไม่ใช่ไฟล์งานที่ส่งออกจากแอปนี้",
     changedElsewhere: "งานถูกแก้ไขจากหน้าต่างอื่น จึงแสดงรายการล่าสุด การแก้ไขล่าสุดของหน้านี้ถูกสำรองไว้ (สำรองข้อมูล › กู้คืน)",
     focusStart: "โฟกัส 25 นาที", focusPause: "หยุดชั่วคราว", focusResume: "เริ่มต่อ", focusStop: "หยุดโฟกัส", focusPlus: "+5 นาที",
+    remindMore: (n) => `อีก ${n} งาน`, repeatTitle: (m) => (m ? `เตือนซ้ำทุก ${m} นาที` : "เตือนซ้ำ: ปิด"), snoozeBtn: "เลื่อน", snooze10: "10 นาที", snooze60: "1 ชั่วโมง", snoozeTomorrow: "พรุ่งนี้", remindClose: "ปิด",
     focusPaused: "หยุดอยู่", focusNice: (n) => `โฟกัสได้ดีมาก! ทำ #${n} เสร็จแล้วใช่ไหม?`, focusDone: "เสร็จแล้ว", focusNotYet: "ยังไม่เสร็จ", focusBody: "หมดเวลาโฟกัสแล้ว",
     breakdown: "แตกเป็นขั้นตอน", stepsThinking: "Max กำลังคิดขั้นตอน…", addSelected: "เพิ่มที่เลือก",
     stepsOffline: "การแตกเป็นขั้นตอนต้องใช้ Max (เซิร์ฟเวอร์ AI บนคอมของคุณ)", stepsFail: "Max ยังคิดขั้นตอนไม่ออกตอนนี้ Ollama เปิดอยู่ไหม? ลองอีกครั้ง",
@@ -174,7 +176,7 @@ const newNum = () => { save("nextNum", nextNum + 1); return nextNum++; };
 const LOCAL = ["127.0.0.1", "localhost", "desktop-ldeu8ir"].includes(location.hostname) ||
   location.hostname.endsWith(".ts.net") || location.hostname.startsWith("100.");
 const firstVisit = load("settings", null) === null;
-let settings = { lang: "en", theme: "light", aiLimit: 20000, ...load("settings", {}) };
+let settings = { lang: "en", theme: "light", aiLimit: 20000, repeatMin: 0, ...load("settings", {}) };
 
 // AI tokens used today; resets when the date changes
 const todayKey = () => new Date().toLocaleDateString("en-CA");
@@ -242,6 +244,7 @@ function render() {
   $("theme").innerHTML = `<svg class="i"><use href="#i-${settings.theme === "dark" ? "sun" : "moon"}"/></svg>`;
   $("notify").classList.toggle("on", "Notification" in window && Notification.permission === "granted");
   drawGreeting();
+  drawRemind();
   drawFocus(); // only the bar's own text (the bar lives outside the list)
 
   // AI usage bar: green, then yellow from 70%, red when full
@@ -1334,22 +1337,100 @@ $("notify").addEventListener("click", async () => {
   render();
 });
 
+// "Remind again" (settings.repeatMin: 0 = off, 10, 30). Cycles on one button; no per-task field, so nothing to lose on load.
+const REPEAT_STEPS = [0, 10, 30];
+$("repeat").addEventListener("click", () => {
+  settings.repeatMin = REPEAT_STEPS[(REPEAT_STEPS.indexOf(settings.repeatMin) + 1) % REPEAT_STEPS.length];
+  save("settings", settings);
+  render();
+});
+
+// Tasks showing in the banner (ids, in memory) and when each was last reminded. A reload forgets both: fine.
+let ringing = [];
+const lastReminded = {};
+
+// Local "YYYY-MM-DDTHH:MM" (toISOString would be UTC and shift the day)
+const localDue = (d) => `${d.toLocaleDateString("en-CA")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+function ring(todo) {
+  lastReminded[todo.id] = Date.now();
+  if (!ringing.includes(todo.id)) ringing.push(todo.id);
+  if ("Notification" in window && Notification.permission === "granted") new Notification(t("remind"), { body: todo.text });
+}
+
 function checkReminders() {
   let changed = false;
+  const now = Date.now();
   for (const todo of todos) {
-    if (todo.due && !todo.done && !todo.notified && new Date(todo.due) <= new Date()) {
+    if (!todo.due || todo.done || new Date(todo.due) > now) continue;
+    if (!todo.notified) {
       todo.notified = true;
       changed = true;
-      if ("Notification" in window && Notification.permission === "granted") {
-        new Notification(t("remind"), { body: todo.text });
-      }
+      ring(todo);
+    } else if (settings.repeatMin) {
+      // Overdue and already told: again every N minutes (first sight starts the clock, so a reload doesn't flood)
+      if (lastReminded[todo.id] === undefined) lastReminded[todo.id] = now;
+      else if (now - lastReminded[todo.id] >= settings.repeatMin * 60000) ring(todo);
     }
   }
-  if (editingId !== null) return saveTodos(); // don't wipe an open edit form
+  if (editingId !== null) { saveTodos(); return drawRemind(); } // don't wipe an open edit form
   if (changed) update();
   else render(); // refresh "overdue" colors as time passes
 }
 setInterval(checkReminders, 30000);
+
+// The in-page banner shows the first waiting task. Text via textContent only.
+function drawRemind() {
+  ringing = ringing.filter((id) => todos.some((x) => x.id === id && !x.done)); // done/deleted meanwhile
+  $("repeat").textContent = settings.repeatMin ? `${settings.repeatMin}m` : "off";
+  $("repeat").title = t("repeatTitle")(settings.repeatMin);
+  $("repeat").setAttribute("aria-label", $("repeat").title);
+  $("repeat").classList.toggle("on", settings.repeatMin > 0);
+  $("remind-bar").hidden = !ringing.length;
+  if (!ringing.length) { $("remind-opts").hidden = true; return; }
+  const todo = todos.find((x) => x.id === ringing[0]);
+  $("remind-head").textContent = t("remind") + (ringing.length > 1 ? " · " + t("remindMore")(ringing.length - 1) : "");
+  $("remind-title").textContent = `#${todo.num} ${todo.text}`;
+  $("remind-done").textContent = t("focusDone");
+  $("remind-snooze").textContent = t("snoozeBtn");
+  $("remind-close").title = t("remindClose");
+  $("remind-close").setAttribute("aria-label", t("remindClose"));
+  const [a, b, c] = $("remind-opts").children;
+  a.textContent = t("snooze10"); b.textContent = t("snooze60"); c.textContent = t("snoozeTomorrow");
+}
+
+$("remind-snooze").addEventListener("click", () => {
+  const open = $("remind-opts").hidden;
+  $("remind-opts").hidden = !open;
+  $("remind-snooze").setAttribute("aria-expanded", open);
+});
+$("remind-close").addEventListener("click", () => { ringing.shift(); drawRemind(); });
+$("remind-done").addEventListener("click", () => {
+  const todo = todos.find((x) => x.id === ringing[0]);
+  if (todo) { backup(`before done #${todo.num}`); todo.done = true; }
+  $("remind-opts").hidden = true;
+  update(); // render() redraws the banner
+});
+$("remind-opts").addEventListener("click", (e) => {
+  const pick = e.target.closest("[data-snooze]")?.dataset.snooze;
+  const todo = todos.find((x) => x.id === ringing[0]);
+  if (!pick || !todo) return;
+  const d = new Date();
+  if (pick === "tomorrow") {
+    // tomorrow at the task's own time of day; a task without a time gets 09:00
+    const time = /T(\d\d:\d\d)/.exec(todo.due)?.[1] || "09:00";
+    d.setDate(d.getDate() + 1);
+    todo.due = `${d.toLocaleDateString("en-CA")}T${time}`;
+  } else {
+    d.setMinutes(d.getMinutes() + Number(pick));
+    todo.due = localDue(d);
+  }
+  todo.notified = false; // the new time gets its own reminder
+  delete lastReminded[todo.id];
+  ringing.shift();
+  $("remind-opts").hidden = true;
+  update();
+});
 
 // ---------- 8b. Focus timer ----------
 // One task at a time. Saved as { id, endsAt } (ms) in localStorage only: no new task field, so nothing to

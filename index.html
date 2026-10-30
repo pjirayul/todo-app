@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
   <!-- ?v= makes browsers fetch the new file after an update (raise it on each release) -->
-  <link rel="stylesheet" href="style.css?v=25">
+  <link rel="stylesheet" href="style.css?v=27">
 </head>
 <body>
   <!-- Line icons, drawn once and reused with <use href="#i-..."> -->
@@ -49,6 +49,7 @@
           <div class="quick" id="quick">
             <button id="lang" class="ib" title="Language">TH</button>
             <button id="theme" class="ib" title="Dark mode" aria-label="Dark mode"><svg class="i"><use href="#i-moon"/></svg></button>
+            <button id="repeat" class="ib" title="Remind again" aria-label="Remind again"></button>
             <button id="notify" class="ib" title="Reminders" aria-label="Reminders"><svg class="i"><use href="#i-bell"/></svg></button>
           </div>
           <!-- Team pill: filled from status.json; stays hidden where there is none (GitHub Pages) -->
@@ -126,6 +127,22 @@
     </details>
   </main>
 
+  <!-- Reminder banner: works where system notifications don't (iPhone over Tailscale). Fixed at the TOP so it never covers the focus bar below -->
+  <div id="remind-bar" class="focus-bar remind-bar" role="alert" hidden>
+    <svg class="i" aria-hidden="true"><use href="#i-bell"/></svg>
+    <div class="focus-info"><div id="remind-head" class="remind-head"></div><div id="remind-title" class="focus-title"></div></div>
+    <div id="remind-main" class="focus-btns">
+      <button id="remind-done" class="chip active" type="button"></button>
+      <button id="remind-snooze" class="chip" type="button" aria-expanded="false"></button>
+      <button id="remind-close" class="ib" type="button"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <div id="remind-opts" class="focus-btns remind-opts" hidden>
+      <button class="chip" type="button" data-snooze="10"></button>
+      <button class="chip" type="button" data-snooze="60"></button>
+      <button class="chip" type="button" data-snooze="tomorrow"></button>
+    </div>
+  </div>
+
   <!-- Focus timer bar: outside the task list on purpose (the list is redrawn often); script.js fills it in -->
   <div id="focus-bar" class="focus-bar" role="status" hidden>
     <svg class="i" aria-hidden="true"><use href="#i-timer"/></svg>
@@ -143,6 +160,6 @@
   </div>
 
   <script src="hints.js?v=1"></script>
-  <script src="script.js?v=32"></script>
+  <script src="script.js?v=33"></script>
 </body>
 </html>

@@ -8,7 +8,8 @@
     "What's overdue?",
     "Move #3 to Friday",
     "Pay rent on the 5th",
-    "Show high priority tasks"
+    "Show high priority tasks",
+    "Tip: tap the mic on your keyboard to speak"
    ],
    "th": [
     "วันนี้ต้องทำอะไรบ้าง",
@@ -16,7 +17,8 @@
     "อะไรเลยกำหนดแล้ว",
     "ย้าย #3 ไปวันศุกร์",
     "จ่ายค่าเช่าวันที่ 5",
-    "พรุ่งนี้มีอะไรบ้าง"
+    "พรุ่งนี้มีอะไรบ้าง",
+    "เคล็ดลับ: แตะไมค์บนคีย์บอร์ดเพื่อพูดสั่งงาน"
    ]
   },
   "day": {
@@ -44,7 +46,8 @@
     "Move #3 to Friday",
     "Remind me to call mom at 7pm",
     "Done #2",
-    "Delete #4"
+    "Delete #4",
+    "Tip: tap the mic on your keyboard and just say it"
    ],
    "th": [
     "วันนี้เหลืออะไรบ้าง",
@@ -52,7 +55,8 @@
     "ย้าย #3 ไปวันศุกร์",
     "โทรหาแม่ 7 โมงเย็น",
     "เสร็จแล้ว #2",
-    "ลบ #4"
+    "ลบ #4",
+    "เคล็ดลับ: แตะไมค์บนคีย์บอร์ดแล้วพูดได้เลย"
    ]
   }
  },

@@ -706,3 +706,11 @@ footer { display: flex; justify-content: space-between; align-items: center; mar
 .focus-fill { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--ai-grad); transition: width 1s linear; }
 @media (max-width: 480px) { .focus-bar { bottom: 8px; } .focus-btns { margin-left: auto; } }
 @media (prefers-reduced-motion: reduce) { .focus-fill { display: none; } } /* digits only */
+
+/* Reminder banner: same glass pill as the focus bar, but at the top */
+.remind-bar { bottom: auto; top: 14px; z-index: 30; }
+.remind-head { font-size: .75rem; color: var(--accent); font-weight: 600; }
+.remind-opts { flex-basis: 100%; justify-content: flex-end; flex-wrap: wrap; }
+.remind-opts[hidden] { display: none; }
+/* phone: buttons drop to their own row so the task text stays readable */
+@media (max-width: 480px) { .remind-bar { top: 8px; bottom: auto; } .remind-bar .focus-btns { flex-basis: 100%; justify-content: flex-end; margin-left: 0; } }
