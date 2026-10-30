@@ -617,17 +617,60 @@ footer { display: flex; justify-content: space-between; align-items: center; mar
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .test-mode-badge { background: #f59e0b; color: #1c1917; box-shadow: 0 2px 8px rgba(245, 158, 11, .3); } }
 [data-theme="dark"] .test-mode-badge { background: #f59e0b; color: #1c1917; box-shadow: 0 2px 8px rgba(245, 158, 11, .3); }
 
-/* Ask Max: answer card under the command bar (minimal; George styles it) */
-.answer-card { position: relative; padding: 12px 40px 10px 14px; margin-bottom: 12px; }
+/* Ask Max: answer card under the command bar. Same family as the ask card:
+   glass card with a notch, Max's voice-wave avatar, then title, tidy rows and chips. */
+.answer-card {
+  position: relative; margin: 12px 0;
+  display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: 12px; align-items: start;
+  padding: 14px 8px 12px 12px; border-radius: 18px; border-color: var(--info-border);
+  background: linear-gradient(180deg, var(--accent-soft), var(--card) 85%);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-hi);
+  animation: ask-in .28s cubic-bezier(.2, .8, .2, 1);
+}
 .answer-card[hidden], #num-filter[hidden] { display: none; }
-.answer-title { margin: 0 0 6px; font-weight: 600; }
-.answer-close { position: absolute; top: 6px; right: 8px; width: 28px; height: 28px; border: 0; background: none; color: var(--muted); font-size: 1.2rem; border-radius: 8px; }
-.answer-rows { list-style: none; margin: 0; padding: 0; }
-.answer-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 4px; border: 0; background: none; text-align: left; border-radius: 8px; font-size: .9rem; }
+.answer-card::before {
+  content: ""; grid-column: 1; grid-row: 1; width: 30px; height: 30px; border-radius: 50%;
+  background: var(--wave-white) center / 16px no-repeat, var(--ai-grad); box-shadow: 0 3px 10px var(--ai-glow);
+}
+.answer-card::after {
+  content: ""; position: absolute; top: -7px; left: 22px; width: 12px; height: 12px; transform: rotate(45deg);
+  background: var(--accent-soft); border-left: 1px solid var(--info-border); border-top: 1px solid var(--info-border); border-top-left-radius: 3px;
+}
+.answer-card > * { grid-column: 2; min-width: 0; }
+.answer-title { grid-row: 1; margin: 0; min-height: 30px; display: flex; align-items: center; padding-right: 44px; font-weight: 600; font-size: .95rem; line-height: 1.45; }
+.answer-close {
+  position: absolute; top: 2px; right: 2px; width: 44px; height: 44px; display: grid; place-items: center;
+  border: 0; background: none; color: var(--muted); font-size: 1.4rem; line-height: 1; border-radius: 12px; cursor: pointer;
+}
+.answer-close:hover { color: var(--text); background: var(--accent-soft); }
+.answer-rows { list-style: none; margin: 6px 0 0; padding: 0; }
+.answer-rows li + li { border-top: 1px solid var(--border); }
+.answer-row {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) 8.6em minmax(4.4em, auto); align-items: center; column-gap: 10px; row-gap: 2px;
+  width: 100%; min-height: 44px; padding: 8px 8px 8px 4px; border: 0; background: none; color: var(--text);
+  text-align: left; border-radius: 10px; font: inherit; font-size: .92rem; line-height: 1.5; cursor: pointer;
+  transition: background .15s;
+}
 .answer-row:hover { background: var(--accent-soft); }
-.answer-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.answer-when { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.answer-when.overdue { color: var(--high); font-weight: 600; }
+.answer-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.answer-when { justify-self: end; text-align: right; color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.answer-when.overdue { color: var(--warn-text); background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 999px; padding: 0 9px; font-weight: 600; }
+.answer-cat { font-size: .78rem; white-space: nowrap; }
 .answer-more { margin: 4px 4px 0; color: var(--muted); font-size: .85rem; }
-.answer-actions { margin: 8px 0 0; }
+.answer-actions { margin: 10px 0 0; gap: 8px; }
+.answer-actions .chip { min-height: 40px; padding: 6px 16px; font-size: .9rem; background: var(--card); border-color: var(--border); color: var(--text); }
+.answer-actions .chip:first-child { background: var(--ai-grad); color: var(--on-accent); border-color: transparent; font-weight: 600; }
+.answer-actions .chip:first-child:only-child, .answer-actions .chip:first-child { box-shadow: 0 3px 10px var(--ai-glow); }
+.answer-card :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* List filter chip ("Showing #1, #4 x") */
+#num-filter .chip.active { min-height: 36px; }
+@media (max-width: 480px) {
+  .answer-card { grid-template-columns: 28px minmax(0, 1fr); column-gap: 10px; padding: 12px 6px 10px 10px; }
+  .answer-card::before { width: 28px; height: 28px; background-size: 15px auto, auto; }
+  .answer-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .answer-text { white-space: normal; overflow-wrap: anywhere; }
+  .answer-cat { grid-column: 2 / -1; justify-self: start; }
+  .answer-actions .chip { flex: 1 1 auto; }
+}
+@media (prefers-reduced-motion: reduce) { .answer-card { animation: none; } .answer-row { transition: none; } }
 
