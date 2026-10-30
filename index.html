@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
   <!-- ?v= makes browsers fetch the new file after an update (raise it on each release) -->
-  <link rel="stylesheet" href="style.css?v=28">
+  <link rel="stylesheet" href="style.css?v=30">
 </head>
 <body>
   <!-- Line icons, drawn once and reused with <use href="#i-..."> -->
@@ -53,7 +53,7 @@
             <button id="notify" class="ib" title="Reminders" aria-label="Reminders"><svg class="i"><use href="#i-bell"/></svg></button>
           </div>
           <!-- Team pill: filled from status.json; stays hidden where there is none (GitHub Pages) -->
-          <a href="status.html" class="team" id="team" title="Team status" hidden>
+          <a href="status.html" class="team" id="team" title="Team status" aria-label="Team status" hidden>
             <span class="avs" id="team-avs"></span><span data-i18n="team">Team</span><small id="team-working"></small>
           </a>
           <button id="more" class="ib only-phone" title="More" aria-label="More" aria-expanded="false" aria-controls="quick"><svg class="i"><use href="#i-dots"/></svg></button>

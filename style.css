@@ -526,6 +526,15 @@ footer { display: flex; justify-content: space-between; align-items: center; mar
   /* Header: language / dark / reminders fold into the three-dots menu; the team pill shows initials only */
   .only-phone { display: grid; }
   .team small { display: none; }
+  /* Narrow bar: the pill keeps just the overlapping avatars (label stays for screen readers) so the full title fits */
+  .team { gap: 0; padding: 0 8px 0 6px; height: 44px; }
+  .team > span[data-i18n] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .av { margin-left: -9px; }
+  .av:first-child { margin-left: 0; }
+  .brand { font-size: .88rem; }
+  /* Fixed bars (focus timer at the bottom, reminder at the top) must never hide the list: leave room while they show */
+  body:has(#focus-bar:not([hidden])) { padding-bottom: 130px; }
+  body:has(#remind-bar:not([hidden])) { padding-top: 120px; }
   .greet { font-size: 1.45rem; }
   .quick {
     display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 10;
@@ -707,6 +716,10 @@ footer { display: flex; justify-content: space-between; align-items: center; mar
 .focus-fill { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--ai-grad); transition: width 1s linear; }
 @media (max-width: 480px) { .focus-bar { bottom: 8px; } .focus-btns { margin-left: auto; } }
 @media (prefers-reduced-motion: reduce) { .focus-fill { display: none; } } /* digits only */
+
+/* Leave room for the fixed bars on every screen size (phones: see the 480px block) */
+body:has(#focus-bar:not([hidden])) { padding-bottom: 130px; }
+body:has(#remind-bar:not([hidden])) { padding-top: 120px; }
 
 /* Reminder banner: same glass pill as the focus bar, but at the top */
 .remind-bar { bottom: auto; top: 14px; z-index: 30; }
