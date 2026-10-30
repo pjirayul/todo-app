@@ -1321,11 +1321,101 @@ def guard_bare_add(result: dict, tasks: list) -> dict:
     return (pick_card(action, tasks) | {"tokens": result.get("tokens", 0)}) if action else result
 
 
-def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: int = None) -> dict:
-    """Same as work_out_command, but every result says which road it took: "rules" (Python alone) or "ai"."""
+# ---------- "Tell Max more…" and "Add as 2 tasks?" (job 0q-2) ----------
+# The page holds the first sentence ("pending") and sends it back as `earlier` with the owner's next message.
+# Python joins them and runs the normal road, so there is no new understanding code: only a join and a few checks.
+PENDING_SECONDS = 300   # an old question is forgotten after 5 minutes
+
+
+def join_pending(text: str, earlier, age, tasks: list):
+    """-> (sentence, joined). Joined = "earlier, text". Unrelated or too old = the new text alone, nothing half-done."""
+    earlier = " ".join(str(earlier or "").split())[:300]
+    low = " ".join(text.lower().split())
+    if not earlier or not isinstance(age, (int, float)) or age > PENDING_SECONDS:
+        return text, False
+    # Unrelated: a #number, a command word first, a question, or a long sentence that shares no word with anything
+    if re.search(r"#\s*\d", low) or any(rx.match(low) for rx in INTENT_WORDS.values()) or maybe_question(low, False):
+        return text, False
+    known = set(re.findall(r"\w+", " ".join([earlier] + [t["text"] for t in tasks]).lower()))
+    if len(low.split()) > 6 and not (set(re.findall(r"\w+", low)) & known):
+        return text, False
+    return (earlier + ", " + text)[:500], True
+
+
+JOINER = re.compile(r"\s(?:and|also|then)\s|,\s*then\s|และ|แล้วก็", re.I)
+SEVERAL_SCHEMA = {"type": "object", "properties": {"parts": {"type": "array", "items": {"type": "string"}}}, "required": ["parts"]}
+SEVERAL_INSTRUCTIONS = (
+    "Cut the sentence into separate to-do tasks. Two different actions (each with its own verb, like buy + call) are "
+    "2 tasks. A list of items, people or places after ONE verb is ONE task: return one part holding the whole sentence. "
+    "Copy the user's own words in each part: never add, change or translate words.\nExamples:\n"
+    '"buy milk and eggs" -> {"parts":["buy milk and eggs"]}\n'
+    '"meet Tom and Ann on friday" -> {"parts":["meet Tom and Ann on friday"]}\n'
+    '"call mom and pay rent" -> {"parts":["call mom","pay rent"]}\n'
+    '"water the plants and buy milk" -> {"parts":["water the plants","buy milk"]}\n'
+    '"send the report tomorrow and book a flight at 5pm" -> {"parts":["send the report tomorrow","book a flight at 5pm"]}\n'
+    '"ซื้อนมพรุ่งนี้ แล้วก็โทรหาแม่" -> {"parts":["ซื้อนมพรุ่งนี้","โทรหาแม่"]}\n'
+    '"กวาดบ้านและรดน้ำต้นไม้" -> {"parts":["กวาดบ้าน","รดน้ำต้นไม้"]}\n'
+    '"ซื้อไข่และนม" -> {"parts":["ซื้อไข่และนม"]}\n'
+)
+
+
+def could_be_several(s: str) -> bool:
+    """Fast path: only a joiner with a real chunk on both sides ("buy milk and eggs" has just "eggs") is worth an AI call."""
+    sides = JOINER.split(s, maxsplit=1)
+    big = lambda side: len(side.split()) >= 2 or (bool(THAI_LETTERS.search(side)) and len(side.strip()) >= 4)
+    return len(sides) == 2 and big(sides[0]) and big(sides[1])
+
+
+def check_parts(parts, s: str) -> list:
+    """The AI's parts, or [] = one task. 2-3 parts made of the owner's own words; all have a day/time or none does."""
+    if not isinstance(parts, list) or not 2 <= len(parts) <= 3:
+        return []
+    parts = [" ".join(str(p).split()) for p in parts]
+    for p in parts:   # each part must be a literal piece of the sentence: the 3B model invents or copies words ("tomorrow" twice)
+        if len(p) < 2 or p.lower() not in " ".join(s.lower().split()):
+            return []
+    dated = [bool(DAY_HINTS.search(p.lower())) or time_said(p.lower()) for p in parts]
+    # "call Tom and email Ann tomorrow": one shared day (the AI may even drop it from the parts) = one task
+    sentence_dated = bool(DAY_HINTS.search(s.lower())) or time_said(s.lower())
+    return parts if all(dated) or (not any(dated) and not sentence_dated) else []
+
+
+def several_card(s: str, result: dict, now: str, categories: list) -> dict:
+    """A plain new task with a joiner: ask the AI to cut it up. 2+ valid parts -> the "Add as 2 tasks?" card, else unchanged."""
+    if result.get("action") != "add" or not could_be_several(s):
+        return result
+    try:
+        r = parse_with_ollama("Sentence: " + s, SEVERAL_INSTRUCTIONS, SEVERAL_SCHEMA, timeout=30)
+    except Exception:
+        return result   # slow or broken AI never blocks the add: one task, as before
+    parts = check_parts(r.get("parts"), s)
+    if not parts:
+        return result | {"tokens": result.get("tokens", 0) + r.get("tokens", 0)}
+    memory = load_memory()
+    adds = []
+    for p in parts:   # Python reads each part's date; no AI
+        task = check_task({"text": p, "when": "none", "time": "", "priority": "med", "category": ""}, p, now, categories, memory)
+        adds.append({k: v for k, v in finish_add(task, p).items() if k != "askWhen"})   # no "When?" per part
+    one = {k: v for k, v in result.items() if k != "tokens"}
+    return {"action": "clarify", "case": "several", "id": uuid.uuid4().hex[:8], "q": "clarifyQ_several", "nums": [],
+            "options": [{"label": "opt_several", "do": {"action": "add_many", "tasks": adds}}, {"label": "opt_one", "do": one}],
+            "more": True, "tokens": result.get("tokens", 0) + r.get("tokens", 0)}
+
+
+def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: int = None,
+                earlier=None, age=None) -> dict:
+    """Same as work_out_command, but every result says which road it took: "rules" (Python alone) or "ai".
+    earlier + age (seconds): the owner's first sentence that Max asked "Tell me more" about."""
+    sentence, joined = join_pending(sentence, earlier, age, tasks)
     result = guard_bare_add(work_out_command(sentence, now, categories, tasks, chosen), tasks)
+    if joined and result.get("action") == "clarify":
+        result["more"] = False   # the owner already told Max more: a second card, but no "Tell Max more…" loop
+    elif not joined and chosen is None:
+        result = several_card(" ".join(strip_greeting(" ".join(sentence.split()))[0].split()), result, now, categories)
     result.setdefault("path", "ai" if result.get("tokens") else "rules")  # AI calls report their tokens
     return result
+
+
 
 
 def work_out_command(sentence: str, now: str, categories: list, tasks: list, chosen: int = None) -> dict:
@@ -1636,6 +1726,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.post_decision(self.path[len("/api/decisions/"):])
         if self.path == "/api/max/mistake":
             return self.post_mistake()
+        if self.path == "/api/max/clarify":
+            return self.post_clarify_answer()
         if self.path == "/api/backup":
             return self.post_backup()
         if self.path == "/api/breakdown":
@@ -1659,7 +1751,8 @@ class Handler(SimpleHTTPRequestHandler):
             if body.get("noAI"):  # the page's daily AI limit is reached: words only, no AI
                 answer = question_answer(sentence, now, body.get("categories", [])[:20], tasks, use_ai=False)
                 return self.send_json(answer or add_without_ai(strip_greeting(" ".join(sentence.split()))[0]))
-            result, status = run_command(sentence, now, body.get("categories", [])[:20], tasks, chosen), 200
+            earlier = str(body.get("earlier", ""))[:300] or None   # "Tell Max more…": the sentence Max asked about
+            result, status = run_command(sentence, now, body.get("categories", [])[:20], tasks, chosen, earlier, body.get("age")), 200
         except urllib.error.URLError:
             result, status = {"error": "Ollama isn't running. Start the Ollama app and try again."}, 502
         except Exception as e:
@@ -1704,6 +1797,19 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json({"error": "Too long"}, 413)
             ok = add_mistake(json.loads(self.rfile.read(size)))
             self.send_json({"ok": True} if ok else {"error": "Not a mistake record"}, 200 if ok else 400)
+        except Exception as e:
+            self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
+
+    def post_clarify_answer(self):
+        # Same protection as the inbox: only our own pages may write to the clarify log
+        if not self.from_our_page():
+            return
+        try:
+            size = int(self.headers.get("Content-Length") or 0)
+            if size > 1000:
+                return self.send_json({"error": "Too long"}, 413)
+            ok = add_clarify_answer(json.loads(self.rfile.read(size)))
+            self.send_json({"ok": True} if ok else {"error": "Not a card answer"}, 200 if ok else 400)
         except Exception as e:
             self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
 
@@ -2145,6 +2251,29 @@ def max_status() -> dict:
     return data
 
 
+# ---------- Which button wins (job 0q-3 will learn from this) ----------
+# One line per answered card: no sentences, only the case and the label picked. Private: data/ is gitignored.
+CLARIFY_LOG_FILE = os.path.join(DATA_DIR, "clarify-log.json")
+CLARIFY_LOG_MAX = 500
+
+
+def add_clarify_answer(body: dict) -> bool:
+    """Save {case, picked, at} from the page. picked = an option label (opt_several...), "more" or "none" (ignored/cancelled)."""
+    case, picked = str(body.get("case", "")), str(body.get("picked", ""))
+    if not re.fullmatch(r"[a-z]{2,12}", case) or not re.fullmatch(r"[a-z_]{2,20}", picked):
+        return False
+    try:
+        with open(CLARIFY_LOG_FILE, encoding="utf-8-sig") as f:
+            log = json.load(f)
+    except (OSError, ValueError):
+        log = []
+    log = (log if isinstance(log, list) else []) + [{"case": case, "picked": picked, "at": datetime.now().strftime("%Y-%m-%d %H:%M")}]
+    os.makedirs(os.path.dirname(CLARIFY_LOG_FILE), exist_ok=True)
+    with open(CLARIFY_LOG_FILE, "w", encoding="utf-8") as f:
+        json.dump(log[-CLARIFY_LOG_MAX:], f, ensure_ascii=False, indent=1)
+    return True
+
+
 # ---------- Learning loop: tasks Max added that the owner deleted a few minutes later ----------
 # Private and local only (data/ is gitignored). Toto reads it to turn mistakes into rules and tests.
 MISTAKES_FILE = os.path.join(DATA_DIR, "max-mistakes.json")
@@ -2341,7 +2470,7 @@ def warm_up_ollama():
 def use_test_mode():
     """Point every private file at a test copy and allow port 8001. Called only for --test."""
     global PORT, ALLOWED_HOSTS, ALLOWED_ORIGINS, DATA_DIR, DB_FILE, BACKUP_DIR
-    global MEMORY_FILE, STATUS_FILE, INBOX_FILE, IDEAS_FILE, MISTAKES_FILE, DECISIONS_FILE, DECISIONS_ARCHIVE_FILE
+    global MEMORY_FILE, STATUS_FILE, INBOX_FILE, IDEAS_FILE, MISTAKES_FILE, DECISIONS_FILE, DECISIONS_ARCHIVE_FILE, CLARIFY_LOG_FILE
     here = os.path.dirname(os.path.abspath(__file__))
     PORT = 8001
     ALLOWED_HOSTS = make_allowed_hosts(8001)
@@ -2354,6 +2483,7 @@ def use_test_mode():
     copies = {"max-memory.json": "MEMORY_FILE", "status.json": "STATUS_FILE",
               "inbox.json": "INBOX_FILE", "ideas.json": "IDEAS_FILE"}
     MISTAKES_FILE = os.path.join(DATA_DIR, "test-max-mistakes.json")  # starts empty, never a copy
+    CLARIFY_LOG_FILE = os.path.join(DATA_DIR, "test-clarify-log.json")  # starts empty, never a copy
     DECISIONS_FILE = os.path.join(DATA_DIR, "test-decisions.json")  # starts empty, never a copy
     DECISIONS_ARCHIVE_FILE = os.path.join(DATA_DIR, "test-decisions-archive.json")
     os.makedirs(DATA_DIR, exist_ok=True)

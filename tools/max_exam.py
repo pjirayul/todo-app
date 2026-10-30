@@ -42,6 +42,9 @@ def ask_ok(case, r):
         return not asked
     if want == "pick":
         return bool(r.get("pickTask")) or (r.get("action") == "clarify" and r.get("case") == "pick")
+    if want == "several":   # "Add 2 tasks?": the first button adds exactly case["parts"] tasks
+        got = len(r["options"][0]["do"].get("tasks", [])) if r.get("action") == "clarify" and r.get("options") else 0
+        return r.get("case") == "several" and got == case.get("parts", 2)
     return r.get("action") == "clarify" and r.get("case") == want and all(n in (r.get("nums") or []) for n in case.get("nums", []))
 
 
@@ -109,7 +112,8 @@ def main():
             calls["n"] = 0
             start = time.time()
             try:
-                r = server.run_command(case["s"], exam["now"], exam["categories"], [dict(t) for t in exam["tasks"]])
+                r = server.run_command(case["s"], exam["now"], exam["categories"], [dict(t) for t in exam["tasks"]],
+                                       earlier=case.get("earlier"), age=10)   # "earlier" = the sentence Max asked "Tell me more" about
             except Exception as err:   # a crash is a wrong answer, not the end of the exam
                 r = {"action": "error:" + type(err).__name__}
             seconds.append(time.time() - start)

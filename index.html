@@ -73,6 +73,7 @@
       <div class="hint-field"><input id="todo-input" type="text" aria-label="Tell Max" placeholder=" " autocomplete="off" required><span class="hint-ph" aria-hidden="true"></span></div>
       <button type="submit" id="add-btn" class="primary" data-i18n="add">Go</button>
     </form>
+    <p id="pending-bar" class="cmd-msg" role="status"></p> <!-- "Answering Max: …" while Max waits for more words -->
     <p id="cmd-msg" class="cmd-msg" role="status"></p>
     <!-- Ask Max: the answer to a question about the tasks (filled in by script.js) -->
     <div id="answer-card" class="card answer-card" role="region" aria-live="polite" hidden></div>
@@ -160,6 +161,6 @@
   </div>
 
   <script src="hints.js?v=1"></script>
-  <script src="script.js?v=39"></script>
+  <script src="script.js?v=40"></script>
 </body>
 </html>

@@ -38,7 +38,9 @@ const TEXT = {
     notifyNone: "This browser can't show reminders.", limitSaved: (n) => `Daily AI limit: ${n} tokens`,
     sureClear: (n) => `Delete ${n} done task${n === 1 ? "" : "s"}?`, yesClear: "Yes, delete",
     clarifyQ_done: "Mark this done?", clarifyQ_delete: "Cancel (delete) this task?", clarifyQ_change: "Change this task?",
-    clarifyQ_similar: "Which one?", clarifyQ_pick: "Which task?",
+    clarifyQ_similar: "Which one?", clarifyQ_pick: "Which task?", clarifyQ_several: "Add as separate tasks?",
+    opt_several: (names) => `Add ${names.length} tasks: ${names.map((x) => `"${x}"`).join(", ")}`, opt_one: "One task", tellMore: "Tell Max more…",
+    answeringMax: "Answering Max:", addedMany: (nums) => `Max added ${nums.map((n) => "#" + n).join(", ")}`,
     opt_complete: "Done", opt_delete: "Cancel", opt_update: "Change", opt_edit: "Edit", opt_uncomplete: "Reopen", opt_add: "Add as new task",
     askWhich: "Which one?", askWhichTask: "Which task?", askWhen: (x) => `When is "${x}"?`,
     today: "Today", tomorrow: "Tomorrow", pickDate: "Pick date", noDate: "No date", ok: "OK", askDate: "Which day?",
@@ -111,7 +113,9 @@ const TEXT = {
     notifyNone: "เบราว์เซอร์นี้แสดงการแจ้งเตือนไม่ได้", limitSaved: (n) => `ขีดจำกัด AI ต่อวัน: ${n} โทเคน`,
     sureClear: (n) => `ลบงานที่เสร็จแล้ว ${n} งาน ใช่ไหม?`, yesClear: "ใช่ ลบเลย",
     clarifyQ_done: "ทำเครื่องหมายว่าเสร็จ?", clarifyQ_delete: "ยกเลิก (ลบ) งานนี้?", clarifyQ_change: "แก้งานนี้?",
-    clarifyQ_similar: "หมายถึงงานไหน?", clarifyQ_pick: "งานไหน?",
+    clarifyQ_similar: "หมายถึงงานไหน?", clarifyQ_pick: "งานไหน?", clarifyQ_several: "เพิ่มเป็นหลายงานไหม?",
+    opt_several: (names) => `เพิ่ม ${names.length} งาน: ${names.map((x) => `"${x}"`).join(", ")}`, opt_one: "งานเดียว", tellMore: "บอก Max เพิ่ม…",
+    answeringMax: "กำลังตอบ Max:", addedMany: (nums) => `Max เพิ่ม ${nums.map((n) => "#" + n).join(", ")} แล้ว`,
     opt_complete: "เสร็จแล้ว", opt_delete: "ยกเลิก", opt_update: "แก้", opt_edit: "แก้ไข", opt_uncomplete: "เปิดใหม่", opt_add: "เพิ่มเป็นงานใหม่",
     askWhich: "หมายถึงงานไหน?", askWhichTask: "งานไหน?", askWhen: (x) => `"${x}" เมื่อไหร่?`,
     today: "วันนี้", tomorrow: "พรุ่งนี้", pickDate: "เลือกวัน", noDate: "ไม่ระบุวัน", ok: "ตกลง", askDate: "วันไหน?",
@@ -953,17 +957,26 @@ async function askWhichTask(text, cmd) {
 // The server (clarify() in server.py) sends {case, options:[{label, num, do}]}; every "do" is the complete command.
 // Nothing is saved until a button is clicked. Cancel / Escape / ignoring = no change, the text stays in the box.
 const clarifyLabel = (o) => {
-  if (!o.num) return t(o.label);                       // "Add as new task"
+  if (o.do.action === "add_many") return t(o.label)(o.do.tasks.map((x) => x.text)); // "Add 2 tasks: …"
+  if (!o.num) return t(o.label);                       // "Add as new task" / "One task"
   const x = todos.find((y) => y.num === o.num);
   if (!x) return `${t(o.label)} #${o.num}`;
   const when = o.do.changes?.due ? " → " + shortDate(o.do.changes.due) : "";
   return `${t(o.label)} "${x.text.length > 30 ? x.text.slice(0, 29) + "…" : x.text}" #${x.num}${when}`;
 };
-async function askClarify(card) {
+async function askClarify(card, text = "") {
   const choices = card.options.map((o, i) => ({ label: clarifyLabel(o), value: i, primary: i === 0 }));
+  if (card.more && text) choices.push({ label: t("tellMore"), value: "more" }); // free text: Max keeps the sentence and waits
   const answer = await askMax(t("clarifyQ_" + card.case), [...choices, { label: t("cancel"), value: null }]);
+  logClarify(card.case, !answer ? "none" : answer.value === "more" ? "more" : card.options[answer.value].label);
   if (!answer) return; // ignored or cancelled: nothing changes
+  if (answer.value === "more") return setPending(text);
   const act = card.options[answer.value].do;
+  if (act.action === "add_many") { // "Add 2 tasks": one message for all of them
+    const nums = [];
+    for (const task of act.tasks) { addTask(task, "quiet"); nums.push(todos[todos.length - 1].num); }
+    return showMessage(t("addedMany")(nums));
+  }
   if (act.action === "add") return act.askWhen ? askWhenThenAdd(act) : addTask(act);
   if (act.action === "edit") { // "move" alone: open that task's editor
     const x = todos.find((y) => y.num === act.num);
@@ -1005,6 +1018,35 @@ async function askWhenThenAdd(task) {
   addTask({ ...task, due });
 }
 
+// "Tell Max more…": the page holds the first sentence for 5 minutes (not saved: a reload forgets it, which is safe).
+// The next message goes to the server together with it; Python joins them and runs the normal road.
+let pending = null; // { text, at }
+let pendingTimer = 0;
+function setPending(text) {
+  pending = text ? { text, at: Date.now() } : null;
+  clearTimeout(pendingTimer);
+  if (pending) pendingTimer = setTimeout(() => setPending(""), 300000);
+  const bar = $("pending-bar");
+  bar.replaceChildren();
+  if (!pending) return;
+  const label = document.createElement("span");
+  label.textContent = `${t("answeringMax")} ${text.length > 60 ? text.slice(0, 59) + "…" : text}`; // textContent: never HTML
+  const drop = document.createElement("button");
+  drop.type = "button";
+  drop.className = "chip";
+  drop.textContent = t("cancel");
+  drop.addEventListener("click", () => { setPending(""); $("todo-input").focus(); });
+  bar.append(label, drop);
+  $("todo-input").value = "";
+  $("todo-input").focus();
+}
+// Which button was picked (private log on this PC for Max's learning; no sentences). Never blocks anything.
+function logClarify(caseName, picked) {
+  if (!LOCAL) return;
+  fetch("api/max/clarify", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ case: caseName, picked }), signal: AbortSignal.timeout(5000) }).catch(() => {});
+}
+
 $("todo-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = $("todo-input").value.trim();
@@ -1035,7 +1077,9 @@ $("todo-form").addEventListener("submit", async (e) => {
     try {
       if (usageToday() >= settings.aiLimit) throw new Error(t("limitHit"));
       if (!LOCAL) throw new Error("no AI server here (GitHub Pages)"); // straight to the simple fallback
-      const data = await parseWithMax(text);
+      const held = pending && Date.now() - pending.at <= 300000 ? pending : null;
+      setPending(""); // used (or too old): never kept for a third message
+      const data = await parseWithMax(text, held ? { earlier: held.text, age: Math.round((Date.now() - held.at) / 1000) } : {});
       if (data.action === "smalltalk") { // Max decided it is chit-chat: show his short reply, add nothing
         $("todo-input").value = "";
         hideAnswer();
@@ -1079,7 +1123,7 @@ $("todo-form").addEventListener("submit", async (e) => {
       showMessage(""); // drop "Max is thinking…"
       $("todo-input").value = "";
       showAnswer(answer);
-    } else if (cmd?.action === "clarify") followUp = () => askClarify(cmd);
+    } else if (cmd?.action === "clarify") followUp = () => askClarify(cmd, text);
     else if (cmd?.pickTask || cmd?.choices?.length) followUp = () => askWhichTask(text, cmd);
     else if (cmd) finishCommand(cmd);
     else if (task.askWhen) followUp = () => askWhenThenAdd(task);
