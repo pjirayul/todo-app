@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
   <!-- ?v= makes browsers fetch the new file after an update (raise it on each release) -->
-  <link rel="stylesheet" href="style.css?v=24">
+  <link rel="stylesheet" href="style.css?v=25">
 </head>
 <body>
   <!-- Line icons, drawn once and reused with <use href="#i-..."> -->
@@ -30,6 +30,9 @@
     <symbol id="i-steps" viewBox="0 0 24 24"><path d="M4 7l1.8 1.8L9 5.5M4 15.5l1.8 1.8L9 14M12.5 7.5H20M12.5 16H20"/></symbol>
     <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.7 17.2a1.7 1.7 0 0 1-2.4-2.4L15 7"/></symbol>
     <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></symbol>
+    <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 1.5M9.5 3h5"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z"/></symbol>
     <symbol id="i-history" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3.5 3.5V8H8"/><path d="M12 8v4.5l3 2"/></symbol>
   </svg>
 
@@ -123,7 +126,23 @@
     </details>
   </main>
 
+  <!-- Focus timer bar: outside the task list on purpose (the list is redrawn often); script.js fills it in -->
+  <div id="focus-bar" class="focus-bar" role="status" hidden>
+    <svg class="i" aria-hidden="true"><use href="#i-timer"/></svg>
+    <div class="focus-info"><div id="focus-title" class="focus-title"></div><div id="focus-time" class="focus-time"></div></div>
+    <div id="focus-run" class="focus-btns">
+      <button id="focus-pause" class="ib" type="button"></button>
+      <button id="focus-plus" class="ib focus-plus" type="button"></button>
+      <button id="focus-stop" class="ib" type="button"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <div id="focus-end" class="focus-btns" hidden>
+      <button id="focus-done" class="chip active" type="button"></button>
+      <button id="focus-later" class="chip" type="button"></button>
+    </div>
+    <span id="focus-fill" class="focus-fill" aria-hidden="true"></span>
+  </div>
+
   <script src="hints.js?v=1"></script>
-  <script src="script.js?v=31"></script>
+  <script src="script.js?v=32"></script>
 </body>
 </html>

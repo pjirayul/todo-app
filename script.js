@@ -24,6 +24,8 @@ const TEXT = {
     yesRestore: "Yes, restore", yesImport: "Yes, import", restored: (n) => `Done. You now have ${n}.`,
     badFile: "That file isn't a task export from this app.",
     changedElsewhere: "Your tasks were changed in another window, so the latest list is shown. This window's last change was saved as a backup (Backup › Restore).",
+    focusStart: "Focus 25 min", focusPause: "Pause", focusResume: "Resume", focusStop: "Stop focus", focusPlus: "+5 min",
+    focusPaused: "Paused", focusNice: (n) => `Nice focus! Mark #${n} done?`, focusDone: "Done", focusNotYet: "Not yet", focusBody: "Focus time is over",
     breakdown: "Break it down", stepsThinking: "Max is thinking of steps…", addSelected: "Add selected",
     stepsOffline: "Break it down needs Max, the AI server on your PC.", stepsFail: "Max couldn't come up with steps right now. Is Ollama running? Try again.",
     stepsPick: "Max suggests these steps. Pick the ones to add:", removeStep: "Remove step",
@@ -91,6 +93,8 @@ const TEXT = {
     yesRestore: "ใช่ กู้คืน", yesImport: "ใช่ นำเข้า", restored: (n) => `เรียบร้อย ตอนนี้มี ${n}`,
     badFile: "ไฟล์นี้ไม่ใช่ไฟล์งานที่ส่งออกจากแอปนี้",
     changedElsewhere: "งานถูกแก้ไขจากหน้าต่างอื่น จึงแสดงรายการล่าสุด การแก้ไขล่าสุดของหน้านี้ถูกสำรองไว้ (สำรองข้อมูล › กู้คืน)",
+    focusStart: "โฟกัส 25 นาที", focusPause: "หยุดชั่วคราว", focusResume: "เริ่มต่อ", focusStop: "หยุดโฟกัส", focusPlus: "+5 นาที",
+    focusPaused: "หยุดอยู่", focusNice: (n) => `โฟกัสได้ดีมาก! ทำ #${n} เสร็จแล้วใช่ไหม?`, focusDone: "เสร็จแล้ว", focusNotYet: "ยังไม่เสร็จ", focusBody: "หมดเวลาโฟกัสแล้ว",
     breakdown: "แตกเป็นขั้นตอน", stepsThinking: "Max กำลังคิดขั้นตอน…", addSelected: "เพิ่มที่เลือก",
     stepsOffline: "การแตกเป็นขั้นตอนต้องใช้ Max (เซิร์ฟเวอร์ AI บนคอมของคุณ)", stepsFail: "Max ยังคิดขั้นตอนไม่ออกตอนนี้ Ollama เปิดอยู่ไหม? ลองอีกครั้ง",
     stepsPick: "Max แนะนำขั้นตอนเหล่านี้ เลือกที่จะเพิ่ม:", removeStep: "ลบขั้นตอน",
@@ -238,6 +242,7 @@ function render() {
   $("theme").innerHTML = `<svg class="i"><use href="#i-${settings.theme === "dark" ? "sun" : "moon"}"/></svg>`;
   $("notify").classList.toggle("on", "Notification" in window && Notification.permission === "granted");
   drawGreeting();
+  drawFocus(); // only the bar's own text (the bar lives outside the list)
 
   // AI usage bar: green, then yellow from 70%, red when full
   const used = usageToday();
@@ -322,6 +327,7 @@ function render() {
         ${stepsHtml(todo)}
         ${suggest?.id === todo.id ? suggestHtml() : ""}
       </div>
+      <button class="edit focus-btn" title="${t("focusStart")}" aria-label="${t("focusStart")}"><svg class="i" aria-hidden="true"><use href="#i-timer"/></svg></button>
       <button class="edit breakdown" title="${t("breakdown")}" aria-label="${t("breakdown")}"><svg class="i" aria-hidden="true"><use href="#i-breakdown"/></svg></button>
       <button class="edit" title="Edit" aria-label="Edit"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></button>
       <button class="delete" title="Delete" aria-label="Delete"><svg class="i" aria-hidden="true"><use href="#i-trash"/></svg></button>`;
@@ -1092,6 +1098,8 @@ $("todo-list").addEventListener("click", async (e) => {
   } else if (e.target.classList.contains("suggest-cancel")) {
     suggest = null;
     render();
+  } else if (e.target.classList.contains("focus-btn")) {
+    startFocus(findTodo(e.target)); // checked before "edit": same look, different job
   } else if (e.target.classList.contains("breakdown")) {
     breakDown(findTodo(e.target)); // checked before "edit": this button also has the edit class for its look
   } else if (e.target.classList.contains("edit")) {
@@ -1342,6 +1350,98 @@ function checkReminders() {
   else render(); // refresh "overdue" colors as time passes
 }
 setInterval(checkReminders, 30000);
+
+// ---------- 8b. Focus timer ----------
+// One task at a time. Saved as { id, endsAt } (ms) in localStorage only: no new task field, so nothing to
+// lose on load. A paused timer keeps { id, endsAt: 0, left } instead. The clock always shows endsAt - now,
+// never counted ticks, because phones pause JavaScript when locked and a reload must not lose the time.
+const FOCUS_MS = 25 * 60 * 1000;
+let focus = load("focus", null);
+let focusTick = null; // the 1-second timer, only alive while a countdown runs
+let audioCtx = null; // made on the Start tap: iPhones keep sound locked until a tap
+let chimed = false;  // chime once per finished timer
+
+const focusTodo = () => focus && todos.find((x) => x.id === focus.id);
+const focusLeft = () => (focus.endsAt ? Math.max(0, focus.endsAt - Date.now()) : focus.left);
+const setFocus = (value) => { focus = value; if (value) save("focus", value); else localStorage.removeItem("focus"); };
+
+function startFocus(todo, ms = FOCUS_MS) {
+  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch {} // no sound is fine
+  chimed = false;
+  setFocus({ id: todo.id, endsAt: Date.now() + ms });
+  drawFocus();
+}
+
+function stopFocus() { setFocus(null); drawFocus(); }
+
+// Two soft notes, quiet; any failure just means a silent finish
+function chime() {
+  try {
+    [660, 880].forEach((freq, i) => {
+      const osc = audioCtx.createOscillator(), gain = audioCtx.createGain(), at = audioCtx.currentTime + i * 0.35;
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.15, at + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.9);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(at); osc.stop(at + 1);
+    });
+  } catch {}
+}
+
+// Update the bar. Called every second while counting, and from render() (language/theme/task changes).
+function drawFocus() {
+  const bar = $("focus-bar");
+  const todo = focusTodo();
+  if (focus && !todo) setFocus(null); // the task was deleted meanwhile
+  bar.hidden = !focus;
+  clearInterval(focusTick); focusTick = null;
+  if (!focus) return;
+  const left = focusLeft();
+  const over = focus.endsAt && left <= 0;
+  const secs = Math.ceil(left / 1000);
+  const clock = `${String(Math.floor(secs / 60)).padStart(2, "0")}:${String(secs % 60).padStart(2, "0")}`;
+  $("focus-title").textContent = `#${todo.num} ${todo.text}`;
+  $("focus-time").textContent = over ? t("focusNice")(todo.num) : focus.endsAt ? clock : `${clock} · ${t("focusPaused")}`;
+  $("focus-fill").style.width = over ? "100%" : `${Math.min(100, 100 - (left / FOCUS_MS) * 100)}%`;
+  $("focus-run").hidden = over;
+  $("focus-end").hidden = !over;
+  $("focus-done").textContent = t("focusDone");
+  $("focus-later").textContent = t("focusNotYet");
+  $("focus-plus").textContent = t("focusPlus");
+  $("focus-plus").title = t("focusPlus");
+  const pauseLabel = t(focus.endsAt ? "focusPause" : "focusResume");
+  $("focus-pause").title = pauseLabel;
+  $("focus-pause").setAttribute("aria-label", pauseLabel);
+  $("focus-pause").innerHTML = `<svg class="i" aria-hidden="true"><use href="#i-${focus.endsAt ? "pause" : "play"}"/></svg>`;
+  $("focus-stop").title = t("focusStop");
+  $("focus-stop").setAttribute("aria-label", t("focusStop"));
+  if (over && !chimed) { // the first time we see the end
+    chimed = true;
+    chime();
+    if ("Notification" in window && Notification.permission === "granted") new Notification(t("focusBody"), { body: todo.text });
+  }
+  if (focus.endsAt && !over) focusTick = setInterval(drawFocus, 1000);
+}
+
+$("focus-pause").addEventListener("click", () => {
+  if (focus.endsAt) setFocus({ id: focus.id, endsAt: 0, left: focusLeft() }); // freeze the time left
+  else setFocus({ id: focus.id, endsAt: Date.now() + focus.left });
+  drawFocus();
+});
+$("focus-plus").addEventListener("click", () => {
+  chimed = false;
+  if (focus.endsAt) setFocus({ id: focus.id, endsAt: Math.max(Date.now(), focus.endsAt) + 5 * 60 * 1000 });
+  else setFocus({ id: focus.id, endsAt: 0, left: focus.left + 5 * 60 * 1000 });
+  drawFocus();
+});
+$("focus-stop").addEventListener("click", stopFocus);
+$("focus-later").addEventListener("click", stopFocus);
+$("focus-done").addEventListener("click", () => {
+  const todo = focusTodo();
+  stopFocus();
+  if (todo && !todo.done) { backup(`before done #${todo.num}`); todo.done = true; update(); }
+});
 
 // ---------- 9. Task backups ----------
 // Tasks only live in this browser, so before changes we send a copy to server.py, which saves

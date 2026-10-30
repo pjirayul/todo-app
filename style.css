@@ -683,3 +683,26 @@ footer { display: flex; justify-content: space-between; align-items: center; mar
 }
 @media (prefers-reduced-motion: reduce) { .answer-card { animation: none; } .answer-row { transition: none; } }
 
+
+/* Focus timer bar: a calm glass pill fixed at the bottom; its text changes each second, nothing else moves */
+.focus-bar {
+  position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 20;
+  width: min(560px, calc(100% - 24px)); box-sizing: border-box; overflow: hidden;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 10px 14px;
+  background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--chip-on-line); border-radius: 16px;
+  box-shadow: var(--hover-shadow), inset 0 1px 0 var(--glass-hi); color: var(--text);
+}
+.focus-bar[hidden] { display: none; }
+.focus-bar > .i { color: var(--accent); flex: none; }
+.focus-info { flex: 1; min-width: 0; }
+.focus-title { font-weight: 600; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.focus-time { font-size: 1.2rem; font-variant-numeric: tabular-nums; color: var(--accent); }
+.focus-btns { display: flex; align-items: center; gap: 6px; }
+.focus-btns[hidden] { display: none; }
+.focus-bar .ib, .focus-bar .chip { min-height: 44px; min-width: 44px; }
+.focus-plus { font-size: .85rem; font-weight: 600; width: auto; padding: 0 10px; }
+.focus-bar .chip { padding: 6px 16px; }
+.focus-fill { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--ai-grad); transition: width 1s linear; }
+@media (max-width: 480px) { .focus-bar { bottom: 8px; } .focus-btns { margin-left: auto; } }
+@media (prefers-reduced-motion: reduce) { .focus-fill { display: none; } } /* digits only */
