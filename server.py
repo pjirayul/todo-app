@@ -2069,8 +2069,21 @@ def add_mistake(body: dict) -> bool:
 # ---------- Command inbox (Team Status page) ----------
 INBOX_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inbox.json")
 # The names this server answers to (without the port). To add another device or name, add one line here.
-HOST_NAMES = ("127.0.0.1", "localhost",
-              "100.66.1.68", "desktop-ldeu8ir", "desktop-ldeu8ir.tailea71da.ts.net")  # this PC on Tailscale
+# This PC's own Tailscale IP/names are private, and this code goes to a public repo, so they live in
+# data/local-hosts.json (gitignored), e.g. ["100.x.y.z", "my-pc", "my-pc.my-tailnet.ts.net"]. No file = none.
+LOCAL_HOSTS_FILE = os.path.join(DATA_DIR, "local-hosts.json")
+
+
+def load_local_hosts(path: str = LOCAL_HOSTS_FILE) -> tuple:
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            data = json.load(f)
+        return tuple(str(h).strip().lower() for h in data if str(h).strip()) if isinstance(data, list) else ()
+    except (OSError, ValueError):
+        return ()
+
+
+HOST_NAMES = ("127.0.0.1", "localhost") + load_local_hosts()
 # Only these computers may connect: this PC and the owner's Tailscale network (private, logged-in
 # devices only). The server listens on 0.0.0.0, so this check is what keeps home Wi-Fi/LAN and
 # the internet out even if the firewall lets them through.

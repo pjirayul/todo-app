@@ -6,6 +6,8 @@ No AI, no Ollama, no server and no real data are used:
 - About me (load_memory) is replaced by the default times,
 - "now" is frozen to Wednesday 28 Oct 2026, 10:00, so the tests never depend on today's date.
 """
+import json
+import os
 import pathlib
 import re
 import unittest
@@ -694,17 +696,32 @@ class MistakesLog(unittest.TestCase):
 
 class TailscaleAccessTests(unittest.TestCase):
     def test_client_ip(self):
-        for ip in ("127.0.0.1", "::1", "100.66.1.68", "100.103.242.114", "fd7a:115c:a1e0::1"):
+        for ip in ("127.0.0.1", "::1", "100.64.0.5", "100.100.100.100", "fd7a:115c:a1e0::1"):
             self.assertTrue(server.client_ip_ok(ip), ip)
         for ip in ("192.168.1.10", "8.8.8.8", "100.128.0.1", "fd00::1", "nonsense"):
             self.assertFalse(server.client_ip_ok(ip), ip)
 
     def test_host_allowlist(self):
-        hosts = server.make_allowed_hosts(8000)
-        for h in ("127.0.0.1:8000", "100.66.1.68:8000", "desktop-ldeu8ir:8000", "desktop-ldeu8ir.tailea71da.ts.net:8000"):
-            self.assertIn(h, hosts)
-        self.assertNotIn("evil.com:8000", hosts)
-        self.assertIn("100.66.1.68:8001", server.make_allowed_hosts(8001))
+        # made-up names; the owner's real ones are in data/local-hosts.json (private)
+        old = server.HOST_NAMES
+        server.HOST_NAMES = ("127.0.0.1", "localhost", "100.64.0.5", "my-pc", "my-pc.example-tailnet.ts.net")
+        try:
+            hosts = server.make_allowed_hosts(8000)
+            for h in ("127.0.0.1:8000", "100.64.0.5:8000", "my-pc:8000", "my-pc.example-tailnet.ts.net:8000"):
+                self.assertIn(h, hosts)
+            self.assertNotIn("evil.com:8000", hosts)
+            self.assertIn("100.64.0.5:8001", server.make_allowed_hosts(8001))
+        finally:
+            server.HOST_NAMES = old
+
+    def test_local_hosts_file(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "h.json")
+            self.assertEqual(server.load_local_hosts(p), ())  # missing file = none
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(["100.64.0.5", "My-PC"], f)
+            self.assertEqual(server.load_local_hosts(p), ("100.64.0.5", "my-pc"))
 
 
 class FastPath(unittest.TestCase):

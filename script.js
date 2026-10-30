@@ -173,8 +173,8 @@ const newNum = () => { save("nextNum", nextNum + 1); return nextNum++; };
 // Running on this PC with server.py? On GitHub Pages there is no server, so the parts that need it
 // (Max, database, backups, team status) are skipped instead of failing in the console.
 // The PC's Tailscale names/IP (phone access) count as the server too; pjirayul.github.io does not.
-const LOCAL = ["127.0.0.1", "localhost", "desktop-ldeu8ir"].includes(location.hostname) ||
-  location.hostname.endsWith(".ts.net") || location.hostname.startsWith("100.");
+const LOCAL = ["127.0.0.1", "localhost"].includes(location.hostname) ||
+  !location.hostname.includes(".") || location.hostname.endsWith(".ts.net") || location.hostname.startsWith("100.");
 const firstVisit = load("settings", null) === null;
 let settings = { lang: "en", theme: "light", aiLimit: 20000, repeatMin: 0, ...load("settings", {}) };
 
