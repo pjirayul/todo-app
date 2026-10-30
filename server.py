@@ -296,7 +296,7 @@ CLOCK_TIME = re.compile(r"\d\s*(:\s*\d\d|\.\d\d|am\b|pm\b|น\.|โมง|ทุ
 # A little linking word stuck to a date ("ในวันศุกร์", "ภายในพรุ่งนี้", "ตอนบ่ายสาม") goes away with it; the same
 # word anywhere else ("ของในตู้เย็น") stays. The lead word is tried first, so "ตอนบ่ายสาม" is cut whole.
 THAI_DATE_WORDS = (r"(?:ภายใน|ใน|ตอน|เมื่อ)?(?:มะรืนนี้|มะรืน|พรุ่งนี้|วันนี้|คืนนี้|ตอนเช้า|ตอนเย็น|ตอนบ่าย|ด่วน|ไม่รีบ|"
-                   r"(วัน)?(จันทร์|อังคาร|พุธ|พฤหัส(บดี)?|ศุกร์|เสาร์|อาทิตย์)(หน้า)?|วันที่\s*\d+|"
+                   r"(วัน)?(จันทร์|อังคาร|พุธ|พฤหัส(บดี)?|ศุกร์|เสาร์|อาทิตย์)(หน้า|นี้)?|วันที่\s*\d+|"
                    r"(" + THAI_TIME_ANY + r")(\s*ครึ่ง)?|\d+\s*(โมง|ทุ่ม)|(สัปดาห์|เดือน)หน้า|อีก\s*\d+\s*(วัน|สัปดาห์|อาทิตย์)|สิ้นเดือน|ปลายเดือน|ต้นเดือนหน้า|สุดสัปดาห์)")
 THAI_LETTERS = re.compile(r"[฀-๿]")
 
@@ -688,9 +688,9 @@ def break_down(text: str, notes: str, due: str, model: str = None) -> dict:
 # Python spots the action and the target (reliable); the AI is only used to read dates.
 # Each pattern must match at the START of the sentence (after lowercasing).
 UNDO_WORDS = r"^(undo|undone|uncheck|unmark|reopen|not done)\b|ยังไม่เสร็จ|ยกเลิกเสร็จ"
-DELETE_WORDS = r"^(delete|remove|del|erase)\b|^ลบ"
-DONE_WORDS = r"^(done|mark|tick|finished|completed)\b|\b(done|finished|completed)$|เสร็จ(แล้ว)?$|^เสร็จ"
-UPDATE_WORDS = r"^(change|modify|move|rename|set|edit|update|reschedule|postpone)\b|^(เปลี่ยน|แก้|ย้าย|เลื่อน)"
+DELETE_WORDS = r"^(delete|remove|del|erase|cancel(?=\s*#)|get rid of)\b|^ลบ"
+DONE_WORDS = r"^(done|mark(?!['’])|tick|finished|completed)\b|\b(done|finished|completed)$|เสร็จ(แล้ว)?$|^เสร็จ"
+UPDATE_WORDS = r"^(change|modify|move|rename|set|edit|update|reschedule|postpone|push|delay)\b|^(เปลี่ยน|แก้|ย้าย|เลื่อน)"
 # Filler words removed around the target ("mark #2 as done", "งาน #1 เสร็จแล้ว")
 FILLER = r"^((the|task|as|is|of|to)\b|งาน|ของ|ให้เป็น|เป็น|ไปเป็น|ไป)\s*"
 FIELD_WORDS = {"category": "category", "cat": "category", "หมวดหมู่": "category", "หมวด": "category",
@@ -909,7 +909,7 @@ def question_filter(low: str, now: datetime, categories: list) -> dict:
         low = low[:m.start()] + " " + low[m.end():]
         if f["text"] in [n.lower() for n in names]:  # "about work" means the category Work
             f["cat"], f["text"] = f["text"], ""
-    if re.search(r"overdue|\blate\b|past due|เลยกำหนด|เกินกำหนด|งานค้าง", low):
+    if re.search(r"overdue|\blate\b|past due|เลยกำหนด|เกินกำหนด|งานค้าง|ค้างอยู่", low):
         f["when"] = "overdue"
     elif re.search(r"no (due )?date|without (a )?(due )?date|undated|ไม่มีวันที่|ไม่มีกำหนด", low):
         f["when"] = "none"
@@ -1238,8 +1238,9 @@ def understand(s: str, now: str, categories: list, tasks: list, greeted: bool = 
         done["path"] = "ai"
         return done
 
-    if rules_result is not None:
-        return None   # a command word started the sentence but the AI saw no command: keep Python's answer
+    if rules_result is not None and re.search(r"#\s*\d", low):
+        return None   # "done #99": keep Python's "can't find #99". Without a #number, a command word that matches no task
+        #               ("Mark's birthday gift friday", "Move car to garage") is just a new task
     # (an intent the sentence has no command words for is still a plain task: its fields are already filled)
     return finish_add(check_task(r, sentence, now, known, memory), s) | {"path": "ai"}
 
@@ -1277,6 +1278,10 @@ def work_out_command(sentence: str, now: str, categories: list, tasks: list, cho
     return understand(s, now, categories, tasks, greeted, result) or result or add_task(s, now, categories)
 
 
+# Other ways to say #3 (only used once a command word is there, so "buy item 3" stays a task)
+NUMBER_FORMS = re.compile(r"(?:ข้อที่|ข้อ|งานที่|งานข้อ|\bno\.?|\bnumber|\btask|\bitem)\s*(\d+)", re.I)
+
+
 def command_by_rules(s: str, now: str, categories: list, tasks: list, chosen: int = None):
     """Python's own reading of a command (done/undo/delete/change). None = no command words: it is a new task."""
     # "#9 rename to milk" means the same as "rename #9 to milk": put the action word first
@@ -1296,6 +1301,7 @@ def command_by_rules(s: str, now: str, categories: list, tasks: list, chosen: in
     else:
         return None
 
+    s = NUMBER_FORMS.sub(r"#\1", s)   # "ข้อ 3", "no. 3", "number 3" all mean #3
     # Remove the action words, keep what's left
     rest = s
     for pattern in (UNDO_WORDS, DELETE_WORDS, DONE_WORDS, UPDATE_WORDS):

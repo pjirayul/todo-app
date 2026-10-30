@@ -30,6 +30,13 @@ def fake_ai(prompt, *args, **kwargs):
     return {"text": sentence, "when": "none", "time": time, "priority": "med", "category": "", "tokens": 0}
 
 
+def ai_says(intent, target=""):
+    """A fake AI that sees a command (the real one does for "delete zebra"): the default fake only ever says "add"."""
+    def ai(prompt, *a, **k):
+        return {**fake_ai(prompt), "intent": intent, "target": target, "change": "", "reply": ""}
+    return ai
+
+
 def default_memory():
     return mock.patch.object(server, "load_memory", return_value=server.clean_memory({}))
 
@@ -243,14 +250,14 @@ class AskWhenUnsure(unittest.TestCase):
         self.assertEqual(ask("delete it", TASKS), {"action": "delete", "pickTask": True})
 
     def test_unknown_task_reports_missing(self):
-        r = ask("delete zebra", TASKS)
+        r = ask("delete zebra", TASKS, ai=ai_says("delete", "zebra"))
         self.assertEqual((r["action"], r["missing"], r["choices"]), ("delete", "zebra", []))
 
     def test_unknown_number_reports_missing(self):
         self.assertEqual(ask("done #77", TASKS)["missing"], "#77")
 
     def test_ambiguous_match_gives_choices(self):
-        r = ask("delete call", CALLS)
+        r = ask("delete call", CALLS, ai=ai_says("delete", "call"))
         self.assertEqual(r["action"], "delete")
         self.assertIsNone(r.get("num"))
         self.assertEqual(sorted(r["choices"]), [5, 6])
@@ -806,7 +813,7 @@ class OneCallUnderstand(unittest.TestCase):
     def test_change_keeps_what_was_not_mentioned(self):
         r, n = self.run_ai("push the dentist to monday", DENTIST, intent="change", target="dentist", change="monday",
                            when="weekday", weekday="Monday")
-        self.assertEqual((r["action"], r["num"], r["changes"], n), ("update", 4, {"due": "2026-11-02T16:30"}, 1))   # time stays 16:30
+        self.assertEqual((r["action"], r["num"], r["changes"], n), ("update", 4, {"due": "2026-11-02T16:30"}, 0))   # time stays 16:30; "push" is a command word: no AI
 
     def test_change_needs_a_change_word(self):
         r, n = self.run_ai("dentist monday", DENTIST, intent="change", target="dentist", change="monday", when="weekday", weekday="Monday")
@@ -828,9 +835,11 @@ class OneCallUnderstand(unittest.TestCase):
         # rules: "dentist task" is not a title; the AI's target "dentist" is
         r, n = self.run_ai("delete the dentist task", DENTIST, intent="delete", target="dentist")
         self.assertEqual((r["action"], r["num"], n), ("delete", 4, 1))
-        # the AI sees no command: Python's "not found" answer stays (no task named "delete the unicorn task")
+        # the AI sees no command and there is no #number: it is a new task ("Move car to garage"), not "can't find"
         r, n = self.run_ai("delete the unicorn task", DENTIST)
-        self.assertEqual((r["action"], r.get("missing")), ("delete", "unicorn task"))
+        self.assertEqual(r["action"], "add")
+        r, n = self.run_ai("delete #99", DENTIST)   # a #number is exact: Python's "can't find #99" stays
+        self.assertEqual((r["action"], r.get("missing")), ("delete", "#99"))
 
     def test_loose_find(self):
         tasks = [{"num": 1, "text": "Ask Bink for Claude access"}, {"num": 2, "text": "Call mom"}, {"num": 3, "text": "Call dad"}]
@@ -977,3 +986,37 @@ class ClockPhrases(unittest.TestCase):
     def test_titles_lose_the_time(self):
         fix = server.fix_date_typos
         self.assertEqual(" ".join(server.own_words(fix("นัดหมอ พรุ่งนี้ ทุ่มครึ่ง"))), "นัดหมอ")
+
+
+class CommandForms(unittest.TestCase):
+    """#N spoken other ways, push/delay/cancel, and command words that must not take over a new task."""
+    TASKS = [{"num": 3, "text": "Call bank", "done": False, "due": "2026-11-02T09:00"},
+             {"num": 4, "text": "Buy milk", "done": False, "due": ""}]
+
+    def test_number_forms(self):
+        for text, action in [("ข้อ 3 เสร็จ", "complete"), ("งานที่ 3 เสร็จแล้ว", "complete"), ("เสร็จข้อ 3", "complete"),
+                             ("no. 3 done", "complete"), ("number 3 done", "complete"), ("done no 3", "complete"),
+                             ("ลบข้อ 3", "delete"), ("ลบงานที่ 3", "delete"), ("delete no. 3", "delete"),
+                             ("cancel #3", "delete"), ("get rid of #3", "delete")]:
+            r = server.command_by_rules(text, "2026-10-30T10:00", [], self.TASKS)
+            self.assertEqual((r["action"], r["num"]), (action, 3), text)
+
+    def test_push_and_delay(self):
+        r = server.command_by_rules("push #3 to monday", "2026-10-30T10:00", [], self.TASKS)
+        self.assertEqual((r["action"], r["num"], r["changes"]), ("update", 3, {"due": "2026-11-02T09:00"}))
+        r = server.command_by_rules("เลื่อนข้อ 3 ไปพรุ่งนี้", "2026-10-30T10:00", [], self.TASKS)
+        self.assertEqual((r["action"], r["num"], r["changes"]), ("update", 3, {"due": "2026-10-31T09:00"}))
+
+    def test_plain_words_stay_tasks(self):
+        for text in ["push the button", "delay flight", "set up the printer", "Mark's birthday gift friday", "cancel dentist"]:
+            self.assertIsNone(server.command_by_rules(text, "2026-10-30T10:00", [], self.TASKS), text)
+
+    def test_unmatched_command_word_becomes_a_task(self):
+        """The AI sees an ordinary task: Python no longer answers "can't find task" (only for a #number)."""
+        r = ask("Move car to garage", self.TASKS)
+        self.assertEqual((r["action"], r["text"]), ("add", "Move car to garage"))
+        self.assertEqual(ask("done #99", self.TASKS)["missing"], "#99")
+
+    def test_how_many_done_is_a_question(self):
+        r = ask("how many done", self.TASKS, ai=no_ai)
+        self.assertEqual((r["action"], r["filter"]["status"]), ("answer", "done"))

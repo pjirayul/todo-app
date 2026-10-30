@@ -171,7 +171,7 @@
     {"s": "ข้อ 3 เสร็จ", "action": "complete", "num": 3},
     {"s": "ลบงานที่ 3", "action": "delete", "num": 3},
     {"s": "no. 3 done", "action": "complete", "num": 3},
-    {"s": "push #4 to monday", "action": "update", "num": 4, "change": {"due": "2026-11-02T09:00"}},
+    {"s": "push #4 to monday", "action": "update", "num": 4, "change": {"due": "2026-11-02T16:30"}},
     {"s": "call bank tomorrow at 7 in the morning", "action": "add", "title": ["call bank"], "due": "2026-10-31T07:00"},
     {"s": "call bank tomorrow midnight", "action": "add", "title": ["call bank"], "due": "2026-10-31T00:00"},
     {"s": "นัดหมอ พรุ่งนี้ ทุ่มครึ่ง", "action": "add", "title": ["นัดหมอ"], "due": "2026-10-31T19:30"},
