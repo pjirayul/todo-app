@@ -839,7 +839,7 @@ class OneCallUnderstand(unittest.TestCase):
         self.assertEqual(server.find_task_loose("unicorn", tasks), (None, []))
 
     def test_afternoon_is_not_noon(self):
-        self.assertEqual(ask("call grandma on friday afternoon")["due"], "2026-10-30T14:00")
+        self.assertEqual(ask("call grandma on friday afternoon")["due"], "2026-10-30T13:00")
 
     def test_old_road_is_still_there(self):
         with mock.patch.object(server, "ONE_CALL", False):
@@ -944,3 +944,36 @@ class SpecialDays(unittest.TestCase):
             self.assertEqual(r["kind"], "chat", text)
         r = server.question_answer("what to do next", "2026-10-30T10:00", [], [], use_ai=False)
         self.assertTrue(r is None or r["action"] == "answer")
+
+
+class ClockPhrases(unittest.TestCase):
+    """English clock phrases without am/pm, Thai ทุ่ม, "14.30 น." and the vague-time defaults (owner, 30 Oct)."""
+
+    def test_english_phrases(self):
+        for text, want in [("tomorrow at 7 in the morning", "07:00"), ("at 3 in the afternoon", "15:00"),
+                           ("friday morning 8", "08:00"), ("tomorrow midnight", "00:00"), ("tomorrow at 5", "17:00"),
+                           ("friday at 9", "09:00"), ("noon", "12:00"), ("8 at night", "20:00"), ("at 5th street", "")]:
+            self.assertEqual(server.english_time(text), want, text)
+
+    def test_thai_toom_and_dot_time(self):
+        self.assertEqual(server.thai_time("นัดหมอ พรุ่งนี้ ทุ่มครึ่ง"), "19:30")
+        self.assertEqual(server.thai_time("นัดหมอ ตอนทุ่ม"), "19:00")
+        self.assertEqual(server.thai_time("สองทุ่ม"), "20:00")
+        self.assertEqual(server.english_time("นัดหมอ พรุ่งนี้ 14.30 น."), "14:30")
+
+    def test_vague_defaults(self):
+        t = server.DEFAULT_TIMES
+        self.assertEqual((t["morning"], t["afternoon"], t["evening"], t["tonight"]), ("09:00", "13:00", "18:00", "20:00"))
+        task = server.rules_date("call bank tomorrow evening", t)
+        self.assertEqual(task["time"], "18:00")
+        self.assertEqual(server.rules_date("call bank friday night", t)["time"], "20:00")
+
+    def test_rules_date_reads_them(self):
+        t = server.DEFAULT_TIMES
+        self.assertEqual(server.rules_date("tomorrow at 7 in the morning", t)["time"], "07:00")
+        self.assertEqual(server.rules_date("tomorrow 14.30 น.", t)["time"], "14:30")
+        self.assertEqual(server.rules_date("พรุ่งนี้ ทุ่มครึ่ง", t)["time"], "19:30")
+
+    def test_titles_lose_the_time(self):
+        fix = server.fix_date_typos
+        self.assertEqual(" ".join(server.own_words(fix("นัดหมอ พรุ่งนี้ ทุ่มครึ่ง"))), "นัดหมอ")

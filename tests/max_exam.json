@@ -36,7 +36,7 @@
     {"s": "dont forget to renew passport", "action": "add", "title": ["renew passport", "renew my passport", "renew the passport"], "category": ["Personal", "Money"]},
     {"s": "do lundry tomorow", "action": "add", "title": ["do laundry", "laundry"], "due": "2026-10-31T09:00", "category": ["Home"]},
     {"s": "by grocerys tomorrow evening", "action": "add", "title": ["buy groceries", "buy grocery", "groceries"], "due": "2026-10-31T18:00", "category": ["Shopping", "Home"]},
-    {"s": "call grandma on sunday afternoon", "action": "add", "title": ["call grandma", "grandma"], "due": "2026-11-01T14:00", "category": ["Personal"]},
+    {"s": "call grandma on sunday afternoon", "action": "add", "title": ["call grandma", "grandma"], "due": "2026-11-01T13:00", "category": ["Personal"]},
     {"s": "team meeting monday 10am", "action": "add", "title": ["team meeting", "meeting"], "due": "2026-11-02T10:00", "category": ["Work"]},
     {"s": "write blog post next week", "action": "add", "title": ["write blog post", "write a blog post", "blog post"], "category": ["Work", "Personal"]},
     {"s": "buy a birthday gift for sam in 5 days", "action": "add", "title": ["buy a birthday gift for sam", "birthday gift for sam", "buy birthday gift for sam"], "due": "2026-11-04T09:00", "category": ["Shopping", "Personal"]},

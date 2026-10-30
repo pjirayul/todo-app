@@ -255,7 +255,7 @@ def fix_date_typos(sentence: str) -> str:
 
 # Parts of the day: when no clock time is said, Python uses the owner's own times (About me).
 # Thai words are kept specific ("ตอนเย็น", not "เย็น", which is also in ตู้เย็น = fridge).
-DAY_PARTS = ((r"\btonight\b|คืนนี้", "tonight"), (r"\bevening\b|ตอนเย็น|เย็นนี้|พรุ่งนี้เย็น", "evening"),
+DAY_PARTS = ((r"\b(to)?night\b|คืนนี้", "tonight"), (r"\bevening\b|ตอนเย็น|เย็นนี้|พรุ่งนี้เย็น", "evening"),
              (r"\bafternoon\b|ตอนบ่าย", "afternoon"), (r"\bmorning\b|ตอนเช้า|เช้านี้|พรุ่งนี้เช้า", "morning"))
 # Thai clock words: Python reads them (the AI turned "บ่ายสาม" into 13:00 instead of 15:00).
 # Each pattern gives the hour; "ครึ่ง" right after it means half past.
@@ -266,7 +266,7 @@ THAI_TIMES = (
     (r"เที่ยงคืน", lambda n, w: 0),                                   # midnight
     (r"เที่ยง(วัน)?", lambda n, w: 12),                                # noon
     (r"บ่าย\s*(โมง|" + _N + r"\s*(โมง)?)", lambda n, w: 13 if n is None else n + 12 if n < 12 else n),  # บ่ายสาม = 15
-    (_N + r"\s*ทุ่ม|ทุ่ม(นึง|หนึ่ง)", lambda n, w: 18 + (n or 1)),       # สองทุ่ม = 20
+    (_N + r"\s*ทุ่ม|ทุ่ม(นึง|หนึ่ง)?", lambda n, w: 18 + (n or 1)),       # สองทุ่ม = 20, ทุ่ม / ทุ่มครึ่ง = 19:00 / 19:30
     (r"ตี\s*" + _N, lambda n, w: n),                                  # ตีสอง = 2
     # "10 โมง" = 10, "5 โมงเย็น" = 17; 1-5 โมง without เช้า is afternoon (สามโมง = 15)
     (_N + r"\s*โมง\s*(เย็น|เช้า)?",
@@ -287,7 +287,12 @@ def thai_time(text: str) -> str:
     return ""
 
 
-CLOCK_TIME = re.compile(r"\d\s*(:\s*\d\d|\.\d\d|am\b|pm\b|น\.|โมง|ทุ่ม)|\bnoon\b|" + THAI_TIME_ANY, re.I)
+# English clock phrases without am/pm: "7 in the morning", "morning 8", "at 5", "midnight"
+PART_TIME = re.compile(r"\b(\d{1,2})(?:[:.]([0-5]\d))?\s*(?:o'?clock\s*)?(?:in the |at |of the )?(morning|afternoon|evening|night)\b"
+                       r"|\b(morning|afternoon|evening|night)\s+(?:at\s+)?(\d{1,2})(?![\d:/]|st|nd|rd|th)")
+AT_HOUR = re.compile(r"\bat (\d{1,2})(?![\d:/]|st|nd|rd|th|\s*(?:days?|weeks?|min|hours?|times))")
+CLOCK_TIME = re.compile(r"\d\s*(:\s*\d\d|\.\d\d|am\b|pm\b|น\.|โมง|ทุ่ม)|\bnoon\b|\bmidnight\b|" + PART_TIME.pattern + "|" +
+                        AT_HOUR.pattern + "|" + THAI_TIME_ANY, re.I)
 # A little linking word stuck to a date ("ในวันศุกร์", "ภายในพรุ่งนี้", "ตอนบ่ายสาม") goes away with it; the same
 # word anywhere else ("ของในตู้เย็น") stays. The lead word is tried first, so "ตอนบ่ายสาม" is cut whole.
 THAI_DATE_WORDS = (r"(?:ภายใน|ใน|ตอน|เมื่อ)?(?:มะรืนนี้|มะรืน|พรุ่งนี้|วันนี้|คืนนี้|ตอนเช้า|ตอนเย็น|ตอนบ่าย|ด่วน|ไม่รีบ|"
@@ -363,9 +368,22 @@ def english_time(text: str) -> str:
     if m and 1 <= int(m.group(1)) <= 12:
         hour = int(m.group(1)) % 12 + (12 if m.group(3) == "pm" else 0)
         return f"{hour:02d}:{m.group(2) or '00'}"
-    m = re.search(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", text)
+    m = PART_TIME.search(text)
+    if m:  # "7 in the morning" = 07:00, "3 in the afternoon" = 15:00, "8 at night" = 20:00
+        hour, minute, part = int(m.group(1) or m.group(5)), m.group(2) or "00", m.group(3) or m.group(4)
+        if 1 <= hour <= 12:
+            hour = hour % 12 + (0 if part == "morning" else 12)
+            return f"{hour % 24:02d}:{minute}"
+    m = re.search(r"\b([01]?\d|2[0-3])[:.]([0-5]\d)(?:\s*น\.?|\b)", text) if "น" in text else None
+    m = m or re.search(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", text)
     if m:
         return f"{int(m.group(1)):02d}:{m.group(2)}"
+    m = AT_HOUR.search(text)  # "at 5": 1-6 is the afternoon, 7-11 the morning (nobody sets a task for 5 am without saying so)
+    if m and 1 <= int(m.group(1)) <= 23:
+        hour = int(m.group(1))
+        return f"{hour + 12 if hour <= 6 else hour:02d}:00"
+    if re.search(r"\bmidnight\b", text):
+        return "00:00"
     return "12:00" if re.search(r"\bnoon\b", text) else ""
 
 
@@ -437,7 +455,7 @@ TIME_LIKE = re.compile(r"\d+([:.]\d\d)?(am|pm|st|nd|rd|th|น\.?)?|\d{1,2}/\d{1,
 def own_words(sentence: str) -> list:
     """The owner's words without the date/time/priority words Python knows: 'TEST dentist friday 3pm' -> TEST, dentist."""
     skip = set(DATE_WORDS) | set(SHORTCUTS) | set(SHORT_DAYS) | set(PRIORITY_WORDS) | \
-        {"am", "pm", "at", "on", "by", "in", "next", "this", "after", "day", "days", "noon", "night"}
+        {"am", "pm", "at", "on", "by", "in", "next", "this", "after", "day", "days", "noon", "night", "midnight"}
     s = re.sub(THAI_DATE_WORDS, " ", sentence)
     for pattern in SPECIAL_DAYS + (DAYS_AHEAD,):
         s = pattern.sub(" ", s)   # "this weekend", "in 2 weeks", "end of month" are dates, not title words
@@ -560,7 +578,7 @@ def check_task(task: dict, sentence: str, now: str, known: list, memory: dict) -
             if re.search(pattern, lower):
                 task["time"] = memory["times"][part]
                 break
-    task["time"] = thai_time(lower) or task.get("time", "")  # "บ่ายสาม" = 15:00, whatever the AI said
+    task["time"] = thai_time(lower) or english_time(lower) or task.get("time", "")  # "บ่ายสาม" = 15:00, whatever the AI said
     # No day or time words at all: the AI made the date up ("นัดประชุมทีม" -> next Friday), so no date
     # Only a time ("ส่งรายงานบ่ายสาม", "call mom at 5pm"): today, like "tonight"
     if not DAY_HINTS.search(lower):
@@ -1895,7 +1913,7 @@ def make_db_copy():
 # max-memory.json is private (gitignored): things Max should know about the owner.
 # Never put passwords or other secrets in it: it is sent to the AI with every request.
 MEMORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "max-memory.json")
-DEFAULT_TIMES = {"morning": "09:00", "afternoon": "14:00", "evening": "18:00", "tonight": "20:00"}
+DEFAULT_TIMES = {"morning": "09:00", "afternoon": "13:00", "evening": "18:00", "tonight": "20:00"}
 HHMM = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 MEMORY_MAX_BYTES = 4000
 
