@@ -9,7 +9,7 @@ No AI, no Ollama, no server and no real data are used:
 import pathlib
 import re
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest import mock
 
 import server
@@ -75,13 +75,17 @@ class ResolveDue(unittest.TestCase):
 
     def test_weekday_is_the_next_one_coming_up(self):
         self.assertEqual(self.due(when="weekday", weekday="Friday"), "2026-10-30T09:00")
-        # Same weekday as today (Wednesday) means next week, not today
-        self.assertEqual(self.due(when="weekday", weekday="Wednesday"), "2026-11-04T09:00")
+        # Same weekday as today (Wednesday): plain "wednesday" is today, "next wednesday" is +7 (owner rule 30 Oct)
+        self.assertEqual(self.due(when="weekday", weekday="Wednesday"), "2026-10-28T09:00")
+        self.assertEqual(self.due(when="weekday", weekday="Wednesday", next_week=True), "2026-11-04T09:00")
         # A weekday already past this week -> next week's
         self.assertEqual(self.due(when="weekday", weekday="Monday"), "2026-11-02T09:00")
 
     def test_next_week_weekday(self):
-        self.assertEqual(self.due(when="weekday", weekday="Friday", next_week=True), "2026-11-06T09:00")
+        # "next friday" = first Friday strictly after today (Wednesday 28 Oct -> this week's Friday)
+        self.assertEqual(self.due(when="weekday", weekday="Friday", next_week=True), "2026-10-30T09:00")
+        # "friday next week" = the Friday inside next Mon-Sun week
+        self.assertEqual(self.due(when="weekday", weekday="Friday", next_week=True, week_after=True), "2026-11-06T09:00")
 
     def test_the_fifth(self):
         self.assertEqual(self.due(when="date", day=5), "2026-11-05T09:00")     # 5th already passed: next month
@@ -126,7 +130,7 @@ class ThaiWordsAndDates(unittest.TestCase):
         self.assertEqual(ask("ส่งรายงานวันศุกร์บ่ายสาม")["due"], "2026-10-30T15:00")
 
     def test_thai_next_friday(self):
-        self.assertEqual(ask("ประชุมวันศุกร์หน้า")["due"], "2026-11-06T09:00")
+        self.assertEqual(ask("ประชุมวันศุกร์หน้า")["due"], "2026-10-30T09:00")   # now is Wednesday
 
     def test_thai_tomorrow_and_tonight(self):
         self.assertEqual(ask("ซื้อนมพรุ่งนี้")["due"], "2026-10-29T09:00")
@@ -860,7 +864,7 @@ class NextWeekdayOnThatWeekday(unittest.TestCase):
 
     def test_other_days_and_sunday(self):
         self.assertEqual(self.date("what do i have on next monday"), "2026-11-02")
-        self.assertEqual(self.date("วันอาทิตย์หน้ามีอะไร"), "2026-11-08")
+        self.assertEqual(self.date("วันอาทิตย์หน้ามีอะไร"), "2026-11-01")   # first Sunday after Friday 30 Oct
 
     def test_next_week_is_not_a_weekday(self):
         f = server.question_filter("what is due next week", self.FRIDAY, [])
@@ -872,3 +876,71 @@ class NextWeekdayOnThatWeekday(unittest.TestCase):
             for text in ["call the bank next friday", "ส่งรายงานวันศุกร์หน้า"]:
                 r = server.run_command(text, "2026-10-30T10:00", [], [])
                 self.assertEqual(r["due"], "2026-11-06T09:00", text)
+
+
+class NextVersusThisWeekday(unittest.TestCase):
+    """Owner rule 30 Oct: "friday" / "this friday" = nearest on or after today; "next friday" = first one strictly after today."""
+    NOWS = {"Mon": datetime(2026, 11, 2, 10, 0), "Wed": datetime(2026, 10, 28, 10, 0),
+            "Fri": datetime(2026, 10, 30, 10, 0), "Sun": datetime(2026, 11, 1, 10, 0)}
+
+    def test_every_weekday_on_four_days(self):
+        for label, now in self.NOWS.items():
+            today = now.date()
+            for i, name in enumerate(server.WEEKDAYS):
+                gap = (i - today.weekday()) % 7
+                self.assertEqual(server.weekday_date(name, today), today + timedelta(days=gap), (label, name))
+                self.assertEqual(server.weekday_date(name, today, after=True), today + timedelta(days=gap or 7), (label, name))
+                low = "what is on next " + name.lower()
+                self.assertEqual(server.next_weekday_named(low, today), (today + timedelta(days=gap or 7)).isoformat(), (label, name))
+
+    def test_monday_next_friday_is_this_weeks(self):
+        task = {"when": "weekday", "weekday": "Friday", "next_week": True}
+        self.assertEqual(server.resolve_due(task, self.NOWS["Mon"]), "2026-11-06T09:00")
+        self.assertEqual(server.resolve_due(task, self.NOWS["Fri"]), "2026-11-06T09:00")   # Friday: +7
+
+
+class SpecialDays(unittest.TestCase):
+    """this weekend / in N weeks / end of month / start of next month (Python reads them; Fri 30 Oct 2026)."""
+    NOW = datetime(2026, 10, 30, 10, 0)
+
+    def due(self, text, now=None):
+        task = server.rules_date(text, server.DEFAULT_TIMES)
+        self.assertIsNotNone(task, text)
+        return server.resolve_due(task, now or self.NOW, server.DEFAULT_TIMES)
+
+    def test_phrases(self):
+        self.assertEqual(self.due("gym this weekend"), "2026-10-31T09:00")
+        self.assertEqual(self.due("gym this weekend", datetime(2026, 11, 1, 10, 0)), "2026-11-01T09:00")   # Sunday: today
+        self.assertEqual(self.due("pay in 2 weeks"), "2026-11-13T09:00")
+        self.assertEqual(self.due("pay in a week"), "2026-11-06T09:00")
+        self.assertEqual(self.due("send report end of month"), "2026-10-31T09:00")
+        self.assertEqual(self.due("rent start of next month"), "2026-11-01T09:00")
+        self.assertEqual(self.due("ส่งงาน สิ้นเดือน"), "2026-10-31T09:00")
+        self.assertEqual(self.due("ส่งงาน สุดสัปดาห์"), "2026-10-31T09:00")
+        self.assertEqual(self.due("ส่งงาน อีก 2 สัปดาห์"), "2026-11-13T09:00")
+        self.assertEqual(self.due("ส่งงาน ต้นเดือนหน้า"), "2026-11-01T09:00")
+
+    def test_check_task_keeps_them(self):
+        """check_task used to blank any date whose words DAY_HINTS did not know."""
+        for text, due in [("gym this weekend", "2026-10-31T09:00"), ("meet Tom in 2 weeks", "2026-11-13T09:00")]:
+            r = server.check_task({"text": text, "when": "none"}, text, "2026-10-30T10:00", [], {"times": server.DEFAULT_TIMES})
+            self.assertEqual(r["due"], due, text)
+
+    def test_titles(self):
+        self.assertEqual(" ".join(server.own_words("gym this weekend")), "gym")
+        self.assertEqual(" ".join(server.own_words("pay rent on the 5th")), "pay rent")
+
+    def test_question_day_after_tomorrow_and_in_days(self):
+        f = server.question_filter("what's the day after tomorrow", self.NOW, [])
+        self.assertEqual((f["when"], f["date"]), ("date", "2026-11-01"))
+        f = server.question_filter("what do i have in 3 days", self.NOW, [])
+        self.assertEqual((f["when"], f["date"]), ("date", "2026-11-02"))
+        f = server.question_filter("what do i have this weekend", self.NOW, [])
+        self.assertEqual(server.due_range(f, self.NOW), ("2026-10-31", "2026-11-01"))
+
+    def test_unreadable_day_is_said(self):
+        for text in ["what is due next month", "what did I finish yesterday", "อะไรบ้างเดือนนี้"]:
+            r = server.question_answer(text, "2026-10-30T10:00", [], [], use_ai=False)
+            self.assertEqual(r["kind"], "chat", text)
+        r = server.question_answer("what to do next", "2026-10-30T10:00", [], [], use_ai=False)
+        self.assertTrue(r is None or r["action"] == "answer")
