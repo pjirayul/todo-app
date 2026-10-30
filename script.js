@@ -370,7 +370,7 @@ function drawGreeting() {
 
 // Team pill: the agents' status dots from status.json (written by Toto on this PC), read via
 // api/status. On GitHub Pages there is no server, so the pill just stays hidden.
-const TEAM = ["Toto", "Kimi", "George", "Lewis", "Bono"];
+const TEAM = ["Toto", "Kimi", "George", "Lewis", "Bono", "GP"];
 async function loadTeam() {
   if (!LOCAL) return; // stays hidden
   try {
@@ -381,7 +381,7 @@ async function loadTeam() {
     $("team-avs").replaceChildren(...TEAM.map((name) => {
       const av = document.createElement("span");
       av.className = `av av-${name.toLowerCase()}`;
-      av.textContent = name[0];
+      av.textContent = name === "GP" ? "GP" : name[0]; // two letters so GP is not mistaken for George
       const dot = document.createElement("i");
       const status = statusOf(name);
       if (status === "working" || status === "done") dot.className = status; // anything else: grey (idle)
