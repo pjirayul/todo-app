@@ -742,7 +742,7 @@ class ThaiTitleLinkingWords(unittest.TestCase):
         return ask(sentence)["text"]   # the fake AI copies the sentence, so this tests Python's clean-up
 
     def test_linking_words_go_with_the_date(self):
-        self.assertEqual(self.title("ขอ claude จาก bink ในวันศุกร์"), "ขอ claude จาก bink")
+        self.assertEqual(self.title("ขอ claude จาก ploy ในวันศุกร์"), "ขอ claude จาก ploy")
         self.assertEqual(self.title("ส่งรายงานภายในพรุ่งนี้"), "ส่งรายงาน")
         self.assertEqual(self.title("กินข้าวกับแม่ในวันอาทิตย์"), "กินข้าวกับแม่")
         self.assertEqual(self.title("ประชุมทีมเมื่อวันจันทร์"), "ประชุมทีม")
@@ -756,7 +756,7 @@ class ThaiTitleLinkingWords(unittest.TestCase):
         self.assertEqual(self.title("ซื้อของใช้ในบ้าน"), "ซื้อของใช้ในบ้าน")
 
     def test_dates_still_read(self):
-        self.assertEqual(ask("ขอ claude จาก bink ในวันศุกร์")["due"], "2026-10-30T09:00")   # Friday after Wed 28 Oct
+        self.assertEqual(ask("ขอ claude จาก ploy ในวันศุกร์")["due"], "2026-10-30T09:00")   # Friday after Wed 28 Oct
         self.assertEqual(ask("นัดหมอตอนบ่ายสาม")["due"], "2026-10-28T15:00")
 
     def test_english_titles_are_not_touched(self):
@@ -842,8 +842,8 @@ class OneCallUnderstand(unittest.TestCase):
         self.assertEqual((r["action"], r.get("missing")), ("delete", "#99"))
 
     def test_loose_find(self):
-        tasks = [{"num": 1, "text": "Ask Bink for Claude access"}, {"num": 2, "text": "Call mom"}, {"num": 3, "text": "Call dad"}]
-        self.assertEqual(server.find_task_loose("bink thing", tasks), (1, []))
+        tasks = [{"num": 1, "text": "Ask Ploy for Claude access"}, {"num": 2, "text": "Call mom"}, {"num": 3, "text": "Call dad"}]
+        self.assertEqual(server.find_task_loose("ploy thing", tasks), (1, []))
         self.assertEqual(server.find_task_loose("the call", tasks)[0], None)   # two tasks have "call": no guess
         self.assertEqual(server.find_task_loose("unicorn", tasks), (None, []))
 

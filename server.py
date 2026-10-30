@@ -748,7 +748,7 @@ LOOSE_SKIP = {"the", "task", "thing", "tasks", "this", "that", "with", "from", "
 
 def find_task_loose(target: str, tasks: list):
     """find_task, and if nothing fits, the longest word of the target that only ONE task contains
-    ("bink thing" -> the task with "Bink"; "with dentist" -> "Dentist appointment"). Used for the AI's target only."""
+    ("ploy thing" -> the task with "Ploy"; "with dentist" -> "Dentist appointment"). Used for the AI's target only."""
     num, choices = find_task(target, tasks)
     if num is not None or choices:
         return num, choices

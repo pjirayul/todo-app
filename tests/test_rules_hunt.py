@@ -129,7 +129,7 @@ NOT_DATES = ["buy sun cream", "sat down with Tom"]
 
 # sentence -> title Python keeps (date/time words and linkers cut out, owner's words kept)
 TITLES = [
-    ("ขอ claude จาก bink ในวันศุกร์", "ขอ claude จาก bink"),
+    ("ขอ claude จาก ploy ในวันศุกร์", "ขอ claude จาก ploy"),
     ("นัดหมอตอนบ่ายสาม", "นัดหมอ"),
     ("ซื้อนมพรุ่งนี้เช้า", "ซื้อนม"),
     ("ส่งงาน สิ้นเดือน", "ส่งงาน"),
