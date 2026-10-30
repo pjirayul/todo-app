@@ -295,9 +295,9 @@ CLOCK_TIME = re.compile(r"\d\s*(:\s*\d\d|\.\d\d|am\b|pm\b|น\.|โมง|ทุ
                         AT_HOUR.pattern + "|" + THAI_TIME_ANY, re.I)
 # A little linking word stuck to a date ("ในวันศุกร์", "ภายในพรุ่งนี้", "ตอนบ่ายสาม") goes away with it; the same
 # word anywhere else ("ของในตู้เย็น") stays. The lead word is tried first, so "ตอนบ่ายสาม" is cut whole.
-THAI_DATE_WORDS = (r"(?:ภายใน|ใน|ตอน|เมื่อ)?(?:มะรืนนี้|มะรืน|พรุ่งนี้|วันนี้|คืนนี้|ตอนเช้า|ตอนเย็น|ตอนบ่าย|ด่วน|ไม่รีบ|"
+THAI_DATE_WORDS = (r"(?:(?:ภายใน|ใน|ตอน|เมื่อ)\s*)?(?:มะรืนนี้|มะรืน|พรุ่งนี้|วันนี้|คืนนี้|ตอนเช้า|ตอนเย็น|ตอนบ่าย|ด่วน|ไม่รีบ|"
                    r"(วัน)?(จันทร์|อังคาร|พุธ|พฤหัส(บดี)?|ศุกร์|เสาร์|อาทิตย์)(หน้า|นี้)?|วันที่\s*\d+|"
-                   r"(" + THAI_TIME_ANY + r")(\s*ครึ่ง)?|\d+\s*(โมง|ทุ่ม)|(สัปดาห์|เดือน)หน้า|อีก\s*\d+\s*(วัน|สัปดาห์|อาทิตย์)|สิ้นเดือน|ปลายเดือน|ต้นเดือนหน้า|สุดสัปดาห์)")
+                   r"(" + THAI_TIME_ANY + r")(\s*ครึ่ง)?|\d+\s*(โมง|ทุ่ม)|(สัปดาห์|เดือน)หน้า|อีก\s*\d+\s*(วัน|สัปดาห์|อาทิตย์)|สิ้นเดือน|ปลายเดือน|ต้นเดือนหน้า|สุดสัปดาห์(นี้)?)")
 THAI_LETTERS = re.compile(r"[฀-๿]")
 
 # Weekday names Python reads itself (the AI sometimes says "next week" when nobody did).
@@ -834,9 +834,10 @@ QUESTION_START = re.compile(r"^(what|what's|whats|which|show|list|how many|how m
                             r"do i have|have i got|tell me|give me)\b")
 # "Hi max, what to do today" / "hey max add milk": a greeting or "Max," in front is not part of the sentence.
 # "max" alone only counts with a comma/colon ("Max birthday gift" is a task). \b is not used for Thai words.
-GREETING = re.compile(r"^\s*(?:(?:hi|hey|hello|yo|ok|okay)(?=[\s,!.]|$)[\s,!.]*(?:max(?=[\s,!.:]|$)[\s,!.:]*)?"
+GREETING = re.compile(r"^\s*(?:(?:hi|hey|hello|yo|ok|okay|good\s+(?:morning|afternoon|evening))(?=[\s,!.]|$)[\s,!.]*(?:max(?=[\s,!.:]|$)[\s,!.:]*)?"
+                      r"|morning(?=\s+max(?:[\s,!.:]|$))[\s,!.]*(?:max[\s,!.:]*)?"   # "morning max" (plain "morning run" is a task)
                       r"|max\s*[,:!]\s*"
-                      r"|(?:สวัสดี|หวัดดี|โอเค)(?:ครับ|ค่ะ|คะ)?\s*(?:max|แม็กซ์|แม็ก)?\s*(?:ครับ|ค่ะ|คะ)?[\s,!]*"
+                      r"|(?:สวัสดี|หวัดดี|โอเค|อรุณสวัสดิ์)(?:ครับ|ค่ะ|คะ)?\s*(?:max|แม็กซ์|แม็ก)?\s*(?:ครับ|ค่ะ|คะ)?[\s,!]*"
                       r"|(?:แม็กซ์|แม็ก)(?:ครับ|ค่ะ|คะ)?\s*[,:!]?\s*)", re.I)
 # Natural ways to ask about the day that have no task word in them
 NATURAL_Q = re.compile(r"\bwhat (?:to do|should i|shall i|do i (?:have|need|got)|am i (?:doing|supposed)|have i got|else)\b"
@@ -990,6 +991,22 @@ def clean_reply(reply) -> str:
     return text if 0 < len(text) <= 80 else ""  # too long or empty: the page uses its own friendly line
 
 
+# Used when the AI's reply is empty, in the wrong language or off-topic ("how are you" -> "You are welcome!")
+CHAT_FALLBACK = {"en": "Happy to chat! Give me a task, or ask what is due.",
+                 "th": "ยินดีคุยด้วยครับ! บอกงานให้ผมได้เลย หรือถามว่ามีอะไรต้องทำ"}
+
+
+def chat_reply(reply, sentence: str) -> str:
+    """The AI's friendly line, checked by Python. Never empty: a short fallback line in the owner's language."""
+    text = clean_reply(reply)
+    thai = bool(THAI_LETTERS.search(sentence))
+    if thai and not THAI_LETTERS.search(text):
+        text = ""   # the 3B model sometimes answers Thai in English
+    if re.search(r"welcome", text, re.I) and not re.search(r"thank|thx|ขอบคุณ", sentence, re.I):
+        text = ""   # "You are welcome!" only answers a thank-you
+    return text or CHAT_FALLBACK["th" if thai else "en"]
+
+
 def parse_question(sentence: str, now: str, categories: list):
     """The filter if the sentence is a question about the tasks, else None (then it is a normal command)."""
     raw = " ".join(strip_greeting(sentence)[0].split()).lower()
@@ -1043,10 +1060,7 @@ def ai_question_filter(sentence: str, rules: dict = None):
     except Exception:
         return None  # no AI: treat the sentence as a normal task
     if r.get("chat") is True and r.get("is_question") is not True:
-        reply = clean_reply(r.get("reply"))
-        if re.search(r"[฀-๿]", sentence) and not re.search(r"[฀-๿]", reply):
-            reply = ""  # the 3B model sometimes answers Thai in English: the page's own Thai line is used then
-        return {"chat": True, "reply": reply, "tokens": r.get("tokens", 0)}
+        return {"chat": True, "reply": chat_reply(r.get("reply"), sentence), "tokens": r.get("tokens", 0)}
     if r.get("is_question") is not True:
         return None
     f = dict(EMPTY_FILTER)
@@ -1210,10 +1224,7 @@ def understand(s: str, now: str, categories: list, tasks: list, greeted: bool = 
     asked = maybe_question(low, greeted)   # the old gate is now only a CHECK: the AI cannot turn a plain task into a question
 
     if intent == "chat" and asked:
-        reply = clean_reply(r.get("reply"))
-        if THAI_LETTERS.search(s) and not THAI_LETTERS.search(reply):
-            reply = ""   # the 3B model sometimes answers Thai in English: the page's own Thai line is used then
-        return {"action": "smalltalk", "kind": "chat", "reply": reply, "tokens": tokens}
+        return {"action": "smalltalk", "kind": "chat", "reply": chat_reply(r.get("reply"), s), "tokens": tokens}
     if intent == "question" and asked:
         f = question_filter(fix_date_typos(low), datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"), categories)
         found = TOOLS["list_tasks"](tasks, f, datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"))
@@ -1226,17 +1237,23 @@ def understand(s: str, now: str, categories: list, tasks: list, greeted: bool = 
         wanted = {"undo": True, "done": False, "change": False}.get(intent)
         pool = tasks if wanted is None else [t for t in tasks if t.get("done") is wanted]
         num, choices = find_task_loose(target, pool)
-        if num is None and target == low:
+        if num is None and target == low and rules_result is not None:
             return {"action": action, "pickTask": True, "tokens": tokens}   # no task named: the page asks "Which task?"
-        if num is None:
+        if num is None and target != low:
             return {"action": action, "missing": target, "choices": choices, "tokens": tokens}
-        if intent != "change":
+        # (num is None and target == low: Python read no command and the AI named no task, "change car to garage": a new task, below)
+        if num is not None and intent != "change":
             return {"action": action, "num": num, "tokens": tokens}
-        change = " ".join(str(r.get("change") or "").split())
-        done = work_out_changes(num, change, "", False, low, tasks, now, categories, ai_task=r)
-        done["tokens"] = done.get("tokens", 0) + tokens
-        done["path"] = "ai"
-        return done
+        if num is not None:
+            change = " ".join(str(r.get("change") or "").split())
+            by_name = not re.search(r"#\s*\d", low)
+            if not (by_name and weak_name_match(num, target, change, tasks)):
+                done = work_out_changes(num, change, "", False, low, tasks, now, categories, ai_task=r)
+                done["tokens"] = done.get("tokens", 0) + tokens
+                done["path"] = "ai"
+                if not (by_name and done.get("nothing")):
+                    return done
+            # else: no clear task / nothing to change: a command word without a #number is a new task (below)
 
     if rules_result is not None and re.search(r"#\s*\d", low):
         return None   # "done #99": keep Python's "can't find #99". Without a #number, a command word that matches no task
@@ -1327,7 +1344,7 @@ def command_by_rules(s: str, now: str, categories: list, tasks: list, chosen: in
     if num_match:
         target, change = num_match.group(0), rest
     elif action == "update":
-        parts = re.split(r"\s+to\s+|\s*(?:ให้เป็น|ไปเป็น|เป็น|ไปวัน|ไป)\s*", rest, maxsplit=1)
+        parts = re.split(r"\s+to\s+|\s+(?=by\s+(?:\d|an?\b|one\b|two\b|three\b))|\s*(?:ให้เป็น|ไปเป็น|เป็น|ไปวัน|ไป)\s*", rest, maxsplit=1)
         if len(parts) < 2:
             if chosen:
                 parts = ["", rest]  # the owner already picked the task: all of it is the change
@@ -1350,7 +1367,29 @@ def command_by_rules(s: str, now: str, categories: list, tasks: list, chosen: in
     if action != "update":
         return {"action": action, "num": num}
 
-    return work_out_changes(num, change, field, rename, low, tasks, now, categories)
+    by_name = not num_match and not chosen
+    if by_name and not field and weak_name_match(num, target, change, tasks):
+        return None   # "move car to garage": one shared word is no clear match, so it is a new task
+    result = work_out_changes(num, change, field, rename, low, tasks, now, categories)
+    return None if by_name and result.get("nothing") else result   # an update that changes nothing is never the answer
+
+
+def weak_name_match(num: int, target: str, change: str, tasks: list) -> bool:
+    """A name-only update ("move car to garage") that hangs on one word of a longer title, and whose change names no
+    day, time or priority. Too risky to touch a task: the caller treats the sentence as a new task."""
+    fixed = fix_date_typos(change).lower()
+    if DAY_HINTS.search(fixed) or time_said(fixed) or BY_DAYS.match(fixed) or any(
+            w in fixed.split() or (not w.isascii() and w in fixed) for w in PRIORITY_WORDS):
+        return False
+    text = next((str(t.get("text", "")).lower() for t in tasks if t["num"] == num), "")
+    words = target.lower().strip()
+    # clear = the target is at least half the title's letters ("laundry" / "Do laundry"), or shares 2+ words with it
+    return len(words) * 2 < len(text) and len(set(words.split()) & set(text.split())) < 2
+
+
+# "delay #3 by 2 days", "push #3 by a week", "เลื่อนข้อ 3 อีก 2 วัน": counted from the task's own day, not today
+BY_DAYS = re.compile(r"(?:by\s+(?P<n>\d+|a|an|one|two|three)\s*(?P<unit>days?|weeks?)|(?:อีก\s*)?(?P<th>\d+)\s*(?P<thunit>วัน|สัปดาห์|อาทิตย์))$")
+NUMBER_WORDS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3}
 
 
 def work_out_changes(num: int, change: str, field: str, rename: bool, low: str, tasks: list, now: str,
@@ -1361,6 +1400,16 @@ def work_out_changes(num: int, change: str, field: str, rename: bool, low: str, 
     if not change:
         return {"action": action, "num": num, "nothing": True}
     changes, tokens, path = {}, 0, "rules"
+    by = BY_DAYS.match(change.strip().lower())
+    if by and not field and (by.group("n") or low.startswith("เลื่อน")):
+        n = by.group("n") or by.group("th")
+        count = int(n) if n.isdigit() else NUMBER_WORDS[n]
+        if (by.group("unit") or by.group("thunit")).startswith(("week", "สัปดาห์", "อาทิตย์")):
+            count *= 7
+        old_due = next((t.get("due", "") for t in tasks if t["num"] == num), "")
+        day = datetime.strptime((old_due or now)[:10], "%Y-%m-%d") + timedelta(days=count)
+        return {"action": action, "num": num, "changes": {"due": day.strftime("%Y-%m-%d") + "T" + (old_due[11:16] or "09:00")},
+                "tokens": 0, "path": "rules"}
     if field == "text":
         changes["text"] = change[:1].upper() + change[1:]
     elif field == "category":

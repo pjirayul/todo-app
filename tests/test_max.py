@@ -628,8 +628,8 @@ class SmallTalk(unittest.TestCase):
             self.assertTrue(server.maybe_chat(" ".join(text.lower().split())) or text in ("how are you", "สบายดีไหม"), text)
             with mock.patch.object(server, "ONE_CALL", False):   # this is the old two-call road (gate call, then parse)
                 r = ask(text, ai=self.CHAT)
-            # a Thai sentence with an English reply: the reply is dropped (the page uses its own Thai line)
-            want = "" if re.search("[฀-๿]", text) else "Thanks! What can I do for you?"
+            # a Thai sentence with an English reply: the reply is dropped (the Thai fallback line is used)
+            want = server.CHAT_FALLBACK["th"] if re.search("[฀-๿]", text) else "Thanks! What can I do for you?"
             self.assertEqual((r["action"], r["kind"], r["reply"]), ("smalltalk", "chat", want), text)
 
     def test_reply_is_cleaned(self):
@@ -823,7 +823,7 @@ class OneCallUnderstand(unittest.TestCase):
         r, n = self.run_ai("you did well", intent="chat", reply="Thanks! What can I do for you?")
         self.assertEqual((r["action"], r["reply"], n), ("smalltalk", "Thanks! What can I do for you?", 1))
         r, n = self.run_ai("คุณช่วยได้ดีมาก", intent="chat", reply="Thanks!")
-        self.assertEqual(r["reply"], "")   # a Thai sentence with an English reply: dropped
+        self.assertEqual(r["reply"], server.CHAT_FALLBACK["th"])   # a Thai sentence with an English reply: dropped
         r, n = self.run_ai("buy milk", intent="chat", reply="Hello!")
         self.assertEqual(r["action"], "add")   # a plain task can't be turned into small talk
         r, n = self.run_ai("buy milk", intent="question")
@@ -1020,3 +1020,58 @@ class CommandForms(unittest.TestCase):
     def test_how_many_done_is_a_question(self):
         r = ask("how many done", self.TASKS, ai=no_ai)
         self.assertEqual((r["action"], r["filter"]["status"]), ("answer", "done"))
+
+
+class Job6FixRound(unittest.TestCase):
+    """Bono's full test (31 Oct): greetings, a loose task match, Thai leftovers, delay by N days, empty chat replies."""
+    RENT = [{"num": 13, "text": "Rent car return", "done": False, "due": ""},
+            {"num": 4, "text": "Dentist appointment", "done": False, "due": "2026-11-02T16:30"},
+            {"num": 3, "text": "Pay rent", "done": False, "due": ""}]
+
+    def test_time_of_day_greetings(self):
+        for text in ["good morning", "Good morning Max", "good evening max", "good afternoon", "morning max", "อรุณสวัสดิ์",
+                     "อรุณสวัสดิ์ครับ แม็กซ์"]:
+            self.assertEqual(ask(text, ai=no_ai)["action"], "greeting", text)
+        r = ask("good morning max, buy eggs")
+        self.assertEqual((r["action"], r["text"]), ("add", "Buy eggs"))
+
+    def test_morning_alone_is_not_a_greeting(self):
+        self.assertEqual(ask("morning run tomorrow")["action"], "add")
+
+    def test_one_shared_word_is_not_a_match(self):
+        for text in ["Move car to garage", "change car to garage", "move car to the garage"]:
+            self.assertIsNone(server.command_by_rules(text, NOW_TEXT, [], self.RENT), text)
+        r = ask("Move car to garage", self.RENT)
+        self.assertEqual((r["action"], r["text"]), ("add", "Move car to garage"))
+
+    def test_a_clear_match_still_works(self):
+        r = server.command_by_rules("move dentist appointment to friday", NOW_TEXT, [], self.RENT)
+        self.assertEqual((r["num"], r["changes"]["due"][:10]), (4, "2026-10-30"))
+        r = server.command_by_rules("move car to friday", NOW_TEXT, [], self.RENT)   # a date: one word is enough
+        self.assertEqual(r["num"], 13)
+
+    def test_an_update_that_changes_nothing_becomes_a_task(self):
+        self.assertIsNone(server.command_by_rules("move dentist appointment to the bank", NOW_TEXT, [], self.RENT))
+        self.assertTrue(server.command_by_rules("move #4 to", NOW_TEXT, [], self.RENT)["nothing"])   # a #number stays exact
+
+    def test_thai_linking_words_leave_with_the_date(self):
+        for text, want in [("ซื้อนมพรุ่งนี้ตอน 2 ทุ่ม", "ซื้อนม"), ("โทรหาแม่ตอน 3 โมงเย็นวันพฤหัส", "โทรหาแม่"),
+                           ("งานเลี้ยงสุดสัปดาห์นี้", "งานเลี้ยง"), ("ล้างของในตู้เย็นพรุ่งนี้", "ล้างของในตู้เย็น")]:
+            self.assertEqual(ask(text)["text"], want, text)
+
+    def test_delay_and_push_by_n_days(self):
+        for text in ["delay #4 by 2 days", "push #4 by 2 days", "postpone #4 by 2 days", "เลื่อนข้อ 4 อีก 2 วัน"]:
+            r = server.command_by_rules(text, NOW_TEXT, [], self.RENT)
+            self.assertEqual((r["num"], r["changes"]), (4, {"due": "2026-11-04T16:30"}), text)
+        r = server.command_by_rules("push #3 by a week", NOW_TEXT, [], self.RENT)   # no date yet: counted from today
+        self.assertEqual(r["changes"], {"due": "2026-11-04T09:00"})
+        r = server.command_by_rules("delay dentist appointment by 3 days", NOW_TEXT, [], self.RENT)
+        self.assertEqual((r["num"], r["changes"]), (4, {"due": "2026-11-05T16:30"}))
+
+    def test_empty_or_wrong_chat_reply_gets_a_friendly_line(self):
+        self.assertEqual(server.chat_reply("", "tell me a joke"), server.CHAT_FALLBACK["en"])
+        self.assertEqual(server.chat_reply("", "คุณเป็นยังไงบ้าง"), server.CHAT_FALLBACK["th"])
+        self.assertEqual(server.chat_reply("You are welcome!", "how are you"), server.CHAT_FALLBACK["en"])
+        self.assertEqual(server.chat_reply("You're welcome!", "thanks a lot"), "You're welcome!")
+        self.assertEqual(server.chat_reply("I am fine, thanks!", "how are you"), "I am fine, thanks!")
+        self.assertEqual(server.chat_reply("Fine thanks!", "คุณเป็นยังไงบ้าง"), server.CHAT_FALLBACK["th"])   # English for Thai

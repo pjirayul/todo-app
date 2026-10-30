@@ -14,7 +14,8 @@
     {"num": 9, "text": "Finish the slides", "done": false, "due": "", "priority": "med", "cat": "Work"},
     {"num": 10, "text": "Ask Bink for Claude access", "done": false, "due": "", "priority": "med", "cat": "Work"},
     {"num": 11, "text": "ซื้อนม", "done": false, "due": "", "priority": "med", "cat": "Shopping"},
-    {"num": 12, "text": "ส่งรายงานลูกค้า", "done": false, "due": "", "priority": "med", "cat": "Work"}
+    {"num": 12, "text": "ส่งรายงานลูกค้า", "done": false, "due": "", "priority": "med", "cat": "Work"},
+    {"num": 13, "text": "Rent car return", "done": false, "due": "", "priority": "med", "cat": "Personal"}
   ],
   "cases": [
     {"s": "buy bread", "action": "add", "title": ["buy bread", "bread"], "due": "", "priority": "med", "category": ["Shopping", "Home"]},
@@ -176,6 +177,19 @@
     {"s": "call bank tomorrow midnight", "action": "add", "title": ["call bank"], "due": "2026-10-31T00:00"},
     {"s": "นัดหมอ พรุ่งนี้ ทุ่มครึ่ง", "action": "add", "title": ["นัดหมอ"], "due": "2026-10-31T19:30"},
     {"s": "นัดหมอ พรุ่งนี้ 14.30 น.", "action": "add", "title": ["นัดหมอ"], "due": "2026-10-31T14:30"},
-    {"s": "how many done", "action": "answer", "filter": {"status": "done"}}
+    {"s": "how many done", "action": "answer", "filter": {"status": "done"}},
+    {"s": "good morning", "action": ["greeting", "smalltalk"]},
+    {"s": "good morning Max", "action": ["greeting", "smalltalk"]},
+    {"s": "good evening max", "action": ["greeting", "smalltalk"]},
+    {"s": "morning max", "action": ["greeting", "smalltalk"]},
+    {"s": "อรุณสวัสดิ์", "action": ["greeting", "smalltalk"]},
+    {"s": "good morning max, buy eggs", "action": "add", "title": ["buy eggs", "eggs"]},
+    {"s": "ซื้อนมพรุ่งนี้ตอน 2 ทุ่ม", "action": "add", "title": ["ซื้อนม"], "due": "2026-10-31T20:00"},
+    {"s": "โทรหาแม่ตอน 3 โมงเย็นวันพฤหัส", "action": "add", "title": ["โทรหาแม่", "โทรแม่"], "due": "2026-11-05T15:00"},
+    {"s": "งานเลี้ยงสุดสัปดาห์นี้", "action": "add", "title": ["งานเลี้ยง"]},
+    {"s": "delay #4 by 2 days", "action": "update", "num": 4, "change": {"due": "2026-11-04T16:30"}},
+    {"s": "push #4 by 2 days", "action": "update", "num": 4, "change": {"due": "2026-11-04T16:30"}},
+    {"s": "change car to garage", "action": "add"},
+    {"s": "tell me a joke", "action": ["smalltalk", "add"]}
   ]
 }
