@@ -26,17 +26,31 @@ server.use_test_mode()
 # Belt and braces: never run if the real database is still selected
 assert os.path.basename(server.DB_FILE) == "test-tasks.db", "exam must run in test mode"
 
-FIELDS = ["action", "title", "due", "priority", "category", "num", "change", "filter"]
+FIELDS = ["action", "title", "due", "priority", "category", "num", "change", "filter", "ask"]
 
 
 def norm(text):
     return " ".join(str(text or "").lower().split())
 
 
+def ask_ok(case, r):
+    """ask = false: no card. ask = "done"/"delete"/...: a clarify card of that case that offers every expected task.
+    "pick" (no task named) is the card or the old pickTask. Cases with step 3 are for job 0q-3 (not built yet)."""
+    want = case["ask"]
+    asked = r.get("action") == "clarify" or bool(r.get("pickTask"))
+    if want is False:
+        return not asked
+    if want == "pick":
+        return bool(r.get("pickTask")) or (r.get("action") == "clarify" and r.get("case") == "pick")
+    return r.get("action") == "clarify" and r.get("case") == want and all(n in (r.get("nums") or []) for n in case.get("nums", []))
+
+
 def check(case, r):
     """{field: True/False} for every field the case lists."""
     act = r.get("action")
     changes = r.get("changes") or {}
+    if r.get("action") == "clarify" and r.get("options"):
+        changes = r["options"][0]["do"].get("changes") or {}   # a card carries the finished change in its first button
     exp_change = case.get("change", {})
     want_act = case["action"] if isinstance(case["action"], list) else [case["action"]]  # a list = any is fine
     out = {"action": act in want_act}
@@ -56,6 +70,8 @@ def check(case, r):
             got = changes.get(key)
             ok = ok and (norm(got) in [norm(w) for w in want] if isinstance(want, list) else got == want)
         out["change"] = ok and bool(changes)
+    if "ask" in case:
+        out["ask"] = ask_ok(case, r)
     if "filter" in case:
         got = r.get("filter") or {}
         out["filter"] = all(norm(got.get(k)) == norm(v) for k, v in case["filter"].items())
@@ -86,7 +102,7 @@ def main():
         return real_ai(*a, **kw)
 
     scores = {k: [0, 0] for k in FIELDS}   # field -> [right, total]
-    seconds, ai_counts, wrong = [], [], []
+    seconds, ai_counts, wrong, results = [], [], [], []
     with mock.patch.object(server, "parse_with_ollama", counting_ai), \
          mock.patch.object(server, "load_memory", return_value=server.clean_memory({})):
         for case in exam["cases"]:
@@ -98,6 +114,7 @@ def main():
                 r = {"action": "error:" + type(err).__name__}
             seconds.append(time.time() - start)
             ai_counts.append(calls["n"])
+            results.append(r)
             result = check(case, r)
             for field, ok in result.items():
                 scores[field][0] += ok
@@ -105,6 +122,8 @@ def main():
             if not all(result.values()):
                 wrong.append({"s": case["s"], "bad": [k for k, v in result.items() if not v], "got": r})
 
+    # Asking too much is worse than asking too little: false_asks counts cards on sentences that should not get one
+    false_asks = sum(1 for c, r in zip(exam["cases"], results) if c.get("ask") is False and r.get("action") == "clarify")
     right = sum(s[0] for s in scores.values())
     total = sum(s[1] for s in scores.values())
     warm = sorted(seconds[1:])
@@ -113,7 +132,7 @@ def main():
         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "label": label, "model": model_override or server.FAST_MODEL,
         "sentences": len(seconds), "overall_pct": round(100 * right / total, 1),
         "fields_pct": {k: round(100 * v[0] / v[1], 1) for k, v in scores.items() if v[1]},
-        "sentences_all_right": len(seconds) - len(wrong),
+        "sentences_all_right": len(seconds) - len(wrong), "false_asks": false_asks,
         "cold_first_s": round(seconds[0], 2), "warm_avg_s": round(sum(warm) / len(warm), 2), "warm_p95_s": round(p95, 2),
         "ai_calls_per_sentence": round(sum(ai_counts) / len(ai_counts), 2),
         "ai_calls_spread": {str(n): ai_counts.count(n) for n in sorted(set(ai_counts))},

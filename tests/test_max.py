@@ -207,7 +207,8 @@ class CommandWords(unittest.TestCase):
 
     def test_delete(self):
         self.assertEqual(ask("delete #9", TASKS), {"action": "delete", "num": 9})
-        self.assertEqual(ask("delete lundry", TASKS), {"action": "delete", "num": 1})   # typo in the name
+        r = ask("delete lundry", TASKS)   # typo in the name: close, not exact, so Max asks first (0q-1)
+        self.assertEqual((r["action"], r["case"], r["nums"]), ("clarify", "delete", [1]))
         self.assertEqual(ask("ลบ #2", TASKS), {"action": "delete", "num": 2})
 
     def test_move_to_a_day(self):
@@ -248,8 +249,11 @@ class CommandWords(unittest.TestCase):
 
 class AskWhenUnsure(unittest.TestCase):
     def test_missing_target_asks_which(self):
-        self.assertEqual(ask("done", TASKS), {"action": "complete", "pickTask": True})
-        self.assertEqual(ask("delete it", TASKS), {"action": "delete", "pickTask": True})
+        for text, action in [("done", "complete"), ("delete it", "delete")]:
+            r = ask(text, TASKS)
+            self.assertEqual((r["action"], r["case"]), ("clarify", "pick"))
+            self.assertEqual(r["nums"], [9, 2, 1])   # open tasks, newest first, at most 3 (#3 is done)
+            self.assertEqual(r["options"][0]["do"]["action"], action)
 
     def test_unknown_task_reports_missing(self):
         r = ask("delete zebra", TASKS, ai=ai_says("delete", "zebra"))
@@ -260,9 +264,9 @@ class AskWhenUnsure(unittest.TestCase):
 
     def test_ambiguous_match_gives_choices(self):
         r = ask("delete call", CALLS, ai=ai_says("delete", "call"))
-        self.assertEqual(r["action"], "delete")
-        self.assertIsNone(r.get("num"))
-        self.assertEqual(sorted(r["choices"]), [5, 6])
+        self.assertEqual((r["action"], r["case"]), ("clarify", "similar"))
+        self.assertEqual(sorted(r["nums"]), [5, 6])
+        self.assertEqual([o["do"] for o in r["options"]], [{"action": "delete", "num": n, "confirmed": True} for n in r["nums"]])
 
     def test_chosen_number_settles_the_question(self):
         self.assertEqual(ask("delete call", CALLS, chosen=6), {"action": "delete", "num": 6})
@@ -810,14 +814,15 @@ class OneCallUnderstand(unittest.TestCase):
 
     def test_done_by_the_ais_target(self):
         r, n = self.run_ai("done with dentist", DENTIST, intent="done", target="dentist")
-        self.assertEqual((r["action"], r["num"], n), ("complete", 4, 1))
+        self.assertEqual((r["action"], r["case"], r["nums"], n), ("clarify", "done", [4], 1))
         r, n = self.run_ai("I finished the slides", [{"num": 7, "text": "Finish the slides", "done": False}], intent="done", target="slides")
-        self.assertEqual((r["action"], r["num"]), ("complete", 7))
+        self.assertEqual(r["options"][0]["do"], {"action": "complete", "num": 7})   # every button carries its exact payload
+        self.assertEqual(r["options"][1]["do"]["action"], "add")                    # "Add as new task"
         r, n = self.run_ai("ซื้อนมแล้ว", [{"num": 3, "text": "ซื้อนม", "done": False}], intent="done", target="ซื้อนม")
-        self.assertEqual((r["action"], r["num"]), ("complete", 3))
+        self.assertEqual((r["case"], r["nums"]), ("done", [3]))
 
     def test_no_command_word_means_no_delete_or_done(self):
-        for sentence, intent in [("cancel dentist", "delete"), ("finish the report", "done"), ("dentist friday", "undo")]:
+        for sentence, intent in [("finish the report", "done"), ("dentist friday", "undo")]:
             r, n = self.run_ai(sentence, DENTIST, intent=intent, target="dentist")
             self.assertEqual((r["action"], n), ("add", 1), sentence)   # a plain task, the AI's idea is ignored
 
@@ -851,7 +856,7 @@ class OneCallUnderstand(unittest.TestCase):
     def test_command_words_without_a_found_task_ask_the_ai(self):
         # rules: "dentist task" is not a title; the AI's target "dentist" is
         r, n = self.run_ai("delete the dentist task", DENTIST, intent="delete", target="dentist")
-        self.assertEqual((r["action"], r["num"], n), ("delete", 4, 1))
+        self.assertEqual((r["action"], r["case"], r["nums"], n), ("clarify", "delete", [4], 1))   # by name: a card, not a guess
         # the AI sees no command and there is no #number: it is a new task ("Move car to garage"), not "can't find"
         r, n = self.run_ai("delete the unicorn task", DENTIST)
         self.assertEqual(r["action"], "add")

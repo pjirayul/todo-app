@@ -37,6 +37,9 @@ const TEXT = {
     notifyBlocked: "Reminders are blocked for this site. To allow them: click the icon left of the address bar › Notifications › Allow, then reload.",
     notifyNone: "This browser can't show reminders.", limitSaved: (n) => `Daily AI limit: ${n} tokens`,
     sureClear: (n) => `Delete ${n} done task${n === 1 ? "" : "s"}?`, yesClear: "Yes, delete",
+    clarifyQ_done: "Mark this done?", clarifyQ_delete: "Cancel (delete) this task?", clarifyQ_change: "Change this task?",
+    clarifyQ_similar: "Which one?", clarifyQ_pick: "Which task?",
+    opt_complete: "Done", opt_delete: "Cancel", opt_update: "Change", opt_edit: "Edit", opt_uncomplete: "Reopen", opt_add: "Add as new task",
     askWhich: "Which one?", askWhichTask: "Which task?", askWhen: (x) => `When is "${x}"?`,
     today: "Today", tomorrow: "Tomorrow", pickDate: "Pick date", noDate: "No date", ok: "OK", askDate: "Which day?",
     askDetails: "Quick details so Max can plan better", suggestSteps: "Suggest steps", skipSuggest: "Skip, just suggest",
@@ -107,6 +110,9 @@ const TEXT = {
     notifyBlocked: "การแจ้งเตือนของเว็บนี้ถูกบล็อกอยู่ วิธีเปิด: กดไอคอนซ้ายของช่องที่อยู่เว็บ › การแจ้งเตือน › อนุญาต แล้วโหลดหน้าใหม่",
     notifyNone: "เบราว์เซอร์นี้แสดงการแจ้งเตือนไม่ได้", limitSaved: (n) => `ขีดจำกัด AI ต่อวัน: ${n} โทเคน`,
     sureClear: (n) => `ลบงานที่เสร็จแล้ว ${n} งาน ใช่ไหม?`, yesClear: "ใช่ ลบเลย",
+    clarifyQ_done: "ทำเครื่องหมายว่าเสร็จ?", clarifyQ_delete: "ยกเลิก (ลบ) งานนี้?", clarifyQ_change: "แก้งานนี้?",
+    clarifyQ_similar: "หมายถึงงานไหน?", clarifyQ_pick: "งานไหน?",
+    opt_complete: "เสร็จแล้ว", opt_delete: "ยกเลิก", opt_update: "แก้", opt_edit: "แก้ไข", opt_uncomplete: "เปิดใหม่", opt_add: "เพิ่มเป็นงานใหม่",
     askWhich: "หมายถึงงานไหน?", askWhichTask: "งานไหน?", askWhen: (x) => `"${x}" เมื่อไหร่?`,
     today: "วันนี้", tomorrow: "พรุ่งนี้", pickDate: "เลือกวัน", noDate: "ไม่ระบุวัน", ok: "ตกลง", askDate: "วันไหน?",
     askDetails: "ขอรายละเอียดสั้นๆ ให้ Max วางแผนได้ดีขึ้น", suggestSteps: "ขอขั้นตอน", skipSuggest: "ข้าม แนะนำเลย",
@@ -612,17 +618,18 @@ function noteIfMistake(todo) {
   }).catch(() => {}); // never slow down or block the delete
 }
 
+function deleteNow(todo) {
+  backup(`before delete #${todo.num}`, true);
+  noteIfMistake(todo);
+  deleteTaskFiles(todo);
+  todos = todos.filter((x) => x !== todo);
+  update();
+  $("todo-input").value = "";
+  $("todo-input").focus();
+  showMessage(t("deleted")(todo.num)); // confirm it is really gone
+}
 function askDelete(todo) {
-  askYesNo($("cmd-msg"), t("sureDelete")(`#${todo.num} "${todo.text}"`), t("yes"), () => {
-    backup(`before delete #${todo.num}`, true);
-    noteIfMistake(todo);
-    deleteTaskFiles(todo);
-    todos = todos.filter((x) => x !== todo);
-    update();
-    $("todo-input").value = "";
-    $("todo-input").focus();
-    showMessage(t("deleted")(todo.num)); // confirm it is really gone
-  }, () => $("todo-input").focus());
+  askYesNo($("cmd-msg"), t("sureDelete")(`#${todo.num} "${todo.text}"`), t("yes"), () => deleteNow(todo), () => $("todo-input").focus());
 }
 
 // Briefly highlight the task a command just changed
@@ -642,6 +649,10 @@ function simpleCommand(text) {
   const low = stripGreeting(text).toLowerCase();
   const num = low.match(/#\s*(\d+)/);
   let action = "";
+  // A lone "cancel"/"move" is never a task (same as bare_action in server.py): offline it asks / keeps the text
+  const bare = low.replace(/\b(it|this|that|task|the)\b|อันนี้|งานนี้|มัน|นี้/g, "").replace(/[\s.,!?]+/g, " ").trim();
+  if (/^(cancel|ยกเลิก)$/.test(bare)) return { action: "delete", pickTask: true };
+  if (/^(move|change|edit|reschedule|modify|update|postpone|push|delay|เลื่อน|แก้|ย้าย|เปลี่ยน)$/.test(bare)) return { action: "offline" };
   if (/^(undo|undone|uncheck|unmark|reopen|not done)\b|ยังไม่เสร็จ|ยกเลิกเสร็จ/.test(low)) action = "uncomplete";
   else if (/^(delete|remove|del|erase)\b|^ลบ/.test(low)) action = "delete";
   else if (/^(done|mark|tick|finished|completed)\b|\b(done|finished|completed)$|เสร็จ(แล้ว)?$|^เสร็จ/.test(low)) action = "complete";
@@ -667,6 +678,7 @@ function applyCommand(cmd) {
   const todo = todos.find((x) => x.num === cmd.num);
   if (!todo) return t("notFound")(`#${cmd.num}`);
   if (cmd.action === "delete") {
+    if (cmd.confirmed) { deleteNow(todo); return null; } // a clarify card button was the "Yes"
     askDelete(todo); // deletes only after the owner clicks Yes
     return null;
   }
@@ -937,6 +949,30 @@ async function askWhichTask(text, cmd) {
   finishCommand(chosen);
 }
 
+// ---------- 8c. Max asks before he guesses (clarify card) ----------
+// The server (clarify() in server.py) sends {case, options:[{label, num, do}]}; every "do" is the complete command.
+// Nothing is saved until a button is clicked. Cancel / Escape / ignoring = no change, the text stays in the box.
+const clarifyLabel = (o) => {
+  if (!o.num) return t(o.label);                       // "Add as new task"
+  const x = todos.find((y) => y.num === o.num);
+  if (!x) return `${t(o.label)} #${o.num}`;
+  const when = o.do.changes?.due ? " → " + shortDate(o.do.changes.due) : "";
+  return `${t(o.label)} "${x.text.length > 30 ? x.text.slice(0, 29) + "…" : x.text}" #${x.num}${when}`;
+};
+async function askClarify(card) {
+  const choices = card.options.map((o, i) => ({ label: clarifyLabel(o), value: i, primary: i === 0 }));
+  const answer = await askMax(t("clarifyQ_" + card.case), [...choices, { label: t("cancel"), value: null }]);
+  if (!answer) return; // ignored or cancelled: nothing changes
+  const act = card.options[answer.value].do;
+  if (act.action === "add") return act.askWhen ? askWhenThenAdd(act) : addTask(act);
+  if (act.action === "edit") { // "move" alone: open that task's editor
+    const x = todos.find((y) => y.num === act.num);
+    if (x) { $("todo-input").value = ""; openEditor(x); }
+    return;
+  }
+  finishCommand(act);
+}
+
 // A meeting/flight/trip… with no day: "When?" Today · Tomorrow · Pick date · No date (= add it as it is)
 async function askWhenThenAdd(task) {
   const day = (offset) => {
@@ -1043,7 +1079,8 @@ $("todo-form").addEventListener("submit", async (e) => {
       showMessage(""); // drop "Max is thinking…"
       $("todo-input").value = "";
       showAnswer(answer);
-    } else if (cmd?.pickTask || cmd?.choices?.length) followUp = () => askWhichTask(text, cmd);
+    } else if (cmd?.action === "clarify") followUp = () => askClarify(cmd);
+    else if (cmd?.pickTask || cmd?.choices?.length) followUp = () => askWhichTask(text, cmd);
     else if (cmd) finishCommand(cmd);
     else if (task.askWhen) followUp = () => askWhenThenAdd(task);
     else addTask(task, problem);

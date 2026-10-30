@@ -18,6 +18,7 @@ import shutil
 import sqlite3
 import sys
 import threading
+import uuid
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta
@@ -1206,7 +1207,7 @@ UNDERSTAND_EXAMPLES = "\n".join(
 # Anywhere in the sentence (the rules road wants them first); "finish the report" and "cancel dentist" stay tasks.
 DONE_ANY = re.compile(r"\b(done|finished|completed)\b|เสร็จ|แล้ว$")
 UNDO_ANY = re.compile(r"\b(undo|undone|uncheck|unmark|reopen|not done|not finished)\b|ยังไม่เสร็จ")
-DELETE_ANY = re.compile(r"\b(delete|remove|erase|del)\b|ลบ")
+DELETE_ANY = re.compile(r"\b(delete|remove|erase|del|cancel)\b|ลบ|ยกเลิก(?!เสร็จ)")
 CHANGE_ANY = re.compile(r"\b(change|modify|move|rename|edit|update|reschedule|postpone|push|delay)\b|เปลี่ยน|แก้|ย้าย|เลื่อน")
 INTENT_WORDS = {"done": DONE_ANY, "undo": UNDO_ANY, "delete": DELETE_ANY, "change": CHANGE_ANY}
 INTENT_ACTION = {"done": "complete", "undo": "uncomplete", "delete": "delete", "change": "update"}
@@ -1218,6 +1219,7 @@ def understand(s: str, now: str, categories: list, tasks: list, greeted: bool = 
     sentence = clean_sentence(s)
     prompt, known, memory = ai_prompt(sentence, categories, UNDERSTAND_EXAMPLES)
     r = parse_with_ollama(prompt, UNDERSTAND_INSTRUCTIONS, UNDERSTAND_SCHEMA, timeout=60)
+    as_new = lambda: finish_add(check_task(dict(r), sentence, now, known, memory), s)   # the card's "Add as new task" button
     tokens = r.get("tokens", 0)
     low = " ".join(s.split()).lower()   # the owner's raw words (fix_date_typos would turn "many" into "may")
     intent = r.get("intent") if r.get("intent") in INTENTS else "add"
@@ -1237,21 +1239,30 @@ def understand(s: str, now: str, categories: list, tasks: list, greeted: bool = 
         wanted = {"undo": True, "done": False, "change": False}.get(intent)
         pool = tasks if wanted is None else [t for t in tasks if t.get("done") is wanted]
         num, choices = find_task_loose(target, pool)
+        by_name = not re.search(r"#\s*\d", low)   # a #number is exact: no card
         if num is None and target == low and rules_result is not None:
-            return {"action": action, "pickTask": True, "tokens": tokens}   # no task named: the page asks "Which task?"
+            # no task named: the page asks "Which task?"
+            return (pick_card(action, tasks) | {"tokens": tokens}) if action != "update" else {"action": action, "pickTask": True, "tokens": tokens}
+        if num is None and choices and by_name and action in ("complete", "delete"):
+            return clarify("similar", choices, plain_do(action)) | {"tokens": tokens}   # "done call": which of the Call tasks?
         if num is None and target != low:
             return {"action": action, "missing": target, "choices": choices, "tokens": tokens}
         # (num is None and target == low: Python read no command and the AI named no task, "change car to garage": a new task, below)
         if num is not None and intent != "change":
+            if intent in ("done", "delete") and by_name:
+                # The AI found the task, but the owner did not say "done X" first: ask, never guess
+                return clarify(intent, [num], plain_do(action), as_new()) | {"tokens": tokens}
             return {"action": action, "num": num, "tokens": tokens}
         if num is not None:
             change = " ".join(str(r.get("change") or "").split())
-            by_name = not re.search(r"#\s*\d", low)
             if not (by_name and weak_name_match(num, target, change, tasks)):
                 done = work_out_changes(num, change, "", False, low, tasks, now, categories, ai_task=r)
                 done["tokens"] = done.get("tokens", 0) + tokens
                 done["path"] = "ai"
                 if not (by_name and done.get("nothing")):
+                    if by_name:   # "move the rent car thing to monday": the changes are ready, one click applies them
+                        return clarify("change", [num], lambda n: {"action": "update", "num": n, "changes": done["changes"]},
+                                       as_new()) | {"tokens": done["tokens"]}
                     return done
             # else: no clear task / nothing to change: a command word without a #number is a new task (below)
 
@@ -1262,9 +1273,57 @@ def understand(s: str, now: str, categories: list, tasks: list, greeted: bool = 
     return finish_add(check_task(r, sentence, now, known, memory), s) | {"path": "ai"}
 
 
+# ---------- Max asks before he guesses (job 0q-1) ----------
+# One card shape for every "are you sure what you meant?" moment. Nothing is saved until the owner clicks an option;
+# every option carries its complete "do" (the same dict run_command would have returned), so a click needs no 2nd AI call.
+# Python decides WHEN (a real candidate task AND a command word); plain new tasks never get a card.
+def plain_do(action: str):
+    """The "do" for one task: done / delete / reopen / edit. A delete click IS the confirmation."""
+    return lambda num: {"action": action, "num": num, **({"confirmed": True} if action == "delete" else {})}
+
+
+def clarify(case: str, nums: list, make_do, add_do: dict = None) -> dict:
+    """case: done | delete | change | similar | pick. At most 3 tasks, safest first, then "Add as new task"."""
+    nums = nums[:3]
+    options = [{"label": "opt_" + make_do(n)["action"], "num": n, "do": make_do(n)} for n in nums]
+    if add_do:
+        options.append({"label": "opt_add", "do": add_do})
+    # The page writes the sentences from its own text table (EN/TH); "more" is for "Tell Max more…" (0q-2)
+    return {"action": "clarify", "case": case, "id": uuid.uuid4().hex[:8], "q": "clarifyQ_" + case,
+            "nums": nums, "options": options, "more": True}
+
+
+def pick_card(action: str, tasks: list) -> dict:
+    """No task named ("cancel", "done it"): offer the 3 newest tasks that fit. "move" opens the editor of the pick."""
+    nums = sorted((t["num"] for t in tasks if bool(t.get("done")) is (action == "uncomplete")), reverse=True)
+    if not nums:
+        return {"action": action, "pickTask": True}   # nothing to pick from: the page says "no tasks"
+    return clarify("pick", nums, plain_do("edit" if action == "update" else action))
+
+
+BARE_FILLER = re.compile(r"\b(it|this|that|task|the)\b|อันนี้|งานนี้|มัน|นี้")
+
+
+def bare_action(text: str) -> str:
+    """"cancel", "move it", "ลบ": only a command word and nothing else -> its action ("" = not a bare command)."""
+    rest = BARE_FILLER.sub(" ", " ".join(text.lower().split())).strip(" .,!?")
+    if not rest or re.search(r"\d", rest):
+        return ""
+    for intent in ("undo", "done", "delete", "change"):   # undo first: "ยกเลิกเสร็จ" must not read as delete
+        if INTENT_WORDS[intent].search(rest) and not INTENT_WORDS[intent].sub("", rest).strip(" .,!?"):
+            return INTENT_ACTION[intent]
+    return ""
+
+
+def guard_bare_add(result: dict, tasks: list) -> dict:
+    """Safety net: if the AI still turned a lone command word into a task ("Cancel", "Move"), ask "Which task?" instead."""
+    action = bare_action(result.get("text", "")) if result.get("action") == "add" else ""
+    return (pick_card(action, tasks) | {"tokens": result.get("tokens", 0)}) if action else result
+
+
 def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: int = None) -> dict:
     """Same as work_out_command, but every result says which road it took: "rules" (Python alone) or "ai"."""
-    result = work_out_command(sentence, now, categories, tasks, chosen)
+    result = guard_bare_add(work_out_command(sentence, now, categories, tasks, chosen), tasks)
     result.setdefault("path", "ai" if result.get("tokens") else "rules")  # AI calls report their tokens
     return result
 
@@ -1286,7 +1345,20 @@ def work_out_command(sentence: str, now: str, categories: list, tasks: list, cho
         return {"action": "greeting"}  # just "hi max": the page says hello, no task is added
     greeted = strip_greeting(s)[1]
     s = strip_greeting(s)[0]  # "hey max add milk tomorrow" is the command "add milk tomorrow"
+    if chosen is None and bare_action(s):
+        return pick_card(bare_action(s), tasks)   # just "cancel" / "move": ask which task, no AI call
     result = command_by_rules(s, now, categories, tasks, chosen)
+    if chosen is None and result and result["action"] != "update":   # no task named / several fit: a card instead of the old two-step
+        if result.get("pickTask"):
+            return pick_card(result["action"], tasks)
+        if result.get("choices"):
+            return clarify("similar", result["choices"], plain_do(result["action"]))
+    if chosen is None and result and result.pop("fuzzy", False):
+        # A command-word-first match that is only close ("move the rent car thing to monday"): one click, "Add as new" costs no AI call
+        if result["action"] == "update":
+            return clarify("change", [result["num"]], lambda n: {"action": "update", "num": n, "changes": result["changes"]}, add_without_ai(s))
+        if result["action"] in ("complete", "delete"):
+            return clarify("done" if result["action"] == "complete" else "delete", [result["num"]], plain_do(result["action"]), add_without_ai(s))
     if not one_call:
         return result or add_task(s, now, categories)
     if result is not None and "missing" not in result:
@@ -1364,14 +1436,16 @@ def command_by_rules(s: str, now: str, categories: list, tasks: list, chosen: in
         num, choices = find_task(target, pool)
     if num is None:
         return {"action": action, "missing": target, "choices": choices}
-    if action != "update":
-        return {"action": action, "num": num}
-
     by_name = not num_match and not chosen
+    # "fuzzy" = the words are not written inside the title ("lundry", "rent car thing"): work_out_command asks first
+    fuzzy = by_name and target.lower().strip() not in next((str(t.get("text", "")).lower() for t in tasks if t["num"] == num), "")
+    if action != "update":
+        return {"action": action, "num": num} | ({"fuzzy": True} if fuzzy else {})
+
     if by_name and not field and weak_name_match(num, target, change, tasks):
         return None   # "move car to garage": one shared word is no clear match, so it is a new task
     result = work_out_changes(num, change, field, rename, low, tasks, now, categories)
-    return None if by_name and result.get("nothing") else result   # an update that changes nothing is never the answer
+    return None if by_name and result.get("nothing") else result | ({"fuzzy": True} if fuzzy else {})   # an update that changes nothing is never the answer
 
 
 def weak_name_match(num: int, target: str, change: str, tasks: list) -> bool:
