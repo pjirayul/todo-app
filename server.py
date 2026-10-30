@@ -1187,7 +1187,7 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             to = "Toto" if body.get("to") == "Claude" else body.get("to")  # Claude was renamed Toto
-            to = to if to in ("Toto", "Kimi", "George", "Bono") else "Toto"
+            to = to if to in ("Toto", "Kimi", "George", "Bono", "Lewis", "GP") else "Toto"
             text = str(body.get("text", "")).strip()[:1000]
             if not text:
                 return self.send_json({"error": "Empty command"}, 400)

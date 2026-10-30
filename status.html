@@ -120,9 +120,10 @@
     .back:hover { border-color: var(--chip-on-line); }
     @media (prefers-reduced-motion: reduce) { .back, .to button, .send { transition: none; } }
     .cmd { display: grid; gap: 10px; }
-    .to { display: flex; gap: 8px; flex-wrap: wrap; }
+    .to { display: flex; gap: 6px; flex-wrap: wrap; }
     .to button, .send { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit; cursor: pointer; transition: border-color .2s, filter .2s; }
-    .to button { display: inline-flex; align-items: center; gap: 8px; padding-left: 8px; border-radius: 99px; }
+    /* Slimmer pills so 6 members fit in 2 rows on a phone; height stays 44px for easy tapping */
+    .to button { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px 0 6px; border-radius: 99px; }
     .to button:hover { border-color: var(--chip-on-line); }
     .to button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
     #cmd-text { min-height: 80px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--text); font: inherit; resize: vertical; }
@@ -194,6 +195,8 @@
         <button type="button" data-to="Kimi"><span class="mini av-kimi" aria-hidden="true">K</span>Kimi</button>
         <button type="button" data-to="George"><span class="mini av-george" aria-hidden="true">G</span>George</button>
         <button type="button" data-to="Bono"><span class="mini av-bono" aria-hidden="true">B</span>Bono</button>
+        <button type="button" data-to="Lewis"><span class="mini av-lewis" aria-hidden="true">L</span>Lewis</button>
+        <button type="button" data-to="GP"><span class="mini av-gp" aria-hidden="true">GP</span>GP</button>
       </div>
       <textarea id="cmd-text" placeholder="e.g. Kimi, add a weekly summary of done tasks" required></textarea>
       <button type="submit" class="send"><svg class="i sm" aria-hidden="true"><use href="#i-send"/></svg>Send to inbox</button>
