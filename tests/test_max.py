@@ -338,12 +338,28 @@ class CategoryHints(unittest.TestCase):
         self.assertEqual(server.pick_category("Stuff", "no hint here", []), "Stuff")  # nothing better: keep
 
     def test_good_ai_category_is_kept(self):
-        self.assertEqual(server.pick_category("Shopping", "gym", []), "Shopping")
+        self.assertEqual(server.pick_category("Shopping", "buy shoes", []), "Shopping")
         self.assertEqual(server.pick_category("Work", "team meeting", []), "Work")
         self.assertEqual(server.pick_category("Work", "gym", []), "Health")      # the AI over-uses Work
         self.assertEqual(server.pick_category("Personal", "something", []), "Personal")  # no hint: kept
         self.assertEqual(server.pick_category("health", "x", []), "Health")
         self.assertEqual(server.pick_category("Family", "gym", ["Family"]), "Family")  # the owner's own
+
+    def test_work_words_are_never_overridden(self):
+        pick = server.pick_category
+        for text in ("run the team meeting", "send run report to boss", "clean up the project code", "repair the server",
+                     "call dentist about report", "email boss about tax", "prepare class presentation for client",
+                     "send report to boss", "ประชุมทีมงาน"):
+            self.assertEqual(pick("Work", text, []), "Work", text)
+        self.assertEqual(pick("Home", "clean the office", []), "Home")  # known non-Work category stays
+
+    def test_strong_hints_fix_wrong_known_category(self):
+        pick = server.pick_category
+        self.assertEqual(pick("Home", "go to the gym tomorrow", []), "Health")
+        self.assertEqual(pick("Money", "pay rent on the 5th", []), "Home")
+        self.assertEqual(pick("Work", "gym friday 6pm", []), "Health")
+        self.assertEqual(pick("Personal", "ไปยิม", []), "Health")
+        self.assertEqual(pick("Money", "dentist on friday", []), "Health")
 
     def test_owner_spelling_wins(self):
         self.assertEqual(server.pick_category("", "gym", ["HEALTH"]), "HEALTH")

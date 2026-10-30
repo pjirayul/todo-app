@@ -362,15 +362,34 @@ CATEGORY_HINTS = (
 )
 
 
+# Clear work words: when one is in the sentence, hints like "run" or "clean" must never turn it into Health/Home
+WORK_WORDS = re.compile(r"\b(boss|client|team|meeting|project|report|server|code|office|colleague|deadline|presentation|email)\b|"
+                        r"งาน|ประชุม|หัวหน้า|ลูกค้า|รายงาน|โปรเจกต์")
+# Strong, unambiguous hints: these may correct a wrong (but known) AI category
+STRONG_HINTS = (
+    ("Health", r"\b(gym|workout|dentist|doctor)\b|ยิม|หมอ"),
+    ("Home", r"\brent\b|ค่าเช่า"),
+)
+
+
 def pick_category(ai_category: str, sentence: str, known: list) -> str:
     """Keep the AI's category when it is one we know; when it gave none or an odd one, use keyword hints.
     Only existing category names are used (the owner's own spelling wins: 'health' -> 'Health')."""
     names = {c.lower(): c for c in DEFAULT_CATEGORIES + list(known)}
     ai_category = (ai_category or "").strip()
-    # The small AI over-uses "Work" and "Personal": for those, a clear keyword ("gym") is more reliable
-    if ai_category.lower() in names and ai_category.lower() not in ("work", "personal"):
-        return names[ai_category.lower()]
     lower = sentence.lower()
+    ai_known = ai_category.lower() in names
+    # Work words win over every keyword hint ("send run report to boss" is Work)
+    if WORK_WORDS.search(lower):
+        return names["work"] if (not ai_known or ai_category.lower() in ("work", "personal")) else names[ai_category.lower()]
+    # A strong hint beats the AI's default category (not the owner's own categories like "Family")
+    if not ai_known or ai_category.lower() in (c.lower() for c in DEFAULT_CATEGORIES):
+        for name, pattern in STRONG_HINTS:
+            if re.search(pattern, lower):
+                return names.get(name.lower(), name)
+    # The small AI over-uses "Work" and "Personal": for those, a clear keyword ("gym") is more reliable
+    if ai_known and ai_category.lower() not in ("work", "personal"):
+        return names[ai_category.lower()]
     for name, pattern in CATEGORY_HINTS:
         if re.search(pattern, lower):
             return names.get(name.lower(), name)
