@@ -721,3 +721,32 @@ class FastPath(unittest.TestCase):
         self.assertEqual(ask("จ่ายค่าเน็ตอีก 3 วัน")["due"], "2026-10-31T09:00")
         self.assertEqual(ask("move #1 to in 2 days", TASKS)["changes"]["due"][:10], "2026-10-30")
         self.assertEqual(PATHS[-1], "rules")
+
+
+class ThaiTitleLinkingWords(unittest.TestCase):
+    """Job 0g-1: the little word stuck to a date goes with it, the same word elsewhere stays."""
+
+    def title(self, sentence):
+        return ask(sentence)["text"]   # the fake AI copies the sentence, so this tests Python's clean-up
+
+    def test_linking_words_go_with_the_date(self):
+        self.assertEqual(self.title("ขอ claude จาก bink ในวันศุกร์"), "ขอ claude จาก bink")
+        self.assertEqual(self.title("ส่งรายงานภายในพรุ่งนี้"), "ส่งรายงาน")
+        self.assertEqual(self.title("กินข้าวกับแม่ในวันอาทิตย์"), "กินข้าวกับแม่")
+        self.assertEqual(self.title("ประชุมทีมเมื่อวันจันทร์"), "ประชุมทีม")
+
+    def test_time_words_are_cut_whole(self):
+        self.assertEqual(self.title("นัดหมอตอนบ่ายสาม"), "นัดหมอ")
+        self.assertEqual(self.title("โทรหาลูกค้าตอนเย็น"), "โทรหาลูกค้า")
+
+    def test_same_word_elsewhere_stays(self):
+        self.assertEqual(self.title("ล้างของในตู้เย็นพรุ่งนี้"), "ล้างของในตู้เย็น")
+        self.assertEqual(self.title("ซื้อของใช้ในบ้าน"), "ซื้อของใช้ในบ้าน")
+
+    def test_dates_still_read(self):
+        self.assertEqual(ask("ขอ claude จาก bink ในวันศุกร์")["due"], "2026-10-30T09:00")   # Friday after Wed 28 Oct
+        self.assertEqual(ask("นัดหมอตอนบ่ายสาม")["due"], "2026-10-28T15:00")
+
+    def test_english_titles_are_not_touched(self):
+        clean = lambda *a, **k: {**fake_ai(*a), "text": "check in at hotel", "when": "none", "time": "15:00"}
+        self.assertEqual(ask("check in at hotel at 3pm", ai=clean)["text"], "Check in at hotel")

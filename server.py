@@ -270,9 +270,11 @@ def thai_time(text: str) -> str:
 
 
 CLOCK_TIME = re.compile(r"\d\s*(:\s*\d\d|\.\d\d|am\b|pm\b|น\.|โมง|ทุ่ม)|noon|" + THAI_TIME_ANY, re.I)
-THAI_DATE_WORDS = (r"มะรืนนี้|มะรืน|พรุ่งนี้|วันนี้|คืนนี้|ตอนเช้า|ตอนเย็น|ตอนบ่าย|ด่วน|ไม่รีบ|"
+# A little linking word stuck to a date ("ในวันศุกร์", "ภายในพรุ่งนี้", "ตอนบ่ายสาม") goes away with it; the same
+# word anywhere else ("ของในตู้เย็น") stays. The lead word is tried first, so "ตอนบ่ายสาม" is cut whole.
+THAI_DATE_WORDS = (r"(?:ภายใน|ใน|ตอน|เมื่อ)?(?:มะรืนนี้|มะรืน|พรุ่งนี้|วันนี้|คืนนี้|ตอนเช้า|ตอนเย็น|ตอนบ่าย|ด่วน|ไม่รีบ|"
                    r"(วัน)?(จันทร์|อังคาร|พุธ|พฤหัส(บดี)?|ศุกร์|เสาร์|อาทิตย์)(หน้า)?|วันที่\s*\d+|"
-                   r"(" + THAI_TIME_ANY + r")(\s*ครึ่ง)?|\d+\s*(โมง|ทุ่ม)|(สัปดาห์|เดือน)หน้า|อีก\s*\d+\s*วัน")
+                   r"(" + THAI_TIME_ANY + r")(\s*ครึ่ง)?|\d+\s*(โมง|ทุ่ม)|(สัปดาห์|เดือน)หน้า|อีก\s*\d+\s*วัน)")
 THAI_LETTERS = re.compile(r"[฀-๿]")
 
 # Weekday names Python reads itself (the AI sometimes says "next week" when nobody did).
