@@ -146,6 +146,7 @@ def parse_with_ollama(prompt: str, system: str = INSTRUCTIONS, schema: dict = TA
             "stream": False,
             "keep_alive": OLLAMA_KEEP_ALIVE,
             "options": {"temperature": temperature},
+            **({"think": False} if model.startswith("qwen3") else {}),   # Qwen3 thinks by default: slow + <think> text
         }).encode(),
         headers={"Content-Type": "application/json"},
     )

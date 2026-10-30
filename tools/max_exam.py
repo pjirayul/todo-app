@@ -1,6 +1,7 @@
 """Max's exam: run the sentences in tests/max_exam.json through the real run_command + real Ollama.
 
     python tools/max_exam.py [label]        (label = a note saved with the run, e.g. "after keep-alive")
+    python tools/max_exam.py --model qwen3:4b   (another model for this run only)
     python tools/max_exam.py -v             (also print every wrong answer)
 
 Safe by design: it calls use_test_mode() first (test database, test files), checks that again, and uses
@@ -63,7 +64,13 @@ def check(case, r):
 
 def main():
     verbose = "-v" in sys.argv
-    words = [a for a in sys.argv[1:] if a != "-v"]
+    args = [a for a in sys.argv[1:] if a != "-v"]
+    model_override = ""
+    if "--model" in args:   # try another brain for this run only: --model qwen3:4b
+        i = args.index("--model")
+        model_override = args[i + 1]
+        del args[i:i + 2]
+    words = args
     label = words[0] if words else ""
     with open(os.path.join(ROOT, "tests", "max_exam.json"), encoding="utf-8-sig") as f:
         exam = json.load(f)
@@ -74,6 +81,8 @@ def main():
 
     def counting_ai(*a, **kw):
         calls["n"] += 1
+        if model_override:
+            kw["model"] = model_override   # this run only; server.py's FAST_MODEL is not changed
         return real_ai(*a, **kw)
 
     scores = {k: [0, 0] for k in FIELDS}   # field -> [right, total]
@@ -101,7 +110,7 @@ def main():
     warm = sorted(seconds[1:])
     p95 = warm[min(len(warm) - 1, int(len(warm) * 0.95))]
     summary = {
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "label": label,
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "label": label, "model": model_override or server.FAST_MODEL,
         "sentences": len(seconds), "overall_pct": round(100 * right / total, 1),
         "fields_pct": {k: round(100 * v[0] / v[1], 1) for k, v in scores.items() if v[1]},
         "sentences_all_right": len(seconds) - len(wrong),
