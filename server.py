@@ -39,6 +39,7 @@ SMART_TIMEOUT = 20              # seconds to wait for the smart brain before fal
 CLAUDE_MODEL = "claude-haiku-5-5"
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 OLLAMA_TAGS_URL = "http://127.0.0.1:11434/api/tags"  # lists the models Ollama has
+OLLAMA_KEEP_ALIVE = "2h"  # keep the model in memory between commands (Ollama's default 5 min means a slow first call)
 
 WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
@@ -143,6 +144,7 @@ def parse_with_ollama(prompt: str, system: str = INSTRUCTIONS, schema: dict = TA
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
             "format": schema,   # forces the answer into our JSON shape
             "stream": False,
+            "keep_alive": OLLAMA_KEEP_ALIVE,
             "options": {"temperature": temperature},
         }).encode(),
         headers={"Content-Type": "application/json"},
@@ -1731,6 +1733,17 @@ TEST_MODE = "--test" in sys.argv
 PORT = 8000
 
 
+def warm_up_ollama():
+    """Load the model now, so the owner's first command is not slow. Never stops the server."""
+    try:
+        data = json.dumps({"model": FAST_MODEL, "keep_alive": OLLAMA_KEEP_ALIVE}).encode()  # no prompt = just load it
+        request = urllib.request.Request(OLLAMA_URL.replace("/api/chat", "/api/generate"), data=data,
+                                         headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(request, timeout=120).close()
+    except Exception:
+        pass  # Ollama is off or busy: Max falls back as usual
+
+
 def use_test_mode():
     """Point every private file at a test copy and allow port 8001. Called only for --test."""
     global PORT, ALLOWED_HOSTS, ALLOWED_ORIGINS, DATA_DIR, DB_FILE, BACKUP_DIR
@@ -1758,6 +1771,8 @@ def use_test_mode():
 if __name__ == "__main__":
     if TEST_MODE:
         use_test_mode()
+    if AI_PROVIDER == "ollama":
+        threading.Thread(target=warm_up_ollama, daemon=True).start()  # in the background: start-up is not delayed
     daily_db_copy()  # also at start-up, so a day without edits still gets its backups
     print(f"To-do app {'TEST MODE ' if TEST_MODE else ''}running at http://127.0.0.1:{PORT} (also Tailscale, port {PORT})  (AI: {AI_PROVIDER})")
     here = os.path.dirname(os.path.abspath(__file__))
