@@ -595,6 +595,55 @@ class GreetingsAndGate(unittest.TestCase):
         self.assertEqual(question("hi max, what to do today", use_ai=False)["nums"], [1, 2])  # rules still answer
 
 
+class SmallTalk(unittest.TestCase):
+    """Chit-chat gets a friendly reply and never a task. A tiny seed list is the fast path; the AI decides the rest."""
+    CHAT = lambda *a, **k: {"is_question": False, "chat": True, "reply": "Thanks! What can I do for you?", "when": "none",
+                            "priority": "any", "status": "open", "tokens": 3}
+
+    def test_seed_list_needs_no_ai(self):
+        for kind, texts in {"compliment": ["You are so smart", "you're so smart", "hi max, you're so smart", "เก่งมาก", "เก่งจัง"],
+                            "thanks": ["thanks", "Thank you", "thx", "ty", "thanks max!", "ขอบคุณ", "ขอบคุณมากครับ"]}.items():
+            for text in texts:
+                self.assertEqual(ask(text, ai=no_ai), {"action": "smalltalk", "kind": kind}, text)
+
+    def test_ai_chat_gets_a_reply(self):
+        # sentences not in the seed list reach the AI (short, no date, no task verb) and it says chat
+        for text in ["you did well", "good job max", "nice one", "คุณช่วยได้ดีมาก", "how are you", "สบายดีไหม"]:
+            self.assertTrue(server.maybe_chat(" ".join(text.lower().split())) or text in ("how are you", "สบายดีไหม"), text)
+            r = ask(text, ai=self.CHAT)
+            # a Thai sentence with an English reply: the reply is dropped (the page uses its own Thai line)
+            want = "" if re.search("[฀-๿]", text) else "Thanks! What can I do for you?"
+            self.assertEqual((r["action"], r["kind"], r["reply"]), ("smalltalk", "chat", want), text)
+
+    def test_reply_is_cleaned(self):
+        self.assertEqual(server.clean_reply("Hi <b>there</b> 😀"), "Hi bthere/b")
+        self.assertEqual(server.clean_reply("x" * 81), "")
+        self.assertEqual(server.clean_reply(None), "")
+
+    def test_real_tasks_skip_the_ai(self):
+        # the gate must say "no AI needed" for clear tasks and commands (so they are added fast)
+        for text in ["pay rent on the 5th", "buy a smart watch", "thank Olive for the gift tomorrow", "Laundry", "call mom",
+                     "ซื้อนม", "ขอบคุณคุณแม่พรุ่งนี้", "done #2", "Buy milk friday"]:
+            self.assertFalse(server.maybe_question(text.lower(), False), text)
+            self.assertIsNone(server.small_talk(text), text)
+
+    def test_chat_ai_down_or_says_task(self):
+        # AI off: the sentence is added as before; AI says "not chat": a task
+        def down(*a, **k):
+            raise RuntimeError("offline")
+        with mock.patch.object(server, "parse_with_ollama", down), default_memory():
+            self.assertIsNone(server.question_answer("you did well", NOW_TEXT, [], []))  # then the page adds it as plain text
+        with mock.patch.object(server, "parse_with_ollama", lambda *a, **k: {"is_question": False, "chat": False, "tokens": 1}),                 default_memory():
+            self.assertIsNone(server.question_answer("you did well", NOW_TEXT, [], []))
+
+    def test_logged_mistake(self):
+        # first real learning-loop case: "You are so smart" became a task
+        self.assertEqual(ask("You are so smart", ai=no_ai)["action"], "smalltalk")
+        self.assertFalse(server.maybe_chat("pay rent on the 5th"))
+        self.assertFalse(server.maybe_chat("buy a smart watch"))
+        self.assertFalse(server.maybe_chat("thank olive for the gift tomorrow"))
+
+
 class MistakesLog(unittest.TestCase):
     def setUp(self):
         import tempfile

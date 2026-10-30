@@ -682,16 +682,21 @@ QUESTION_SCHEMA = {
     "type": "object",
     "properties": {
         "is_question": {"type": "boolean"},
+        "chat": {"type": "boolean"},
+        "reply": {"type": "string"},
         "when": {"type": "string", "enum": ["none", "today", "tomorrow", "week", "nextweek", "overdue", "nodate"]},
         "priority": {"type": "string", "enum": ["any", "high", "low"]},
         "status": {"type": "string", "enum": ["open", "done"]},
     },
-    "required": ["is_question", "when", "priority", "status"],
+    "required": ["is_question", "chat", "reply", "when", "priority", "status"],
 }
 QUESTION_INSTRUCTIONS = (
     "You sort a sentence typed in a to-do app. is_question is true only if the user asks about their own tasks "
     "(what is due, what is late, how many are left) or asks what to do or which to do first. "
     "A new task to remember is NOT a question; a sentence that tells what to do, buy or pay is a task. "
+    "chat is true if the sentence is only small talk to you, the assistant (a compliment, thanks, hello, how are you, "
+    "a remark): then reply is ONE short friendly sentence, max 80 characters, in the same language as the user, "
+    "no emoji, and you invite them to give a task. Otherwise chat is false and reply is empty. "
     "when: today, tomorrow, week (this week), nextweek, overdue, nodate (tasks without a date), or none. "
     "priority: high, low or any. status: open (default) or done. Never answer the question."
 )
@@ -758,6 +763,35 @@ def strip_greeting(sentence: str):
     return (rest, True) if rest and rest != sentence.strip() else (sentence, False)
 
 
+# Small talk seed list: a tiny speed path (and the offline copy in script.js SMALL_TALK). Only a whole short
+# sentence matches, so "thank Olive for the gift tomorrow" stays a task. Everything else is left to the AI (chat label).
+_MAX = r"(?:\s+max)?"
+SMALL_TALK = {
+    "compliment": re.compile(r"^(?:you|u)(?:'re| are|re)?\s+(?:so |really )?(?:smart|great|awesome|amazing)" + _MAX + r"$"
+                             r"|^(?:คุณ)?เก่ง(?:มาก|จัง)?ๆ?(?:ครับ|ค่ะ|คะ|นะ)*$"),
+    "thanks": re.compile(r"^(?:thanks|thank you|thx|ty)(?: so much| a lot)?" + _MAX + r"$"
+                         r"|^ขอบคุณ(?:มาก)?ๆ?(?:ครับ|ค่ะ|คะ|นะ)*$"),
+}
+
+
+def small_talk(sentence: str):
+    """'You are so smart' -> 'compliment' (also 'thanks'); anything else -> None."""
+    plain = strip_greeting(sentence)[0]
+    low = " ".join(plain.replace("’", "'").lower().split()).rstrip(" !.?,")
+    for kind, pattern in SMALL_TALK.items():
+        if pattern.match(low):
+            return kind
+    return None
+
+
+# The AI's own friendly reply to chit-chat: one short plain line. Python cleans it (the page shows it as text only).
+def clean_reply(reply) -> str:
+    text = " ".join(str(reply or "").split())
+    text = "".join(c for c in text if ord(c) < 0x2190 or 0x0E00 <= ord(c) <= 0x0E7F)  # no emoji / symbols
+    text = text.replace("<", "").replace(">", "").strip()
+    return text if 0 < len(text) <= 80 else ""  # too long or empty: the page uses its own friendly line
+
+
 def parse_question(sentence: str, now: str, categories: list):
     """The filter if the sentence is a question about the tasks, else None (then it is a normal command)."""
     raw = " ".join(strip_greeting(sentence)[0].split()).lower()
@@ -775,11 +809,32 @@ def parse_question(sentence: str, now: str, categories: list):
     return f if something or TASK_WORDS.search(raw) or NATURAL_Q.search(raw) else None
 
 
+CHAT_ADDRESSED = re.compile(r"^(?:you|u|your)\b|^คุณ")
+TASK_VERBS = re.compile(r"\b(?:buy|pay|call|send|book|fix|finish|get|clean|write|email|text|pick|order|renew|submit|"
+                        r"cancel|schedule|make|take|bring|return|print|check|prepare|review|plan|visit|wash|cook)\b|"
+                        r"ซื้อ|จ่าย|โทร|ส่ง|จอง|ซ่อม|ทำ|เก็บ|ล้าง|นัด|ยกเลิก|เตรียม|ไป")
+
+
+def maybe_chat(low: str) -> bool:
+    """Could this be small talk? Short, no date/time, no clear task verb, or it talks to Max ("you ...", "คุณ...")."""
+    if re.search(r"\d", low) or re.search(THAI_DATE_WORDS, low) or any(
+            w in DATE_WORDS or w in SHORTCUTS or w in SHORT_DAYS or w in [d.lower() for d in WEEKDAYS]
+            for w in re.findall(r"[a-z]+", low)):
+        return False
+    if CHAT_ADDRESSED.search(low):
+        return True
+    if TASK_VERBS.search(low):
+        return False
+    thai = bool(re.search(r"[฀-๿]", low))
+    # one-word tasks ("Laundry") must stay fast, so English needs 2+ words; Thai has no spaces: 5-20 letters
+    return 5 <= len(low) <= 20 if thai else 2 <= len(low.split()) <= 6
+
+
 def maybe_question(low: str, greeted: bool) -> bool:
     """The loose gate: worth one AI call to decide? Clear commands and clear tasks ("pay rent on the 5th") are not."""
     if re.search(r"#\s*\d", low) or any(re.search(p, low) for p in (UNDO_WORDS, DELETE_WORDS, DONE_WORDS, UPDATE_WORDS)):
         return False
-    return greeted or low.endswith("?") or bool(QUESTION_WORD_ANYWHERE.search(low))
+    return greeted or low.endswith("?") or bool(QUESTION_WORD_ANYWHERE.search(low)) or maybe_chat(low)
 
 
 def ai_question_filter(sentence: str, rules: dict = None):
@@ -789,6 +844,11 @@ def ai_question_filter(sentence: str, rules: dict = None):
         r = parse_with_ollama(f"Sentence: {sentence}", QUESTION_INSTRUCTIONS, QUESTION_SCHEMA, timeout=20)
     except Exception:
         return None  # no AI: treat the sentence as a normal task
+    if r.get("chat") is True and r.get("is_question") is not True:
+        reply = clean_reply(r.get("reply"))
+        if re.search(r"[฀-๿]", sentence) and not re.search(r"[฀-๿]", reply):
+            reply = ""  # the 3B model sometimes answers Thai in English: the page's own Thai line is used then
+        return {"chat": True, "reply": reply, "tokens": r.get("tokens", 0)}
     if r.get("is_question") is not True:
         return None
     f = dict(EMPTY_FILTER)
@@ -867,6 +927,8 @@ def question_answer(sentence: str, now: str, categories: list, tasks: list, use_
         f = ai_question_filter(plain, question_filter(fix_date_typos(low), datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"), categories))
     if f is None:
         return None
+    if f.get("chat"):  # the AI says it is small talk: a friendly reply, no task
+        return {"action": "smalltalk", "kind": "chat", "reply": f["reply"], "tokens": f["tokens"]}
     tokens = f.pop("tokens", 0)
     found = TOOLS["list_tasks"](tasks, f, datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"))
     return {"action": "answer", "filter": f, "nums": [t["num"] for t in found], "tokens": tokens}
@@ -876,6 +938,9 @@ def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: 
     """chosen: the #number the owner picked after Max asked "Which one?" (None normally)."""
     """Work out what the sentence wants: add a task, or change/delete/complete an existing one."""
     s = " ".join(sentence.split())
+    kind = small_talk(s)
+    if kind:
+        return {"action": "smalltalk", "kind": kind}  # a friendly reply, no task, no AI call
     answer = question_answer(s, now, categories, tasks)  # a question about the tasks: answer it, add nothing
     if answer:
         return answer

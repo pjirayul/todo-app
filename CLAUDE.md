@@ -13,6 +13,21 @@ The owner is a beginner builder; keep code simple, readable, and explained.
   of your own role file in `.claude/agents/`, so the next fresh you starts smarter. Keep that list under ~15 lines; replace stale ones.
 - Keep reports short: what changed, how tested, anything not done.
 
+## Design rules (check every idea against these — owner, 30 Oct)
+1. **Language understanding = Max's AI decides**, Python checks the result, plus a tiny offline fallback. No long hard-coded phrase lists.
+2. **Exact things = Python** (dates, times, #numbers, counting, filters, safety checks). The AI never invents dates or numbers.
+3. **Fast path:** clear, simple inputs skip the AI entirely.
+4. **Simple over clever:** the owner is a beginner; small readable code, comments for the "why".
+5. **Private by default:** data stays on the owner's PC; nothing goes online without a Go/No-go.
+6. **Measure, don't guess:** unit tests + Max's exam + the learning loop decide if a change is better.
+7. **Small, reversible steps:** backups, the test copy (8001), Bono's checks.
+
+## How ideas get checked (protects against a bad plan — even Toto's)
+- **GP design check:** before any medium+ job, and any change to how Max understands or replies, GP reviews Toto's plan against the design rules
+  and suggests simpler/smarter options (short note in `.claude/docs/code-health/design-checks.md`). Kimi builds only after that.
+- **Options first:** for behaviour the owner will notice, Toto shows 2–3 options with pros/cons and a pick; the owner chooses.
+- The owner can always ask "Toto, why?" or "GP, second opinion?".
+
 ## Always back up before modifying anything
 1. **Code backup:** before editing any file, make a local Git snapshot:
    `git -C C:\dev\todo-app add -A` then `git -C C:\dev\todo-app commit -m "Backup before <what you're about to do>"`.

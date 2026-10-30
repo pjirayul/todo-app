@@ -62,6 +62,9 @@ const TEXT = {
     ansMoveTomorrow: "Move all to tomorrow", sureMoveAll: (n) => `Move ${n} overdue task${n === 1 ? "" : "s"} to tomorrow? The times stay the same.`,
     yesMove: "Yes, move", movedN: (n) => `Moved ${n} task${n === 1 ? "" : "s"} to tomorrow`,
     greetReply: "Hi! Tell me a task, or ask 'what is due today?'",
+    stCompliment: "Thanks! What can I do for you?",
+    stThanks: "You're welcome!",
+    stChat: "Thanks for chatting! Tell me a task, or ask 'what is due today?'",
     ansOffline: "Max is offline, so I can only answer simple questions here: today, tomorrow, this week, overdue, high priority, or how many are left.",
   },
   th: {
@@ -125,6 +128,9 @@ const TEXT = {
     ansMoveTomorrow: "ย้ายทั้งหมดไปพรุ่งนี้", sureMoveAll: (n) => `ย้าย ${n} งานที่เลยกำหนดไปพรุ่งนี้? เวลาเดิมคงไว้`,
     yesMove: "ใช่ ย้ายเลย", movedN: (n) => `ย้าย ${n} งานไปพรุ่งนี้แล้ว`,
     greetReply: "สวัสดี! บอกงานที่ต้องทำได้เลย หรือถามว่า 'วันนี้มีอะไรบ้าง'",
+    stCompliment: "ขอบคุณค่ะ! มีอะไรให้ช่วยไหม",
+    stThanks: "ยินดีค่ะ!",
+    stChat: "ขอบคุณที่คุยด้วยนะ! บอกงานได้เลย หรือถามว่า 'วันนี้มีอะไรบ้าง'",
     ansOffline: "Max ออฟไลน์ ตอบได้เฉพาะคำถามง่าย ๆ ที่นี่: วันนี้ พรุ่งนี้ สัปดาห์นี้ เลยกำหนด งานสำคัญ หรือเหลือกี่งาน",
   },
 };
@@ -721,6 +727,16 @@ const GREETING = /^\s*(?:(?:hi|hey|hello|yo|ok|okay)(?=[\s,!.]|$)[\s,!.]*(?:max(
 const stripGreeting = (text) => text.replace(GREETING, "").trim() || text;
 // "hi max" alone: nothing is left after the greeting, so it is not a task
 const isGreetingOnly = (text) => GREETING.test(text) && !text.replace(GREETING, "").trim();
+// Small talk seed list, same as SMALL_TALK in server.py: a speed path and the offline copy.
+// Anything else that is chit-chat is recognised by Max (the AI) on the server.
+const SMALL_TALK = {
+  compliment: /^(?:you|u)(?:'re| are|re)?\s+(?:so |really )?(?:smart|great|awesome|amazing)(?:\s+max)?$|^(?:คุณ)?เก่ง(?:มาก|จัง)?ๆ?(?:ครับ|ค่ะ|คะ|นะ)*$/,
+  thanks: /^(?:thanks|thank you|thx|ty)(?: so much| a lot)?(?:\s+max)?$|^ขอบคุณ(?:มาก)?ๆ?(?:ครับ|ค่ะ|คะ|นะ)*$/,
+};
+const smallTalkKind = (text) => {
+  const low = stripGreeting(text).replace(/’/g, "'").toLowerCase().split(/\s+/).filter(Boolean).join(" ").replace(/[ !.?,]+$/, "");
+  return Object.keys(SMALL_TALK).find((k) => SMALL_TALK[k].test(low)) || null;
+};
 const ANSWER_ROWS = 8; // tasks listed in the card; the rest are "+N more"
 const dateKey = (d) => d.toLocaleDateString("en-CA"); // YYYY-MM-DD
 const shortDate = (due) => new Date(due).toLocaleString(t("locale"), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -938,6 +954,12 @@ $("todo-form").addEventListener("submit", async (e) => {
     $("todo-input").value = "";
     return showMessage(t("greetReply"));
   }
+  const talk = smallTalkKind(text); // "you are so smart" / "thanks": a friendly reply, never a task, no server call
+  if (talk) {
+    $("todo-input").value = "";
+    hideAnswer();
+    return showMessage(t("st" + talk[0].toUpperCase() + talk.slice(1)));
+  }
   const button = $("add-btn");
   const input = $("todo-input");
   button.disabled = input.disabled = true;
@@ -955,6 +977,12 @@ $("todo-form").addEventListener("submit", async (e) => {
       if (usageToday() >= settings.aiLimit) throw new Error(t("limitHit"));
       if (!LOCAL) throw new Error("no AI server here (GitHub Pages)"); // straight to the simple fallback
       const data = await parseWithMax(text);
+      if (data.action === "smalltalk") { // Max decided it is chit-chat: show his short reply, add nothing
+        $("todo-input").value = "";
+        hideAnswer();
+        showMessage(data.reply || t("stChat"));
+        return;
+      }
       if (data.action === "answer") answer = data;
       else if (data.action && data.action !== "add") cmd = data;
       else if (data.text) task = data;
