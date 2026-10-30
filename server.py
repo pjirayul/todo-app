@@ -271,7 +271,7 @@ def thai_time(text: str) -> str:
 CLOCK_TIME = re.compile(r"\d\s*(:\s*\d\d|\.\d\d|am\b|pm\b|น\.|โมง|ทุ่ม)|noon|" + THAI_TIME_ANY, re.I)
 THAI_DATE_WORDS = (r"มะรืนนี้|มะรืน|พรุ่งนี้|วันนี้|คืนนี้|ตอนเช้า|ตอนเย็น|ตอนบ่าย|ด่วน|ไม่รีบ|"
                    r"(วัน)?(จันทร์|อังคาร|พุธ|พฤหัส(บดี)?|ศุกร์|เสาร์|อาทิตย์)(หน้า)?|วันที่\s*\d+|"
-                   r"(" + THAI_TIME_ANY + r")(\s*ครึ่ง)?|\d+\s*(โมง|ทุ่ม)|(สัปดาห์|เดือน)หน้า")
+                   r"(" + THAI_TIME_ANY + r")(\s*ครึ่ง)?|\d+\s*(โมง|ทุ่ม)|(สัปดาห์|เดือน)หน้า|อีก\s*\d+\s*วัน")
 THAI_LETTERS = re.compile(r"[฀-๿]")
 
 # Weekday names Python reads itself (the AI sometimes says "next week" when nobody did).
@@ -477,6 +477,8 @@ def parse_task(sentence: str, now: str, categories: list) -> dict:
     day = weekday_in(lower)
     if day and task.get("when") != "date":
         task.update(when="weekday", weekday=day, next_week=bool(NEXT_WEEK.search(lower)))
+    elif days_ahead(lower):  # "in 3 days" / "อีก 3 วัน": the count is exact, so Python sets it
+        task.update(when="in_days", in_days=days_ahead(lower))
     for words, when in DAY_WORDS:
         if any(w in lower for w in words):
             task["when"] = when
@@ -657,7 +659,7 @@ DAY_HINTS = re.compile(
     r"\b(today|tonight|tomorrow|next|week|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
     r"january|february|march|april|may|june|july|august|september|october|november|december|"
     r"jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec|in \d+ days?|\d{1,2}(st|nd|rd|th))\b|\d{1,2}/\d{1,2}|"
-    r"มะรืน|พรุ่งนี้|วันนี้|คืนนี้|จันทร์|อังคาร|พุธ|พฤหัส|ศุกร์|เสาร์|วันอาทิตย์|วันที่\s*\d+|(สัปดาห์|อาทิตย์|เดือน)หน้า", re.I)
+    r"มะรืน|พรุ่งนี้|วันนี้|คืนนี้|จันทร์|อังคาร|พุธ|พฤหัส|ศุกร์|เสาร์|วันอาทิตย์|วันที่\s*\d+|(สัปดาห์|อาทิตย์|เดือน)หน้า|อีก\s*\d+\s*วัน", re.I)
 
 
 def time_said(text: str) -> bool:

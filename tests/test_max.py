@@ -714,3 +714,10 @@ class FastPath(unittest.TestCase):
         self.assertEqual(PATHS[-1], "ai")
         ask("move #1 to march 5", TASKS)
         self.assertEqual(PATHS[-1], "ai")
+
+    def test_in_n_days_english_and_thai(self):
+        # The fake AI says nothing about the date: Python must set it from the count
+        self.assertEqual(ask("pay internet in 3 days")["due"], "2026-10-31T09:00")
+        self.assertEqual(ask("จ่ายค่าเน็ตอีก 3 วัน")["due"], "2026-10-31T09:00")
+        self.assertEqual(ask("move #1 to in 2 days", TASKS)["changes"]["due"][:10], "2026-10-30")
+        self.assertEqual(PATHS[-1], "rules")
