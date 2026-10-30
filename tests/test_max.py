@@ -34,11 +34,16 @@ def default_memory():
     return mock.patch.object(server, "load_memory", return_value=server.clean_memory({}))
 
 
+PATHS = []
+
+
 def ask(sentence, tasks=(), chosen=None, ai=fake_ai):
     """Run the command bar logic with the fake AI and the default About me."""
     with mock.patch.object(server, "parse_with_ollama", ai), default_memory(), \
          mock.patch.object(server, "AI_PROVIDER", "ollama"):
-        return server.run_command(sentence, NOW_TEXT, [], list(tasks), chosen)
+        result = server.run_command(sentence, NOW_TEXT, [], list(tasks), chosen)
+    PATHS.append(result.pop("path"))   # every result says "rules" or "ai"; tests that care read PATHS[-1]
+    return result
 
 
 # Some tasks to talk about
@@ -688,3 +693,24 @@ class TailscaleAccessTests(unittest.TestCase):
             self.assertIn(h, hosts)
         self.assertNotIn("evil.com:8000", hosts)
         self.assertIn("100.66.1.68:8001", server.make_allowed_hosts(8001))
+
+
+class FastPath(unittest.TestCase):
+    """Date/time changes on existing tasks are read by Python alone (no AI call)."""
+    def no_ai(self, *a, **k):
+        raise AssertionError("the AI should not be called")
+
+    def test_rules_only_updates(self):
+        for s, due in (("move #1 to friday", "2026-10-30T09:00"), ("#2 tomorrow 5pm", "2026-10-29T17:00"),
+                       ("move #1 to 5pm", "2026-10-30T17:00"), ("เลื่อน #1 เป็นพรุ่งนี้บ่ายสาม", "2026-10-29T15:00"),
+                       ("move #1 to monday", "2026-11-02T09:00")):
+            with self.subTest(s):
+                r = ask(s, TASKS, ai=self.no_ai)
+                self.assertEqual(r["changes"]["due"], due)
+                self.assertEqual(PATHS[-1], "rules")
+
+    def test_hard_dates_still_use_the_ai(self):
+        ask("move #1 to next week", TASKS)
+        self.assertEqual(PATHS[-1], "ai")
+        ask("move #1 to march 5", TASKS)
+        self.assertEqual(PATHS[-1], "ai")

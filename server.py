@@ -299,6 +299,69 @@ def weekday_in(lower: str) -> str:
     return next((day for thai, day in THAI_WEEKDAYS.items() if thai in lower), "")
 
 
+DAY_WORDS = ((("มะรืน", "day after tomorrow"), "day_after_tomorrow"),
+             (("พรุ่งนี้", "tomorrow"), "tomorrow"),
+             (("วันนี้", "today", "tonight", "คืนนี้"), "today"))
+# "in 3 days" / "อีก 3 วัน"
+DAYS_AHEAD = re.compile(r"\bin\s+(\d+)\s+days?\b|อีก\s*(\d+)\s*วัน")
+
+
+def days_ahead(lower: str) -> int:
+    """'pay bill in 3 days' / 'จ่ายค่าเน็ตอีก 3 วัน' -> 3 (0 if not said)."""
+    m = DAYS_AHEAD.search(lower)
+    return int(m.group(1) or m.group(2)) if m else 0
+
+
+def english_time(text: str) -> str:
+    """'5pm' -> '17:00', '9:30 am' -> '09:30', '17:45' -> '17:45', 'noon' -> '12:00' ('' if none)."""
+    m = re.search(r"\b(\d{1,2})(?:[:.]([0-5]\d))?\s*(am|pm)\b", text)
+    if m and 1 <= int(m.group(1)) <= 12:
+        hour = int(m.group(1)) % 12 + (12 if m.group(3) == "pm" else 0)
+        return f"{hour:02d}:{m.group(2) or '00'}"
+    m = re.search(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", text)
+    if m:
+        return f"{int(m.group(1)):02d}:{m.group(2)}"
+    return "12:00" if re.search(r"\bnoon\b", text) else ""
+
+
+def rules_date(text: str, times: dict):
+    """Day/time words Python can read alone ("friday", "tomorrow 5pm", "บ่ายสาม") -> the dict resolve_due
+    needs. None = something else is in there (a month, "next week"...), so the AI must read it."""
+    low = fix_date_typos(text).lower()
+    task = {"when": "none", "time": thai_time(low) or english_time(low)}
+    day = weekday_in(low)
+    if day:
+        task.update(when="weekday", weekday=day, next_week=bool(NEXT_WEEK.search(low)))
+    elif days_ahead(low):
+        task.update(when="in_days", in_days=days_ahead(low))
+    for words, when in DAY_WORDS:
+        if any(w in low for w in words):
+            task["when"] = when
+            break
+    # Take out every day word handled above; if DAY_HINTS still finds a date word, the AI is needed
+    left = DAYS_AHEAD.sub(" ", low)
+    for words, _ in DAY_WORDS:
+        for w in words:
+            left = left.replace(w, " ")
+    left = re.sub(r"\b(" + "|".join(d.lower() for d in WEEKDAYS) + r")\b|(วัน)?(" + "|".join(THAI_WEEKDAYS) + ")", " ", left)
+    if day:
+        left = re.sub(r"\bnext\b", " ", left)  # "next friday" is fine; "next week" is not
+    if DAY_HINTS.search(left):
+        return None
+    if not CLOCK_TIME.search(low):
+        for pattern, part in DAY_PARTS:
+            if re.search(pattern, low):
+                task["time"] = times[part]
+                break
+    if CLOCK_TIME.search(low) and not task["time"]:
+        return None  # a clock time we could not read
+    if task["when"] == "none":
+        if not task["time"]:
+            return None
+        task["when"] = "today"  # only a time: the caller keeps the task's own day
+    return task
+
+
 def keep_capitals(title: str, sentence: str) -> str:
     """Words the owner typed in CAPITALS ("TEST", "ATM") are on purpose: keep them as typed."""
     skip = set(DATE_WORDS) | set(SHORTCUTS) | set(SHORT_DAYS) | set(PRIORITY_WORDS) | {"am", "pm"}
@@ -414,9 +477,7 @@ def parse_task(sentence: str, now: str, categories: list) -> dict:
     day = weekday_in(lower)
     if day and task.get("when") != "date":
         task.update(when="weekday", weekday=day, next_week=bool(NEXT_WEEK.search(lower)))
-    for words, when in ((("มะรืน", "day after tomorrow"), "day_after_tomorrow"),
-                        (("พรุ่งนี้", "tomorrow"), "tomorrow"),
-                        (("วันนี้", "today", "tonight", "คืนนี้"), "today")):
+    for words, when in DAY_WORDS:
         if any(w in lower for w in words):
             task["when"] = when
             break
@@ -629,7 +690,7 @@ def add_task(s: str, now: str, categories: list) -> dict:
         # and uses this time (or the owner's morning time).
         task["askWhen"] = True
         task["time"] = time or load_memory()["times"]["morning"]
-    return {"action": "add", **task}
+    return {"action": "add", **task, "path": "ai"}
 
 
 def add_without_ai(s: str) -> dict:
@@ -937,8 +998,15 @@ def question_answer(sentence: str, now: str, categories: list, tasks: list, use_
 
 
 def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: int = None) -> dict:
-    """chosen: the #number the owner picked after Max asked "Which one?" (None normally)."""
-    """Work out what the sentence wants: add a task, or change/delete/complete an existing one."""
+    """Same as work_out_command, but every result says which road it took: "rules" (Python alone) or "ai"."""
+    result = work_out_command(sentence, now, categories, tasks, chosen)
+    result.setdefault("path", "ai" if result.get("tokens") else "rules")  # AI calls report their tokens
+    return result
+
+
+def work_out_command(sentence: str, now: str, categories: list, tasks: list, chosen: int = None) -> dict:
+    """Work out what the sentence wants: add a task, or change/delete/complete an existing one.
+    chosen: the #number the owner picked after Max asked "Which one?" (None normally)."""
     s = " ".join(sentence.split())
     kind = small_talk(s)
     if kind:
@@ -1017,7 +1085,7 @@ def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: 
     # Only the fields the command mentions change
     if not change:
         return {"action": action, "num": num, "nothing": True}
-    changes, tokens = {}, 0
+    changes, tokens, path = {}, 0, "rules"
     if field == "text":
         changes["text"] = change[:1].upper() + change[1:]
     elif field == "category":
@@ -1035,7 +1103,14 @@ def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: 
         fixed = fix_date_typos(change).lower()
         day, clock = bool(DAY_HINTS.search(fixed)), time_said(fixed)
         if field != "priority" and left and (day or clock or field == "due"):
-            parsed = parse_task(change, now, categories)  # the AI reads the date words
+            # Plain day/time words ("friday", "5pm", "tomorrow") Python reads alone; anything else asks the AI
+            rules = rules_date(change, load_memory()["times"])
+            if rules:
+                parsed = {"due": resolve_due(rules, datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"), load_memory()["times"]),
+                          "time": rules["time"], "tokens": 0}
+            else:
+                parsed = parse_task(change, now, categories)  # the AI reads the date words
+                path = "ai"
             tokens = parsed["tokens"]
             old_due = next((t.get("due", "") for t in tasks if t["num"] == num), "")
             due = parsed["due"]
@@ -1052,8 +1127,8 @@ def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: 
             # No date or time words: a new name only, so the date stays exactly as it was
             changes["text"] = change[:1].upper() + change[1:]
         if not changes:
-            return {"action": action, "num": num, "nothing": True, "tokens": tokens}
-    return {"action": action, "num": num, "changes": changes, "tokens": tokens}
+            return {"action": action, "num": num, "nothing": True, "tokens": tokens, "path": path}
+    return {"action": action, "num": num, "changes": changes, "tokens": tokens, "path": path}
 
 
 class Handler(SimpleHTTPRequestHandler):
