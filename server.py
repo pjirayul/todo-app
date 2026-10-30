@@ -1692,7 +1692,7 @@ ALLOWED_HOSTS = make_allowed_hosts(8000)
 ALLOWED_ORIGINS = tuple("http://" + host for host in ALLOWED_HOSTS)
 # The only files the server hands out; everything else in the folder stays private
 PUBLIC_FILES = {"/", "/index.html", "/style.css", "/script.js", "/status.html",
-                "/icon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", "/manifest.json"}
+                "/icon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", "/manifest.json", "/hints.json", "/hints.js"}
 STATUS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "status.json")
 
 

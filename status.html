@@ -126,6 +126,12 @@
     .to button { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px 0 6px; border-radius: 99px; }
     .to button:hover { border-color: var(--chip-on-line); }
     .to button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    /* Rotating example hint over the empty box (hints.js) */
+    .hint-field { position: relative; }
+    #cmd-text { width: 100%; box-sizing: border-box; }
+    .hint-ph { position: absolute; top: 11px; left: 13px; right: 13px; color: var(--muted); pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .45s ease; }
+    .hint-ph.out, #cmd-text:not(:placeholder-shown) ~ .hint-ph, #cmd-text:focus ~ .hint-ph { opacity: 0; }
+    @media (prefers-reduced-motion: reduce) { .hint-ph { transition: none; } }
     #cmd-text { min-height: 80px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--text); font: inherit; resize: vertical; }
     .send {
       display: inline-flex; align-items: center; gap: 8px;
@@ -198,7 +204,7 @@
         <button type="button" data-to="Lewis"><span class="mini av-lewis" aria-hidden="true">L</span>Lewis</button>
         <button type="button" data-to="GP"><span class="mini av-gp" aria-hidden="true">GP</span>GP</button>
       </div>
-      <textarea id="cmd-text" placeholder="e.g. Kimi, add a weekly summary of done tasks" required></textarea>
+      <div class="hint-field"><textarea id="cmd-text" aria-label="Message to the team" placeholder=" " required></textarea><span class="hint-ph" aria-hidden="true"></span></div>
       <button type="submit" class="send"><svg class="i sm" aria-hidden="true"><use href="#i-send"/></svg>Send to inbox</button>
       <p class="hint">Toto reads the inbox when you message him in the Claude app (say "check inbox"). Works only on this PC.</p>
       <p class="hint" id="cmd-msg" role="status"></p>
@@ -217,12 +223,14 @@
     </p>
   </div>
 
+  <script src="hints.js?v=1"></script>
   <script>
     // ---------- Thai / English ----------
     // The app (index.html) saves the language in localStorage "settings". We read the same setting.
     let LANG = "en";
     try { LANG = (JSON.parse(localStorage.getItem("settings")) || {}).lang === "th" ? "th" : "en"; } catch {}
     document.documentElement.lang = LANG;
+    smartHints(document.getElementById("cmd-text"), "teamCommand", () => LANG); // rotating examples (hints.json)
     // English text -> Thai text. L("...") gives the Thai text in Thai mode and the same text otherwise.
     const TH = {
       "Team Status": "สถานะทีม", "Back": "กลับ", "Team": "ทีม", "Loading…": "กำลังโหลด…",
@@ -248,7 +256,6 @@
       "Couldn't send:": "ส่งไม่สำเร็จ:", "Couldn't save:": "บันทึกไม่สำเร็จ:", "to": "ถึง",
       "The inbox only works on this PC with server.py running.": "กล่องข้อความใช้ได้เฉพาะบนเครื่องนี้ขณะที่ server.py ทำงานอยู่",
       "This only works on this PC with server.py running.": "ใช้ได้เฉพาะบนเครื่องนี้ขณะที่ server.py ทำงานอยู่",
-      "e.g. Kimi, add a weekly summary of done tasks": "เช่น Kimi เพิ่มสรุปรายสัปดาห์ของงานที่เสร็จ",
     };
     const L = (s) => (LANG === "th" && TH[s]) || s;
     // Translate the fixed words in the page once: every piece of text, the tab title and the hint inside the box

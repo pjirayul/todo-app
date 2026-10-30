@@ -1,0 +1,103 @@
+{
+ "_about": "Rotating example hints. Slots: morning 05-11, day 11-17, evening 17-05. Only lines Max handles today.",
+ "command": {
+  "morning": {
+   "en": [
+    "What's due today?",
+    "Add buy milk tomorrow 9am",
+    "What's overdue?",
+    "Move #3 to Friday",
+    "Pay rent on the 5th",
+    "Show high priority tasks"
+   ],
+   "th": [
+    "วันนี้ต้องทำอะไรบ้าง",
+    "ซื้อนม พรุ่งนี้ 9 โมง",
+    "อะไรเลยกำหนดแล้ว",
+    "ย้าย #3 ไปวันศุกร์",
+    "จ่ายค่าเช่าวันที่ 5",
+    "พรุ่งนี้มีอะไรบ้าง"
+   ]
+  },
+  "day": {
+   "en": [
+    "Remind me to call mom at 7pm",
+    "Pay rent on the 5th",
+    "Move #3 to Friday",
+    "Add meeting Monday 2pm",
+    "Done #2",
+    "What's due today?"
+   ],
+   "th": [
+    "โทรหาแม่ 7 โมงเย็น",
+    "จ่ายค่าเช่าวันที่ 5",
+    "ย้าย #3 ไปวันศุกร์",
+    "ประชุมวันจันทร์ 2 โมง",
+    "เสร็จแล้ว #2",
+    "วันนี้ต้องทำอะไรบ้าง"
+   ]
+  },
+  "evening": {
+   "en": [
+    "What's left today?",
+    "What's due tomorrow?",
+    "Move #3 to Friday",
+    "Remind me to call mom at 7pm",
+    "Done #2",
+    "Delete #4"
+   ],
+   "th": [
+    "วันนี้เหลืออะไรบ้าง",
+    "พรุ่งนี้มีอะไรบ้าง",
+    "ย้าย #3 ไปวันศุกร์",
+    "โทรหาแม่ 7 โมงเย็น",
+    "เสร็จแล้ว #2",
+    "ลบ #4"
+   ]
+  }
+ },
+ "teamCommand": {
+  "morning": {
+   "en": [
+    "Kimi, add a weekly summary of done tasks",
+    "George, make the cards a bit rounder",
+    "Lewis, find a simple way to back up to a USB stick",
+    "Bono, test the app on a phone"
+   ],
+   "th": [
+    "Kimi เพิ่มสรุปรายสัปดาห์ของงานที่เสร็จ",
+    "George ทำการ์ดให้มนขึ้นอีกนิด",
+    "Lewis หาวิธีง่าย ๆ สำรองข้อมูลลง USB",
+    "Bono ลองเทสต์แอปบนมือถือ"
+   ]
+  },
+  "day": {
+   "en": [
+    "Kimi, add a weekly summary of done tasks",
+    "George, make the cards a bit rounder",
+    "Lewis, find a simple way to back up to a USB stick",
+    "Bono, test the app on a phone"
+   ],
+   "th": [
+    "Kimi เพิ่มสรุปรายสัปดาห์ของงานที่เสร็จ",
+    "George ทำการ์ดให้มนขึ้นอีกนิด",
+    "Lewis หาวิธีง่าย ๆ สำรองข้อมูลลง USB",
+    "Bono ลองเทสต์แอปบนมือถือ"
+   ]
+  },
+  "evening": {
+   "en": [
+    "Kimi, add a weekly summary of done tasks",
+    "George, make the cards a bit rounder",
+    "Lewis, find a simple way to back up to a USB stick",
+    "Bono, test the app on a phone"
+   ],
+   "th": [
+    "Kimi เพิ่มสรุปรายสัปดาห์ของงานที่เสร็จ",
+    "George ทำการ์ดให้มนขึ้นอีกนิด",
+    "Lewis หาวิธีง่าย ๆ สำรองข้อมูลลง USB",
+    "Bono ลองเทสต์แอปบนมือถือ"
+   ]
+  }
+ }
+}

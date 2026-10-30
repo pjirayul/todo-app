@@ -1293,6 +1293,7 @@ $("lang").addEventListener("click", () => {
   hideAnswer(); // its words are in the old language
   render();
   loadTeam(); // "· 2 working" in the new language
+  commandHints.refresh(); // example hints in the new language
 });
 
 // Phone: the three-dots button opens a small menu with language / dark mode / reminders.
@@ -1601,6 +1602,7 @@ startDb().finally(() => { // ...then the database's list (when the server is on)
   checkReminders();
   dailyBackup();
 });
+const commandHints = smartHints($("todo-input"), "command", () => settings.lang); // rotating examples
 loadTeam();
 loadMax();
 if (LOCAL) setInterval(() => { loadTeam(); loadMax(); }, 30000); // team dots follow status.json; Max follows Ollama

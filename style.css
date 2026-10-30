@@ -188,8 +188,9 @@ svg.i.sm { width: 15px; height: 15px; }
 
 /* Add form */
 .add { padding: 10px 10px 10px 16px; display: flex; gap: 8px; align-items: center; }
+.hint-field { position: relative; flex: 1; min-width: 0; }
 #todo-input {
-  flex: 1; min-width: 0;
+  width: 100%; min-width: 0;
   border: none; outline: none; background: none;
   font-size: 1.1rem; padding: 8px 0;
 }
@@ -213,6 +214,14 @@ svg.i.sm { width: 15px; height: 15px; }
   box-shadow: var(--shadow), 0 0 0 4px var(--accent-soft), 0 8px 28px var(--ai-glow);
 }
 .add #todo-input:focus { outline: none; }
+/* Rotating example hint drawn over the empty box (see hints.js); fades out/in, hidden while typing or focused */
+.hint-ph {
+  position: absolute; inset: 0; display: flex; align-items: center; pointer-events: none;
+  color: var(--muted); font-size: .95rem; letter-spacing: -.005em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .45s ease;
+}
+.hint-ph.out, input:not(:placeholder-shown) ~ .hint-ph, input:focus ~ .hint-ph { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .hint-ph { transition: none; } }
 .edit-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .edit-row input, .edit-row select, .toolbar input, .toolbar select {
   padding: 10px 13px;
@@ -526,7 +535,7 @@ footer { display: flex; justify-content: space-between; align-items: center; mar
   .add { padding-left: 14px; }
   .chip { padding: 8px 14px; }
   .primary { padding: 12px 16px; }
-  #todo-input::placeholder { font-size: .85rem; }
+  .hint-ph { font-size: .85rem; }
   .cmd-msg { font-size: .85rem; padding: 8px 10px; }
   .todo-item { gap: 10px; padding: 12px 8px 12px 10px; }
   .edit-row > * { flex: 1 1 45%; }

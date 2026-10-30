@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
   <!-- ?v= makes browsers fetch the new file after an update (raise it on each release) -->
-  <link rel="stylesheet" href="style.css?v=23">
+  <link rel="stylesheet" href="style.css?v=24">
 </head>
 <body>
   <!-- Line icons, drawn once and reused with <use href="#i-..."> -->
@@ -65,7 +65,8 @@
     <!-- Command bar: add a task, or change one ("move #2 to friday", "done #3", "delete laundry") -->
     <!-- AI fills in date, priority and category -->
     <form id="todo-form" class="card add">
-      <input id="todo-input" type="text" data-i18n-ph="placeholder" placeholder="Add or change tasks… e.g. pay rent on the 5th · move #2 to friday" autocomplete="off" required>
+      <!-- Hint text: rotating examples from hints.json drawn by hints.js (a real placeholder can't fade) -->
+      <div class="hint-field"><input id="todo-input" type="text" aria-label="Tell Max" placeholder=" " autocomplete="off" required><span class="hint-ph" aria-hidden="true"></span></div>
       <button type="submit" id="add-btn" class="primary" data-i18n="add">Go</button>
     </form>
     <p id="cmd-msg" class="cmd-msg" role="status"></p>
@@ -122,6 +123,7 @@
     </details>
   </main>
 
-  <script src="script.js?v=30"></script>
+  <script src="hints.js?v=1"></script>
+  <script src="script.js?v=31"></script>
 </body>
 </html>
