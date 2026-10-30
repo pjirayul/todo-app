@@ -33,6 +33,8 @@ The owner is a beginner builder; keep code simple, readable, and explained.
    `git -C C:\dev\todo-app add -A` then `git -C C:\dev\todo-app commit -m "Backup before <what you're about to do>"`.
    then tag it so it is never lost when Toto syncs with GitHub: `git -C C:\dev\todo-app tag backup-YYYYMMDD-HHMMSS`.
    (Local only — never push. If there is nothing to commit, still add the tag.) List backups: `git tag -l "backup-*"`.
+   **When another agent works at the same time (two lanes):** don't use `add -A` — add and commit only your own files
+   (`git add <your files>` then `git commit -m "..." -- <your files>`), so you never save someone else's half-finished work.
 2. **Task backup:** before testing in the browser or changing anything that touches saved tasks,
    save the owner's data first: call `POST /api/backup` from the page (or click "Back up now"),
    which writes `backups/tasks-YYYYMMDD-HHMMSS.json`. Restore exactly afterwards.
