@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
   <!-- ?v= makes browsers fetch the new file after an update (raise it on each release) -->
-  <link rel="stylesheet" href="style.css?v=20">
+  <link rel="stylesheet" href="style.css?v=21">
 </head>
 <body>
   <!-- Line icons, drawn once and reused with <use href="#i-..."> -->
@@ -69,6 +69,8 @@
       <button type="submit" id="add-btn" class="primary" data-i18n="add">Go</button>
     </form>
     <p id="cmd-msg" class="cmd-msg" role="status"></p>
+    <!-- Ask Max: the answer to a question about the tasks (filled in by script.js) -->
+    <div id="answer-card" class="card answer-card" role="region" aria-live="polite" hidden></div>
     <datalist id="cat-list"></datalist>
 
     <!-- How much AI the app used today, against a daily limit you choose -->
@@ -93,6 +95,7 @@
       <button class="chip" data-filter="overdue" data-i18n="overdue">Overdue</button>
     </div>
     <div class="chips" id="cat-filters"></div>
+    <div class="chips" id="num-filter" hidden></div>
 
     <ul id="todo-list" class="card list"></ul>
 
@@ -119,6 +122,6 @@
     </details>
   </main>
 
-  <script src="script.js?v=23"></script>
+  <script src="script.js?v=25"></script>
 </body>
 </html>

@@ -409,3 +409,100 @@ class OffsiteBackup(unittest.TestCase):
             with mock.patch.object(server, "OFFSITE_BACKUP_DIR", cloud), mock.patch.object(server, "TEST_MODE", True):
                 server.offsite_backup()
                 self.assertFalse(os.path.exists(cloud))
+
+
+# ---------- Ask Max: questions about the tasks ----------
+QTASKS = [
+    {"num": 1, "text": "Pay rent", "done": False, "due": "2026-10-28T09:00", "priority": "high", "cat": "Home"},
+    {"num": 2, "text": "Dentist", "done": False, "due": "2026-10-28T16:00", "priority": "med", "cat": "Health"},
+    {"num": 3, "text": "Send report", "done": False, "due": "2026-10-29T10:00", "priority": "high", "cat": "Work"},
+    {"num": 4, "text": "Team meeting", "done": False, "due": "2026-10-30T09:00", "priority": "high", "cat": "Work"},
+    {"num": 5, "text": "Call mom", "done": False, "due": "2026-10-26T09:00", "priority": "med", "cat": "Home"},
+    {"num": 6, "text": "Buy milk", "done": False, "due": "", "priority": "med", "cat": ""},
+    {"num": 7, "text": "Old rent receipt", "done": True, "due": "2026-10-27T09:00", "priority": "med", "cat": "Home"},
+    {"num": 8, "text": "Plan trip", "done": False, "due": "2026-11-03T09:00", "priority": "med", "cat": ""},
+    {"num": 9, "text": "Water bill", "done": False, "due": "2026-11-05T09:00", "priority": "low", "cat": "Money"},
+]
+
+
+def no_ai(*args, **kwargs):
+    raise AssertionError("a question that Python understands must not call the AI")
+
+
+def question(sentence, tasks=QTASKS, ai=no_ai, use_ai=True):
+    with mock.patch.object(server, "parse_with_ollama", ai), default_memory():
+        return server.question_answer(sentence, NOW_TEXT, [], list(tasks), use_ai)
+
+
+class AskMax(unittest.TestCase):
+    def nums(self, sentence):
+        answer = question(sentence)
+        self.assertIsNotNone(answer, sentence)
+        self.assertEqual(answer["action"], "answer")
+        return answer["nums"]
+
+    def test_english_when(self):
+        self.assertEqual(self.nums("what is due today?"), [1, 2])
+        self.assertEqual(self.nums("what's due tomorrow"), [3])
+        self.assertEqual(self.nums("what's overdue"), [5, 1])          # soonest first
+        self.assertEqual(self.nums("anything late?"), [5, 1])
+        self.assertEqual(self.nums("what is due this week?"), [1, 2, 3, 4])  # today until Sunday 1 Nov
+        self.assertEqual(self.nums("what's due next week?"), [8, 9])
+        self.assertEqual(self.nums("which tasks have no date?"), [6])
+        self.assertEqual(self.nums("what is due on friday?"), [4])
+        self.assertEqual(self.nums("what is due on the 5th?"), [9])
+
+    def test_english_priority_category_status_text(self):
+        self.assertEqual(self.nums("show high priority work this week"), [3, 4])
+        self.assertEqual(self.nums("list my home tasks"), [5, 1])
+        self.assertEqual(self.nums("how many tasks left"), [5, 1, 2, 3, 4, 8, 9, 6])
+        self.assertEqual(self.nums("which tasks are done?"), [7])
+        self.assertEqual(self.nums("anything about rent?"), [1])        # done #7 has "rent" too, but open is the default
+        self.assertEqual(self.nums("anything about work?"), [3, 4])     # a category name means the category
+
+    def test_thai(self):
+        self.assertEqual(self.nums("วันนี้มีงานอะไรบ้าง"), [1, 2])
+        self.assertEqual(self.nums("งานที่เลยกำหนด"), [5, 1])
+        self.assertEqual(self.nums("พรุ่งนี้มีอะไรบ้าง"), [3])
+        self.assertEqual(self.nums("มีกี่งาน"), [5, 1, 2, 3, 4, 8, 9, 6])
+        self.assertEqual(self.nums("แสดงงานด่วนสัปดาห์นี้"), [1, 3, 4])
+        self.assertEqual(self.nums("มีอะไรเกี่ยวกับค่าเช่า"), [])
+
+    def test_filter_is_returned(self):
+        f = question("show high priority work this week")["filter"]
+        self.assertEqual((f["when"], f["priority"], f["cat"], f["status"]), ("week", "high", "work", "open"))
+
+    def test_typos_are_fixed(self):
+        self.assertEqual(self.nums("what is due tomorow?"), [3])
+
+    def test_not_questions(self):
+        for text in ["add buy milk tomorrow", "move #3 to friday", "done #2", "Buy milk", "show Tom the report tomorrow",
+                     "pay rent on the 5th", "what is #3?", "ซื้อนมพรุ่งนี้", "Call mom?"]:
+            self.assertIsNone(question(text, ai=lambda *a, **k: {"is_question": False, "when": "none",
+                                                                   "priority": "any", "status": "open"}), text)
+
+    def test_no_ai_for_clear_questions(self):
+        # no_ai() raises if the AI is called; these must be understood by Python alone
+        for text in ["what is due today?", "วันนี้มีงานอะไรบ้าง", "how many tasks left"]:
+            self.assertIsNotNone(question(text))
+
+    def test_ai_fallback_only_sorts_the_question(self):
+        fake = lambda *a, **k: {"is_question": True, "when": "overdue", "priority": "any", "status": "open", "tokens": 7}
+        answer = question("is there anything I forgot about?", ai=fake)
+        self.assertEqual((answer["filter"]["when"], answer["nums"], answer["tokens"]), ("overdue", [5, 1], 7))
+        # the AI's list is only a filter: Python still does the counting, and bad answers are ignored
+        broken = lambda *a, **k: (_ for _ in ()).throw(OSError("Ollama is off"))
+        self.assertIsNone(question("is there anything I forgot about?", ai=broken))
+        self.assertIsNone(question("is there anything I forgot about?", use_ai=False))
+
+    def test_through_run_command(self):
+        answer = ask("what's due today?", QTASKS)
+        self.assertEqual((answer["action"], answer["nums"]), ("answer", [1, 2]))
+        self.assertEqual(ask("add buy milk tomorrow", QTASKS)["action"], "add")   # normal commands unchanged
+        self.assertEqual(ask("done #2", QTASKS)["action"], "complete")
+        self.assertEqual(ask("move #3 to friday", QTASKS)["action"], "update")
+
+    def test_tools(self):
+        f = dict(server.EMPTY_FILTER, when="today")
+        self.assertEqual(server.count_tasks(QTASKS, f, NOW), 2)
+        self.assertEqual([t["num"] for t in server.TOOLS["list_tasks"](QTASKS, dict(f, priority="high"), NOW)], [1])

@@ -651,10 +651,196 @@ def breakdown_questions(text: str, notes: str, due: str) -> list:
     return missing + ["budget"] if missing and TRAVEL_WORDS.search(text) else missing
 
 
+# ---------- "Ask Max": questions about the owner's tasks ----------
+# Python recognises a question, reads the filter and counts (exact). The AI is only a fallback
+# that sorts an unclear question into the same filter; it never writes the answer.
+# The tools below (list_tasks, count_tasks) are small on purpose: a future Max agent can call them by name.
+QUESTION_START = re.compile(r"^(what|what's|whats|which|show|list|how many|how much|anything|any|is there|are there|"
+                            r"do i have|have i got|tell me|give me)\b")
+ORDER_START = re.compile(r"^(show|list|tell me|give me)\b")  # also normal verbs ("show Tom the report"): stricter
+QUESTION_TH = re.compile(r"มีอะไร|อะไรบ้าง|กี่งาน|งานอะไร|งานค้าง|เลยกำหนด|เกินกำหนด|^แสดง")
+TASK_WORDS = re.compile(r"\b(tasks?|to-?dos?|left|remaining|pending|outstanding|open|have)\b|งาน")
+ABOUT = re.compile(r"(?:about|regarding|containing|เกี่ยวกับ|เรื่อง)\s*(.+?)"
+                   r"(?=\s+(?:due|today|tomorrow|this|next|on|by|before|overdue|high|urgent|in)\b|วันนี้|พรุ่งนี้|สัปดาห์|อาทิตย์|[?.!]|$)")
+ORDINAL_DAY = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)\b|วันที่\s*(\d{1,2})")
+EMPTY_FILTER = {"when": "", "date": "", "priority": "", "cat": "", "status": "open", "text": ""}
+# What the AI may answer when it sorts an unclear question (checked again by Python)
+QUESTION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "is_question": {"type": "boolean"},
+        "when": {"type": "string", "enum": ["none", "today", "tomorrow", "week", "nextweek", "overdue", "nodate"]},
+        "priority": {"type": "string", "enum": ["any", "high", "low"]},
+        "status": {"type": "string", "enum": ["open", "done"]},
+    },
+    "required": ["is_question", "when", "priority", "status"],
+}
+QUESTION_INSTRUCTIONS = (
+    "You sort a sentence typed in a to-do app. is_question is true only if the user asks about their own tasks "
+    "(what is due, what is late, how many are left). A new task to remember is NOT a question. "
+    "when: today, tomorrow, week (this week), nextweek, overdue, nodate (tasks without a date), or none. "
+    "priority: high, low or any. status: open (default) or done. Never answer the question."
+)
+
+
+def next_weekday_date(name: str, today):
+    """'Friday' -> the next Friday (today if today is Friday)."""
+    return today + timedelta(days=(WEEKDAYS.index(name) - today.weekday()) % 7)
+
+
+def question_filter(low: str, now: datetime, categories: list) -> dict:
+    """Read the filter out of a lower-case question: when, priority, category, done/open, text."""
+    f = dict(EMPTY_FILTER)
+    today = now.date()
+    names = list(dict.fromkeys(list(categories) + DEFAULT_CATEGORIES))  # known category names
+    # "anything about rent due this week": the words after "about" are a text search
+    m = ABOUT.search(low)
+    if m:
+        f["text"] = m.group(1).strip(" ?.!")
+        low = low[:m.start()] + " " + low[m.end():]
+        if f["text"] in [n.lower() for n in names]:  # "about work" means the category Work
+            f["cat"], f["text"] = f["text"], ""
+    if re.search(r"overdue|\blate\b|past due|เลยกำหนด|เกินกำหนด|งานค้าง", low):
+        f["when"] = "overdue"
+    elif re.search(r"no (due )?date|without (a )?(due )?date|undated|ไม่มีวันที่|ไม่มีกำหนด", low):
+        f["when"] = "none"
+    elif re.search(r"next week|สัปดาห์หน้า|อาทิตย์หน้า", low):
+        f["when"] = "nextweek"
+    elif re.search(r"\bweek\b|สัปดาห์นี้|อาทิตย์นี้", low):
+        f["when"] = "week"
+    elif re.search(r"tomorrow|พรุ่งนี้", low):
+        f["when"] = "tomorrow"
+    elif re.search(r"\btoday\b|\btonight\b|วันนี้|คืนนี้", low):
+        f["when"] = "today"
+    elif re.search(r"day after tomorrow|มะรืน", low):
+        f["when"], f["date"] = "date", (today + timedelta(days=2)).isoformat()
+    elif weekday_in(low):
+        f["when"], f["date"] = "date", next_weekday_date(weekday_in(low), today).isoformat()
+    elif ORDINAL_DAY.search(low):
+        day = int(next(g for g in ORDINAL_DAY.search(low).groups() if g))
+        for add in (0, 1):  # this month if the day hasn't passed, else next month
+            try:
+                date = add_months(now.replace(day=1), add).replace(day=day).date()
+            except ValueError:
+                continue
+            if date >= today:
+                f["when"], f["date"] = "date", date.isoformat()
+                break
+    if re.search(r"\b(high|urgent|important|asap)\b|ด่วน|สำคัญ", low):
+        f["priority"] = "high"
+    elif re.search(r"\blow\b|ไม่รีบ", low):
+        f["priority"] = "low"
+    if re.search(r"\b(done|completed|finished)\b|เสร็จแล้ว", low):
+        f["status"] = "done"
+    for name in names:
+        if not f["cat"] and re.search(r"(?<!\w)" + re.escape(name.lower()) + r"(?!\w)", low):
+            f["cat"] = name.lower()
+    return f
+
+
+def parse_question(sentence: str, now: str, categories: list):
+    """The filter if the sentence is a question about the tasks, else None (then it is a normal command)."""
+    raw = " ".join(sentence.split()).lower()
+    if re.search(r"#\s*\d", raw):
+        return None  # "#3" always means a command
+    if not (QUESTION_START.match(raw) or raw.endswith("?") or QUESTION_TH.search(raw)):
+        return None
+    # Typos are fixed only for the filter ("tomorow"); the fixer would turn "many" into "may"
+    low = fix_date_typos(raw)
+    f = question_filter(low, datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"), categories)
+    something = f["when"] or f["priority"] or f["cat"] or f["text"] or f["status"] == "done"
+    if ORDER_START.match(low):
+        # "show Tom the report tomorrow" is a task; "show high priority work" is a question
+        return f if TASK_WORDS.search(raw) or f["priority"] or f["cat"] or f["when"] == "overdue" else None
+    return f if something or TASK_WORDS.search(raw) else None
+
+
+def ai_question_filter(sentence: str):
+    """Fallback for an unclear question: the small AI only sorts it into the filter (checked here)."""
+    try:
+        r = parse_with_ollama(f"Sentence: {sentence}", QUESTION_INSTRUCTIONS, QUESTION_SCHEMA, timeout=20)
+    except Exception:
+        return None  # no AI: treat the sentence as a normal task
+    if r.get("is_question") is not True:
+        return None
+    f = dict(EMPTY_FILTER)
+    f["when"] = {"today": "today", "tomorrow": "tomorrow", "week": "week", "nextweek": "nextweek",
+                 "overdue": "overdue", "nodate": "none"}.get(r.get("when"), "")
+    f["priority"] = r.get("priority") if r.get("priority") in ("high", "low") else ""
+    f["status"] = "done" if r.get("status") == "done" else "open"
+    f["tokens"] = r.get("tokens", 0)
+    return f
+
+
+def due_range(f: dict, now: datetime):
+    """The first and last day (YYYY-MM-DD) a filter's date part covers."""
+    today = now.date()
+    if f["when"] == "today":
+        return today.isoformat(), today.isoformat()
+    if f["when"] == "tomorrow":
+        day = (today + timedelta(days=1)).isoformat()
+        return day, day
+    if f["when"] == "week":  # today until Sunday
+        return today.isoformat(), (today + timedelta(days=6 - today.weekday())).isoformat()
+    if f["when"] == "nextweek":  # next Monday until next Sunday
+        monday = today + timedelta(days=7 - today.weekday())
+        return monday.isoformat(), (monday + timedelta(days=6)).isoformat()
+    return f["date"], f["date"]
+
+
+# ----- Tools: small, exact functions (a future Max agent can call these by name) -----
+def list_tasks(tasks: list, f: dict, now: datetime) -> list:
+    """Tasks that match the filter, soonest first. A task is {num, text, done, due, priority, cat}."""
+    now_text = now.strftime("%Y-%m-%dT%H:%M")
+    first, last = due_range(f, now) if f["when"] in ("today", "tomorrow", "week", "nextweek", "date") else ("", "")
+    found = []
+    for t in tasks:
+        due = t.get("due", "")
+        if bool(t.get("done")) != (f["status"] == "done"):
+            continue
+        if f["priority"] and t.get("priority", "med") != f["priority"]:
+            continue
+        if f["cat"] and t.get("cat", "").lower() != f["cat"].lower():
+            continue
+        if f["text"] and f["text"].lower() not in t["text"].lower():
+            continue
+        if f["when"] == "none" and due:
+            continue
+        if f["when"] == "overdue" and not (due and due < now_text):
+            continue
+        if first and not (due and first <= due[:10] <= last):
+            continue
+        found.append(t)
+    return sorted(found, key=lambda t: (t.get("due") or "9999", t["num"]))
+
+
+def count_tasks(tasks: list, f: dict, now: datetime) -> int:
+    return len(list_tasks(tasks, f, now))
+
+
+TOOLS = {"list_tasks": list_tasks, "count_tasks": count_tasks}
+
+
+def question_answer(sentence: str, now: str, categories: list, tasks: list, use_ai: bool = True):
+    """The answer-card data if the sentence is a question, else None. Questions never add tasks."""
+    f = parse_question(sentence, now, categories)
+    low = sentence.strip().lower()
+    if f is None and use_ai and (QUESTION_START.match(low) or low.endswith("?")) and not re.search(r"#\s*\d", low):
+        f = ai_question_filter(sentence)
+    if f is None:
+        return None
+    tokens = f.pop("tokens", 0)
+    found = TOOLS["list_tasks"](tasks, f, datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"))
+    return {"action": "answer", "filter": f, "nums": [t["num"] for t in found], "tokens": tokens}
+
+
 def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: int = None) -> dict:
     """chosen: the #number the owner picked after Max asked "Which one?" (None normally)."""
     """Work out what the sentence wants: add a task, or change/delete/complete an existing one."""
     s = " ".join(sentence.split())
+    answer = question_answer(s, now, categories, tasks)  # a question about the tasks: answer it, add nothing
+    if answer:
+        return answer
     # "#9 rename to milk" means the same as "rename #9 to milk": put the action word first
     number_first = re.match(r"(#\s*\d+)\s*(.+)", s)
     if number_first and any(re.match(p, number_first.group(2).lower())
@@ -866,11 +1052,14 @@ class Handler(SimpleHTTPRequestHandler):
             # The browser sends its tasks (number + title + due) so commands can find "#3" or "laundry",
             # and "move #2 to friday" can keep #2's time
             tasks = [{"num": int(t["num"]), "text": str(t.get("text", "")), "done": t.get("done") is True,
+                      "priority": t.get("priority") if t.get("priority") in ("low", "med", "high") else "med",
+                      "cat": str(t.get("cat", ""))[:100],  # priority + category are for questions ("high priority work")
                       "due": t["due"] if isinstance(t.get("due"), str) and DUE_FORMAT.fullmatch(t["due"]) else ""}
                      for t in body.get("tasks", [])[:300]]
             chosen = body.get("num") if isinstance(body.get("num"), int) else None  # picked after "Which one?"
             if body.get("noAI"):  # the page's daily AI limit is reached: words only, no AI
-                return self.send_json(add_without_ai(sentence))
+                answer = question_answer(sentence, now, body.get("categories", [])[:20], tasks, use_ai=False)
+                return self.send_json(answer or add_without_ai(sentence))
             result, status = run_command(sentence, now, body.get("categories", [])[:20], tasks, chosen), 200
         except urllib.error.URLError:
             result, status = {"error": "Ollama isn't running. Start the Ollama app and try again."}, 502

@@ -43,6 +43,25 @@ const TEXT = {
     alreadyDone: (n) => `#${n} is already done.`,
     maxAdded: (n, text, when) => `Max added #${n}: ${text}${when ? " · " + when : ""}`, maxUpdated: (n) => `Max updated #${n}`, deleted: (n) => `Deleted #${n}`,
     maxDone: (n) => `Max marked #${n} done`, maxUndone: (n) => `Max reopened #${n}`,
+    // Ask Max (answers to questions): the filter is turned into words by filterBits() below
+    whenLabel: { today: "due today", tomorrow: "due tomorrow", week: "due this week", nextweek: "due next week", overdue: "overdue", none: "with no date" },
+    dateLabel: (d) => `due ${d}`, priLabel: { high: "high priority", low: "low priority" }, catLabel: (c) => c,
+    ansDone: "done", ansAbout: (x) => `about "${x}"`,
+    ansCount: (n, b) => {
+      const over = b.scope === "overdue"; // "overdue" goes before the word tasks, other dates after
+      const words = [over ? b.scope : "", ...b.adj].filter(Boolean).join(" ");
+      const tail = [over ? "" : b.scope, b.about].filter(Boolean).join(" ");
+      return `${n} ${words ? words + " " : ""}task${n === 1 ? "" : "s"}${tail ? " " + tail : words ? "" : " left"}`;
+    },
+    ansNone: (f, b, label) => {
+      const plain = !b.adj.length && !b.about;
+      const friendly = { "": "No open tasks. All clear!", today: "Nothing due today. Enjoy!", tomorrow: "Nothing due tomorrow.", overdue: "Nothing overdue. Nice work!" };
+      return (plain && friendly[f.when]) || `No tasks found: ${label}`;
+    },
+    ansMore: (n) => `+${n} more`, ansShowAll: "Show all in list", ansFiltered: "Filtered:", ansClear: "Clear filter", ansClose: "Close",
+    ansMoveTomorrow: "Move all to tomorrow", sureMoveAll: (n) => `Move ${n} overdue task${n === 1 ? "" : "s"} to tomorrow? The times stay the same.`,
+    yesMove: "Yes, move", movedN: (n) => `Moved ${n} task${n === 1 ? "" : "s"} to tomorrow`,
+    ansOffline: "Max is offline, so I can only answer simple questions here: today, tomorrow, this week, overdue, high priority, or how many are left.",
   },
   th: {
     title: "บอกมาได้เลย",placeholder: "บอก Max… เช่น จ่ายค่าเช่าวันที่ 5 · เลื่อน #2 เป็นวันศุกร์",
@@ -87,6 +106,24 @@ const TEXT = {
     alreadyDone: (n) => `#${n} เสร็จไปแล้ว`,
     maxAdded: (n, text, when) => `Max เพิ่ม #${n}: ${text}${when ? " · " + when : ""} แล้ว`, maxUpdated: (n) => `Max แก้ #${n} แล้ว`, deleted: (n) => `ลบ #${n} แล้ว`,
     maxDone: (n) => `Max ทำเครื่องหมาย #${n} ว่าเสร็จแล้ว`, maxUndone: (n) => `Max เปิด #${n} ใหม่แล้ว`,
+    whenLabel: { today: "วันนี้", tomorrow: "พรุ่งนี้", week: "สัปดาห์นี้", nextweek: "สัปดาห์หน้า", overdue: "ที่เลยกำหนด", none: "ที่ไม่มีวันที่" },
+    dateLabel: (d) => `วันที่ ${d}`, priLabel: { high: "สำคัญ", low: "ไม่รีบ" }, catLabel: (c) => `หมวด ${c}`,
+    ansDone: "ที่เสร็จแล้ว", ansAbout: (x) => `เกี่ยวกับ "${x}"`,
+    ansCount: (n, b, f) => {
+      const after = ["overdue", "none"].includes(f.when); // these go after the word งาน, the other dates before it
+      const front = after ? "" : b.scope;
+      const rest = [b.adj.join(" "), after ? b.scope : "", b.about].filter(Boolean).join(" ");
+      return `${front}มี ${n} งาน${rest ? " " + rest : front ? "" : "คงเหลือ"}`;
+    },
+    ansNone: (f, b, label) => {
+      const plain = !b.adj.length && !b.about;
+      const friendly = { "": "ไม่มีงานเหลือ เคลียร์หมดแล้ว", today: "วันนี้ว่าง ไม่มีงานค้าง", tomorrow: "พรุ่งนี้ว่าง ไม่มีงาน", overdue: "ไม่มีงานที่เลยกำหนด เยี่ยมมาก" };
+      return (plain && friendly[f.when]) || `ไม่พบงาน: ${label}`;
+    },
+    ansMore: (n) => `และอีก ${n} งาน`, ansShowAll: "แสดงทั้งหมดในรายการ", ansFiltered: "กรองอยู่:", ansClear: "ล้างตัวกรอง", ansClose: "ปิด",
+    ansMoveTomorrow: "ย้ายทั้งหมดไปพรุ่งนี้", sureMoveAll: (n) => `ย้าย ${n} งานที่เลยกำหนดไปพรุ่งนี้? เวลาเดิมคงไว้`,
+    yesMove: "ใช่ ย้ายเลย", movedN: (n) => `ย้าย ${n} งานไปพรุ่งนี้แล้ว`,
+    ansOffline: "Max ออฟไลน์ ตอบได้เฉพาะคำถามง่าย ๆ ที่นี่: วันนี้ พรุ่งนี้ สัปดาห์นี้ เลยกำหนด งานสำคัญ หรือเหลือกี่งาน",
   },
 };
 
@@ -153,7 +190,7 @@ const putFile = (id, blob) => fileStore("readwrite", (s) => s.put(blob, id));
 const getFile = (id) => fileStore("readonly", (s) => s.get(id));
 const deleteFile = (id) => fileStore("readwrite", (s) => s.delete(id));
 const deleteTaskFiles = (todo) => (todo.files || []).forEach((f) => deleteFile(f.id));
-let view = { filter: "all", cat: "", search: "", sort: "manual" };
+let view = { filter: "all", cat: "", search: "", sort: "manual", nums: null, label: "" }; // nums: only these tasks ("Show all in list" from an answer)
 let editingId = null; // the task whose edit form is open
 // "Break it down" suggestions on screen (nothing is saved until "Add selected"):
 // { id: task id, loading: true } while the AI thinks, then { id, steps: [...], picked: [true, ...] },
@@ -212,12 +249,18 @@ function render() {
     if (view.filter === "done" && !x.done) return false;
     if (view.filter === "overdue" && !isOverdue(x)) return false;
     if (view.cat && x.cat !== view.cat) return false;
+    if (view.nums && !view.nums.includes(x.num)) return false;
     const num = view.search.trim().match(/^#(\d+)$/); // "#3" finds task number 3
     if (num) return x.num === Number(num[1]);
     return x.text.toLowerCase().includes(view.search.toLowerCase());
   });
   if (view.sort === "due") visible.sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
   if (view.sort === "priority") visible.sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
+
+  // "Filtered: … ×" chip while an answer's list is applied
+  $("num-filter").hidden = !view.nums;
+  $("num-filter").innerHTML = view.nums
+    ? `<button class="chip active" data-clear-nums title="${t("ansClear")}">${t("ansFiltered")} ${escapeHtml(view.label)} ×</button>` : "";
 
   const list = $("todo-list");
   list.innerHTML = visible.length ? "" : `<li class="empty"><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg>${t("empty")}</li>`;
@@ -595,7 +638,7 @@ async function parseWithMax(text, extra = {}) {
       text,
       now: `${now.toLocaleDateString("en-CA")}T${now.toTimeString().slice(0, 5)} ${now.toLocaleDateString("en-US", { weekday: "long" })}`,
       categories: [...new Set(todos.map((x) => x.cat).filter(Boolean))],
-      tasks: todos.map((x) => ({ num: x.num, text: x.text, due: x.due, done: x.done })), // "#3"/"laundry" can be found; due keeps the time
+      tasks: todos.map((x) => ({ num: x.num, text: x.text, due: x.due, done: x.done, priority: x.priority, cat: x.cat })), // "#3"/"laundry" can be found; due keeps the time; priority + cat answer questions
       ...extra,
     }),
     signal: AbortSignal.timeout(30000), // a stuck AI must not freeze the box forever
@@ -632,6 +675,159 @@ function addTask(task, problem = "") {
     const when = task.due ? new Date(task.due).toLocaleString(t("locale"), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
     showMessage(t("maxAdded")(num, task.text, when)); // textContent inside, so task text never runs as HTML
   }
+}
+
+// ---------- Ask Max: answers to questions about the tasks ----------
+// Max (server.py) recognises the question and does the counting; this draws the answer card.
+// Questions never add a task. Offline (GitHub Pages, server off, AI limit) localQuestion() below
+// answers the simple ones (today / tomorrow / this week / overdue / priority / done) by itself.
+const QUESTION_WORDS = /^(what|what's|whats|which|show|list|how many|how much|anything|any|is there|are there|do i have|have i got|tell me|give me)\b|มีอะไร|อะไรบ้าง|กี่งาน|งานอะไร|งานค้าง|เลยกำหนด|เกินกำหนด|^แสดง/;
+const ANSWER_ROWS = 8; // tasks listed in the card; the rest are "+N more"
+const dateKey = (d) => d.toLocaleDateString("en-CA"); // YYYY-MM-DD
+const shortDate = (due) => new Date(due).toLocaleString(t("locale"), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+// First and last day of today / tomorrow / this week (until Sunday) / next week, as YYYY-MM-DD
+function dayRange(when) {
+  const weekday = (new Date().getDay() + 6) % 7; // Monday = 0
+  const offsets = { today: [0, 0], tomorrow: [1, 1], week: [0, 6 - weekday], nextweek: [7 - weekday, 13 - weekday] }[when];
+  return offsets.map((n) => { const d = new Date(); d.setDate(d.getDate() + n); return dateKey(d); });
+}
+
+// Same rules as list_tasks() in server.py (the server's answer is the real one; this is the offline copy)
+function matchesFilter(x, f) {
+  if (x.done !== (f.status === "done")) return false;
+  if (f.priority && x.priority !== f.priority) return false;
+  if (f.cat && x.cat.toLowerCase() !== f.cat) return false;
+  if (f.text && !x.text.toLowerCase().includes(f.text)) return false;
+  if (f.when === "none") return !x.due;
+  if (f.when === "overdue") return !!x.due && new Date(x.due) < new Date();
+  if (["today", "tomorrow", "week", "nextweek"].includes(f.when)) {
+    const [first, last] = dayRange(f.when);
+    return !!x.due && x.due.slice(0, 10) >= first && x.due.slice(0, 10) <= last;
+  }
+  return true;
+}
+
+// A small offline copy of the server's question reader. null = not a question, or too tricky for here.
+function localQuestion(text) {
+  const low = text.toLowerCase().trim();
+  if (!(QUESTION_WORDS.test(low) || low.endsWith("?")) || /#\s*\d/.test(low)) return null;
+  if (/monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d(st|nd|rd|th)\b|จันทร์|อังคาร|พุธ|พฤหัส|ศุกร์|เสาร์|วันอาทิตย์|วันที่|มะรืน/.test(low)) return null;
+  const f = { when: "", date: "", priority: "", cat: "", status: "open", text: "" };
+  let rest = low;
+  const about = low.match(/(?:about|regarding|เกี่ยวกับ)\s*(.+?)(?=\s+(?:due|today|tomorrow|this|next|overdue)\b|[?.!]|$)/);
+  if (about) { f.text = about[1].trim(); rest = low.replace(about[0], " "); }
+  if (/overdue|\blate\b|เลยกำหนด|เกินกำหนด|งานค้าง/.test(rest)) f.when = "overdue";
+  else if (/next week|สัปดาห์หน้า|อาทิตย์หน้า/.test(rest)) f.when = "nextweek";
+  else if (/\bweek\b|สัปดาห์นี้|อาทิตย์นี้/.test(rest)) f.when = "week";
+  else if (/tomorrow|พรุ่งนี้/.test(rest)) f.when = "tomorrow";
+  else if (/\btoday\b|\btonight\b|วันนี้|คืนนี้/.test(rest)) f.when = "today";
+  if (/\b(high|urgent|important|asap)\b|ด่วน|สำคัญ/.test(rest)) f.priority = "high";
+  if (/\b(done|completed|finished)\b|เสร็จแล้ว/.test(rest)) f.status = "done";
+  f.cat = (todos.map((x) => x.cat.toLowerCase()).find((c) => c && rest.includes(c))) || "";
+  const taskWord = /\b(tasks?|to-?dos?|left|remaining|pending|outstanding|open|have)\b|งาน/.test(low);
+  const strong = f.priority || f.cat || f.when === "overdue";
+  const something = strong || f.when || f.text || f.status === "done";
+  if (!(/^(show|list|tell me|give me)\b/.test(low) ? taskWord || strong : something || taskWord)) return null;
+  const found = todos.filter((x) => matchesFilter(x, f)).sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999") || a.num - b.num);
+  return { action: "answer", filter: f, nums: found.map((x) => x.num) };
+}
+
+// A filter in words: { scope: "due today", adj: ["high priority", "Work"], about: 'about "rent"' }
+function filterBits(f) {
+  const L = TEXT[settings.lang];
+  const scope = f.when === "date" ? L.dateLabel(new Date(f.date + "T00:00").toLocaleDateString(L.locale, { day: "numeric", month: "short" })) : L.whenLabel[f.when] || "";
+  const cat = f.cat ? todos.map((x) => x.cat).find((c) => c.toLowerCase() === f.cat) || f.cat : ""; // show the name as typed in the list
+  const adj = [f.status === "done" ? L.ansDone : "", L.priLabel[f.priority] || "", cat ? L.catLabel(cat) : ""].filter(Boolean);
+  return { scope, adj, about: f.text ? L.ansAbout(f.text) : "" };
+}
+const filterLabel = (f) => { const b = filterBits(f); return [b.scope, ...b.adj, b.about].filter(Boolean).join(" · "); };
+
+function hideAnswer() {
+  $("answer-card").hidden = true;
+  $("answer-card").replaceChildren();
+}
+
+// Put the main list back to "everything" (also used by "Show all in list")
+function resetListView() {
+  view = { ...view, filter: "all", cat: "", search: "", nums: null, label: "" };
+  $("search").value = "";
+  document.querySelectorAll("#filters .chip").forEach((c) => c.classList.toggle("active", c.dataset.filter === "all"));
+}
+
+// Click on an answer row: scroll to the task and flash it (clear the list filters first if they hide it)
+function jumpToTask(num) {
+  if (!document.querySelector(`.todo-item[data-num="${num}"]`)) { resetListView(); render(); }
+  flash(num);
+}
+
+// "Move all to tomorrow": asks Yes/No first, keeps each task's time, backs up first
+function askMoveToTomorrow(found) {
+  askYesNo($("cmd-msg"), t("sureMoveAll")(found.length), t("yesMove"), () => {
+    backup("before moving overdue tasks to tomorrow", true);
+    const tomorrow = dayRange("tomorrow")[0];
+    for (const x of found) { x.due = tomorrow + x.due.slice(10); x.notified = false; } // slice(10) = "THH:MM"
+    update();
+    hideAnswer();
+    showMessage(t("movedN")(found.length));
+  }, () => $("todo-input").focus());
+}
+
+// Draw the answer card under the command bar. Everything goes in with textContent (never as HTML).
+function showAnswer(data) {
+  const f = data.filter;
+  const found = data.nums.map((n) => todos.find((x) => x.num === n)).filter(Boolean);
+  const bits = filterBits(f);
+  const card = $("answer-card");
+  const make = (tag, className, text = "") => {
+    const el = document.createElement(tag);
+    el.className = className;
+    el.textContent = text;
+    return el;
+  };
+  const title = make("p", "answer-title", found.length ? t("ansCount")(found.length, bits, f) : t("ansNone")(f, bits, filterLabel(f)));
+  const close = make("button", "answer-close", "×");
+  close.type = "button";
+  close.setAttribute("aria-label", t("ansClose"));
+  close.addEventListener("click", () => { hideAnswer(); $("todo-input").focus(); });
+  card.replaceChildren(title, close);
+
+  if (found.length) {
+    const rows = make("ul", "answer-rows");
+    for (const x of found.slice(0, ANSWER_ROWS)) {
+      const li = document.createElement("li");
+      const row = make("button", "answer-row");
+      row.type = "button";
+      row.append(make("span", "num answer-num", `#${x.num}`), make("span", "answer-text", x.text));
+      if (x.due) row.append(make("span", `answer-when${isOverdue(x) ? " overdue" : ""}`, shortDate(x.due)));
+      if (x.cat) row.append(make("span", "tag answer-cat", `#${x.cat}`));
+      row.addEventListener("click", () => jumpToTask(x.num));
+      li.append(row);
+      rows.append(li);
+    }
+    card.append(rows);
+  }
+  const actions = make("div", "chips answer-actions");
+  const chip = (label, onClick) => {
+    const b = make("button", "chip", label);
+    b.type = "button";
+    b.addEventListener("click", onClick);
+    actions.append(b);
+  };
+  if (found.length > ANSWER_ROWS) {
+    card.append(make("p", "answer-more", t("ansMore")(found.length - ANSWER_ROWS)));
+    chip(t("ansShowAll"), () => {
+      resetListView();
+      view.nums = found.map((x) => x.num);
+      view.label = filterLabel(f);
+      render();
+      $("todo-list").scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+  }
+  if (f.when === "overdue" && f.status === "open" && found.length) chip(t("ansMoveTomorrow"), () => askMoveToTomorrow(found));
+  // (A "Plan my day" chip for today's tasks comes later, with the Max agent.)
+  card.append(actions);
+  card.hidden = false;
 }
 
 // Short label for a task chip: "#7 Do laundry"
@@ -706,25 +902,37 @@ $("todo-form").addEventListener("submit", async (e) => {
   let cmd = null;       // set when the sentence is a command for an existing task
   let problem = "";     // message to show after the box is usable again
   let followUp = null;  // a question for the owner, asked once the box is usable again
+  let answer = null;    // set when the sentence is a question about the tasks (nothing is added)
+  hideAnswer();
   try {
     try {
       if (usageToday() >= settings.aiLimit) throw new Error(t("limitHit"));
       if (!LOCAL) throw new Error("no AI server here (GitHub Pages)"); // straight to the simple fallback
       const data = await parseWithMax(text);
-      if (data.action && data.action !== "add") cmd = data;
+      if (data.action === "answer") answer = data;
+      else if (data.action && data.action !== "add") cmd = data;
       else if (data.text) task = data;
       else throw new Error("AI gave no task");
     } catch (err) {
       if (LOCAL) console.warn("AI unavailable:", err);
       showMessage("");
       problem = err.message === t("limitHit") ? t("limitHit") : t("aiOff");
-      cmd = simpleCommand(text);
-      if (!cmd && LOCAL && problem === t("limitHit")) {
-        // A new task at the AI limit: Python can still ask "When?" for a meeting/trip (no AI used)
+      answer = localQuestion(text); // simple questions need no AI
+      if (!answer && !QUESTION_WORDS.test(text.toLowerCase())) cmd = simpleCommand(text);
+      if (!answer && !cmd && LOCAL && problem === t("limitHit")) {
+        // A new task at the AI limit: Python can still ask "When?" for a meeting/trip (no AI used),
+        // and still answers questions (the tricky ones: a weekday, a category)
         try {
           const data = await parseWithMax(text, { noAI: true });
-          if (data.text) task = data;
+          if (data.action === "answer") answer = data;
+          else if (data.text) task = data;
         } catch {} // server off: add as plain text
+      }
+      if (answer) problem = "";
+      else if (!cmd && QUESTION_WORDS.test(text.toLowerCase()) && /tasks?|due|overdue|left|งาน|วันนี้|พรุ่งนี้/.test(text.toLowerCase())) {
+        // Looks like a question we can't answer here: say so (and don't add it as a task)
+        showMessage(t("ansOffline"), true);
+        return;
       }
       if (cmd?.action === "offline") {
         // A command we can't do without AI: keep the text so nothing is lost.
@@ -734,7 +942,11 @@ $("todo-form").addEventListener("submit", async (e) => {
       }
     }
     // Python (server.py) decided whether Max should ask first
-    if (cmd?.pickTask || cmd?.choices?.length) followUp = () => askWhichTask(text, cmd);
+    if (answer) {
+      showMessage(""); // drop "Max is thinking…"
+      $("todo-input").value = "";
+      showAnswer(answer);
+    } else if (cmd?.pickTask || cmd?.choices?.length) followUp = () => askWhichTask(text, cmd);
     else if (cmd) finishCommand(cmd);
     else if (task.askWhen) followUp = () => askWhenThenAdd(task);
     else addTask(task, problem);
@@ -935,6 +1147,9 @@ $("filters").addEventListener("click", (e) => {
   document.querySelectorAll("#filters .chip").forEach((c) => c.classList.toggle("active", c === e.target));
   render();
 });
+$("num-filter").addEventListener("click", (e) => {
+  if (e.target.closest("[data-clear-nums]")) { view.nums = null; view.label = ""; render(); }
+});
 $("cat-filters").addEventListener("click", (e) => {
   if (e.target.dataset.cat === undefined) return;
   view.cat = view.cat === e.target.dataset.cat ? "" : e.target.dataset.cat; // click again to clear
@@ -1000,6 +1215,7 @@ $("usage").addEventListener("click", () => {
 $("lang").addEventListener("click", () => {
   settings.lang = settings.lang === "en" ? "th" : "en";
   save("settings", settings);
+  hideAnswer(); // its words are in the old language
   render();
   loadTeam(); // "· 2 working" in the new language
 });
