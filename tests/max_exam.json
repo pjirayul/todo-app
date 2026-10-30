@@ -151,6 +151,11 @@
     {"s": "what about Tom?", "action": "answer", "filter": {"text": "tom"}},
     {"s": "Tom called, call him back tomorrow", "action": "add", "title": ["call Tom back", "call him back"], "due": "2026-10-31T09:00"},
     {"s": "ส่งรายงานเสร็จแล้ว", "action": "complete", "num": 12},
+    {"s": "what to do next friday", "action": "answer", "filter": {"when": "date", "date": "2026-11-06"}},
+    {"s": "งานวันศุกร์หน้ามีอะไรบ้าง", "action": "answer", "filter": {"when": "date", "date": "2026-11-06"}},
+    {"s": "what to do friday", "action": "answer", "filter": {"when": "date", "date": "2026-10-30"}},
+    {"s": "call the bank next friday", "action": "add", "title": ["call the bank", "call bank"], "due": "2026-11-06T09:00"},
+    {"s": "ส่งรายงานวันศุกร์หน้า", "action": "add", "title": ["ส่งรายงาน"], "due": "2026-11-06T09:00"},
     {"s": "hello", "action": ["greeting", "smalltalk"]},
     {"s": "hey", "action": ["greeting", "smalltalk"]},
     {"s": "สวัสดีครับ", "action": ["greeting", "smalltalk"]}

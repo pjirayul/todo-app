@@ -35,6 +35,9 @@ FAST_MODEL = "qwen2.5:3b"
 # and the 3B can't stay loaded together, so each switch reloads a model: 7B ~50 s per Break it down,
 # and the next command bar answer ~22 s instead of 1-2 s. To try it: SMART_MODEL = "qwen2.5:7b"
 SMART_MODEL = FAST_MODEL
+# One AI call per sentence that understands everything (add / change / done / undo / delete / question / chat);
+# Python then checks every part. False = the old road (a "gate" call, then a parse call), kept as the easy undo.
+ONE_CALL = False   # measured 30 Oct: exam 94.4 -> 97.4 but warm avg 1.25 s (limit 1.2). Flip to True to get the accuracy.
 SMART_TIMEOUT = 20              # seconds to wait for the smart brain before falling back to the fast one
 CLAUDE_MODEL = "claude-haiku-5-5"
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
@@ -269,7 +272,7 @@ def thai_time(text: str) -> str:
     return ""
 
 
-CLOCK_TIME = re.compile(r"\d\s*(:\s*\d\d|\.\d\d|am\b|pm\b|น\.|โมง|ทุ่ม)|noon|" + THAI_TIME_ANY, re.I)
+CLOCK_TIME = re.compile(r"\d\s*(:\s*\d\d|\.\d\d|am\b|pm\b|น\.|โมง|ทุ่ม)|\bnoon\b|" + THAI_TIME_ANY, re.I)
 # A little linking word stuck to a date ("ในวันศุกร์", "ภายในพรุ่งนี้", "ตอนบ่ายสาม") goes away with it; the same
 # word anywhere else ("ของในตู้เย็น") stays. The lead word is tried first, so "ตอนบ่ายสาม" is cut whole.
 THAI_DATE_WORDS = (r"(?:ภายใน|ใน|ตอน|เมื่อ)?(?:มะรืนนี้|มะรืน|พรุ่งนี้|วันนี้|คืนนี้|ตอนเช้า|ตอนเย็น|ตอนบ่าย|ด่วน|ไม่รีบ|"
@@ -465,15 +468,31 @@ def pick_category(ai_category: str, sentence: str, known: list) -> str:
     return names.get(ai_category.lower(), ai_category)  # no hint: whatever the AI said (may be empty)
 
 
-def parse_task(sentence: str, now: str, categories: list) -> dict:
+def clean_sentence(sentence: str) -> str:
+    """The sentence as the AI gets it: no "add"/"remind me to", date typos fixed."""
     sentence = ADD_WORDS.sub("", sentence).strip() or sentence
-    sentence = strip_lead_in(sentence)
-    sentence = fix_date_typos(sentence)
+    return fix_date_typos(strip_lead_in(sentence))
+
+
+def ai_prompt(sentence: str, categories: list, examples: str = None):
+    """The fixed start (examples, About me, categories) comes first so Ollama can reuse it. Returns (prompt, known, memory)."""
     memory = load_memory()
     known = list(dict.fromkeys(categories + memory["categories"]))[:30]  # existing + the owner's own, no repeats
     about = memory_summary(memory)
-    prompt = f"{EXAMPLES}\n\n{about + chr(10) if about else ''}Existing categories: {', '.join(known) or 'none'}\nSentence: {sentence}"
+    prompt = f"{examples or EXAMPLES}\n\n{about + chr(10) if about else ''}Existing categories: {', '.join(known) or 'none'}\nSentence: {sentence}"
+    return prompt, known, memory
+
+
+def parse_task(sentence: str, now: str, categories: list) -> dict:
+    sentence = clean_sentence(sentence)
+    prompt, known, memory = ai_prompt(sentence, categories)
     task = parse_with_ollama(prompt) if AI_PROVIDER == "ollama" else parse_with_claude(prompt)
+    return check_task(task, sentence, now, known, memory)
+
+
+def check_task(task: dict, sentence: str, now: str, known: list, memory: dict) -> dict:
+    """Python checks what the AI said (dates, time, title, category) and returns the safe task.
+    Shared by parse_task (one task per call) and understand() (one call for every kind of sentence)."""
     # Common day words are certain, so they override the AI
     lower = sentence.lower()
     # A named weekday is certain too: "วันศุกร์" on a Thursday is tomorrow, not next week's Friday
@@ -657,6 +676,23 @@ def find_task(target: str, tasks: list):
     return (close[0], []) if len(close) == 1 else (None, close[:5])
 
 
+LOOSE_SKIP = {"the", "task", "thing", "tasks", "this", "that", "with", "from", "about", "please", "item"}
+
+
+def find_task_loose(target: str, tasks: list):
+    """find_task, and if nothing fits, the longest word of the target that only ONE task contains
+    ("bink thing" -> the task with "Bink"; "with dentist" -> "Dentist appointment"). Used for the AI's target only."""
+    num, choices = find_task(target, tasks)
+    if num is not None or choices:
+        return num, choices
+    words = sorted({w for w in re.findall(r"\w+", target.lower()) if len(w) >= 4 and w not in LOOSE_SKIP}, key=len, reverse=True)
+    for w in words:
+        hits = [t["num"] for t in tasks if w in str(t.get("text", "")).lower()]
+        if len(hits) == 1:
+            return hits[0], []
+    return None, []
+
+
 # Did the change text name a day, or a clock time? Only then may the task's date/time change.
 DAY_HINTS = re.compile(
     r"\b(today|tonight|tomorrow|next|week|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
@@ -688,7 +724,10 @@ TRIP_DETAILS = re.compile(r"Trip details:|รายละเอียดทร�
 
 
 def add_task(s: str, now: str, categories: list) -> dict:
-    task = parse_task(s, now, categories)
+    return finish_add(parse_task(s, now, categories), s)
+
+
+def finish_add(task: dict, s: str) -> dict:
     time = task.pop("time")  # only updates need it...
     if not task["due"] and ask_words(s):
         # ...and "When?": "meeting with Tom at 3pm" has a time but no day. The page asks for the day
@@ -775,6 +814,21 @@ def next_weekday_date(name: str, today):
     return today + timedelta(days=(WEEKDAYS.index(name) - today.weekday()) % 7)
 
 
+def next_weekday_named(low: str, today):
+    """'what to do next friday' / 'วันศุกร์หน้า' -> that weekday in the FOLLOWING Mon-Sun week, never today ('' if not said).
+    Same meaning as the add-task road (resolve_due with next_week), so a Friday asking for "next friday" gets +7 days."""
+    m = re.search(r"\bnext\s+(" + "|".join(d.lower() for d in WEEKDAYS) + r")\b", low)
+    if m:
+        name = m.group(1).capitalize()
+    else:
+        m = re.search(r"(?:วัน)?(จันทร์|อังคาร|พุธ|พฤหัส|ศุกร์|เสาร์)(?:บดี)?หน้า|(วันอาทิตย์)หน้า", low)
+        if not m:
+            return ""
+        name = THAI_WEEKDAYS[m.group(1) or m.group(2)]
+    monday = today - timedelta(days=today.weekday())
+    return (monday + timedelta(days=7 + WEEKDAYS.index(name))).isoformat()
+
+
 def question_filter(low: str, now: datetime, categories: list) -> dict:
     """Read the filter out of a lower-case question: when, priority, category, done/open, text."""
     f = dict(EMPTY_FILTER)
@@ -791,6 +845,8 @@ def question_filter(low: str, now: datetime, categories: list) -> dict:
         f["when"] = "overdue"
     elif re.search(r"no (due )?date|without (a )?(due )?date|undated|ไม่มีวันที่|ไม่มีกำหนด", low):
         f["when"] = "none"
+    elif next_weekday_named(low, today):
+        f["when"], f["date"] = "date", next_weekday_named(low, today)
     elif re.search(r"next week|สัปดาห์หน้า|อาทิตย์หน้า", low):
         f["when"] = "nextweek"
     elif re.search(r"\bweek\b|สัปดาห์นี้|อาทิตย์นี้", low):
@@ -1002,6 +1058,110 @@ def question_answer(sentence: str, now: str, categories: list, tasks: list, use_
     return {"action": "answer", "filter": f, "nums": [t["num"] for t in found], "tokens": tokens}
 
 
+# ---------- One AI call that understands the whole sentence (job 0h) ----------
+# The AI only reads the language (what kind of sentence, which words name a task); Python does every exact part:
+# dates, #numbers (regex only), finding the task, the question filter, and the safety checks below.
+INTENTS = ["add", "change", "done", "undo", "delete", "question", "chat"]
+UNDERSTAND_SCHEMA = {
+    "type": "object",
+    "properties": {   # the task fields come FIRST: the title and dates were better when the AI wrote them before the intent
+        **TASK_SCHEMA["properties"],
+        "intent": {"type": "string", "enum": INTENTS},
+        "target": {"type": "string"},
+        "change": {"type": "string"},
+        "reply": {"type": "string"},
+    },
+    "required": TASK_SCHEMA["required"] + ["intent", "target", "change", "reply"],
+}
+UNDERSTAND_INSTRUCTIONS = INSTRUCTIONS + (
+    "\nFirst decide intent. add = a new task to remember: the default, and a sentence that just names something to do "
+    "is add, even with a day or time. Use another intent ONLY when the sentence clearly talks about a task that already "
+    "exists: change (rename it, new day or time, priority, category), done (it is finished), undo (it is not finished "
+    "after all), delete (remove it), question (asks about the user's own tasks), chat (small talk to you, the assistant).\n"
+    "target: for change/done/undo/delete, the words from the sentence that name the existing task, else \"\".\n"
+    "change: for change, the new value in the user's own words (a day, a time, a new name, a priority), else \"\".\n"
+    "reply: only for chat, ONE short friendly sentence (max 80 characters) in the language of the user, no emoji, "
+    "that invites them to give a task; else \"\". Always fill text, whatever the intent."
+)
+
+
+def _example(sentence: str, **fields) -> str:
+    """One extra example line in the same shape as EXAMPLES, with the new fields."""
+    row = {"text": "", "priority": "med", "category": "", "when": "none", "in_days": 0, "weekday": "", "next_week": False,
+           "day": 0, "month": 0, "next_month": False, "time": "", "intent": "add", "target": "", "change": "", "reply": ""}
+    row.update(fields)
+    return f'"{sentence}" -> ' + json.dumps(row, ensure_ascii=False, separators=(",", ":"))
+
+
+# The task examples get the new fields; a few more show the other kinds of sentence
+UNDERSTAND_EXAMPLES = "\n".join(
+    [line[:-1] + ',"intent":"add","target":"","change":"","reply":""}' if "-> {" in line else line
+     for line in EXAMPLES.split("\n")] + [
+        _example("finished the tax form", intent="done", target="tax form", text="Tax form"),
+        _example("ทำการบ้านเสร็จแล้ว", intent="done", target="การบ้าน", text="การบ้าน"),
+        _example("postpone the haircut to next monday", intent="change", target="haircut", change="next monday",
+                 text="Haircut", when="weekday", weekday="Monday", next_week=True),
+        _example("remove the gym task", intent="delete", target="gym", text="Gym"),
+        _example("what is due on friday?", intent="question", text="What is due on friday"),
+        _example("you are funny", intent="chat", text="You are funny", reply="Thank you! What shall we add to your list?"),
+    ])
+
+# The command words Python needs to SEE in the sentence before it deletes, finishes or edits a task for the AI.
+# Anywhere in the sentence (the rules road wants them first); "finish the report" and "cancel dentist" stay tasks.
+DONE_ANY = re.compile(r"\b(done|finished|completed)\b|เสร็จ|แล้ว$")
+UNDO_ANY = re.compile(r"\b(undo|undone|uncheck|unmark|reopen|not done|not finished)\b|ยังไม่เสร็จ")
+DELETE_ANY = re.compile(r"\b(delete|remove|erase|del)\b|ลบ")
+CHANGE_ANY = re.compile(r"\b(change|modify|move|rename|edit|update|reschedule|postpone|push|delay)\b|เปลี่ยน|แก้|ย้าย|เลื่อน")
+INTENT_WORDS = {"done": DONE_ANY, "undo": UNDO_ANY, "delete": DELETE_ANY, "change": CHANGE_ANY}
+INTENT_ACTION = {"done": "complete", "undo": "uncomplete", "delete": "delete", "change": "update"}
+
+
+def understand(s: str, now: str, categories: list, tasks: list, greeted: bool = False, rules_result: dict = None):
+    """One AI call, then Python checks. Returns the result dict, or None = "not sure, use the old road".
+    rules_result: Python already read a command but could not find the task (the AI's target may help)."""
+    sentence = clean_sentence(s)
+    prompt, known, memory = ai_prompt(sentence, categories, UNDERSTAND_EXAMPLES)
+    r = parse_with_ollama(prompt, UNDERSTAND_INSTRUCTIONS, UNDERSTAND_SCHEMA, timeout=60)
+    tokens = r.get("tokens", 0)
+    low = " ".join(s.split()).lower()   # the owner's raw words (fix_date_typos would turn "many" into "may")
+    intent = r.get("intent") if r.get("intent") in INTENTS else "add"
+    asked = maybe_question(low, greeted)   # the old gate is now only a CHECK: the AI cannot turn a plain task into a question
+
+    if intent == "chat" and asked:
+        reply = clean_reply(r.get("reply"))
+        if THAI_LETTERS.search(s) and not THAI_LETTERS.search(reply):
+            reply = ""   # the 3B model sometimes answers Thai in English: the page's own Thai line is used then
+        return {"action": "smalltalk", "kind": "chat", "reply": reply, "tokens": tokens}
+    if intent == "question" and asked:
+        f = question_filter(fix_date_typos(low), datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"), categories)
+        found = TOOLS["list_tasks"](tasks, f, datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"))
+        return {"action": "answer", "filter": f, "nums": [t["num"] for t in found], "tokens": tokens}
+
+    if intent in INTENT_WORDS and INTENT_WORDS[intent].search(low):
+        action, target = INTENT_ACTION[intent], " ".join(str(r.get("target") or "").split())
+        target = target or low   # the AI named nothing: look for a task word anywhere in the sentence
+        # By name, "undo" can only mean a done task and "done" an open one; only Python matches the words to a real task
+        wanted = {"undo": True, "done": False, "change": False}.get(intent)
+        pool = tasks if wanted is None else [t for t in tasks if t.get("done") is wanted]
+        num, choices = find_task_loose(target, pool)
+        if num is None and target == low:
+            return {"action": action, "pickTask": True, "tokens": tokens}   # no task named: the page asks "Which task?"
+        if num is None:
+            return {"action": action, "missing": target, "choices": choices, "tokens": tokens}
+        if intent != "change":
+            return {"action": action, "num": num, "tokens": tokens}
+        change = " ".join(str(r.get("change") or "").split())
+        done = work_out_changes(num, change, "", False, low, tasks, now, categories, ai_task=r)
+        done["tokens"] = done.get("tokens", 0) + tokens
+        done["path"] = "ai"
+        return done
+
+    if rules_result is not None:
+        return None   # a command word started the sentence but the AI saw no command: keep Python's answer
+    # (an intent the sentence has no command words for is still a plain task: its fields are already filled)
+    return finish_add(check_task(r, sentence, now, known, memory), s) | {"path": "ai"}
+
+
 def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: int = None) -> dict:
     """Same as work_out_command, but every result says which road it took: "rules" (Python alone) or "ai"."""
     result = work_out_command(sentence, now, categories, tasks, chosen)
@@ -1016,12 +1176,27 @@ def work_out_command(sentence: str, now: str, categories: list, tasks: list, cho
     kind = small_talk(s)
     if kind:
         return {"action": "smalltalk", "kind": kind}  # a friendly reply, no task, no AI call
-    answer = question_answer(s, now, categories, tasks)  # a question about the tasks: answer it, add nothing
+    one_call = ONE_CALL and AI_PROVIDER == "ollama" and chosen is None
+    # A question about the tasks: answer it, add nothing. One-call mode: only Python-clear questions here,
+    # the unclear ones are decided by the single AI call below
+    answer = question_answer(s, now, categories, tasks, use_ai=not one_call)
     if answer:
         return answer
     if GREETING.match(s) and not GREETING.sub("", s, count=1).strip():
         return {"action": "greeting"}  # just "hi max": the page says hello, no task is added
+    greeted = strip_greeting(s)[1]
     s = strip_greeting(s)[0]  # "hey max add milk tomorrow" is the command "add milk tomorrow"
+    result = command_by_rules(s, now, categories, tasks, chosen)
+    if not one_call:
+        return result or add_task(s, now, categories)
+    if result is not None and "missing" not in result:
+        return result  # a clear command Python read alone: no AI
+    # Everything else: ONE AI call that understands the whole sentence, then Python checks it
+    return understand(s, now, categories, tasks, greeted, result) or result or add_task(s, now, categories)
+
+
+def command_by_rules(s: str, now: str, categories: list, tasks: list, chosen: int = None):
+    """Python's own reading of a command (done/undo/delete/change). None = no command words: it is a new task."""
     # "#9 rename to milk" means the same as "rename #9 to milk": put the action word first
     number_first = re.match(r"(#\s*\d+)\s*(.+)", s)
     if number_first and any(re.match(p, number_first.group(2).lower())
@@ -1037,7 +1212,7 @@ def work_out_command(sentence: str, now: str, categories: list, tasks: list, cho
     elif re.search(UPDATE_WORDS, low) or re.match(r"#\s*\d+", low):
         action = "update"
     else:
-        return add_task(s, now, categories)
+        return None
 
     # Remove the action words, keep what's left
     rest = s
@@ -1069,7 +1244,7 @@ def work_out_command(sentence: str, now: str, categories: list, tasks: list, cho
             if chosen:
                 parts = ["", rest]  # the owner already picked the task: all of it is the change
             else:  # "set up the printer" is a new task, not a command
-                return add_task(s, now, categories)
+                return None
         target, change = strip_filler(parts[0]), strip_filler(parts[1])
     else:
         target, change = rest, ""
@@ -1087,7 +1262,14 @@ def work_out_command(sentence: str, now: str, categories: list, tasks: list, cho
     if action != "update":
         return {"action": action, "num": num}
 
-    # Only the fields the command mentions change
+    return work_out_changes(num, change, field, rename, low, tasks, now, categories)
+
+
+def work_out_changes(num: int, change: str, field: str, rename: bool, low: str, tasks: list, now: str,
+                     categories: list, ai_task: dict = None) -> dict:
+    """What an update changes: only the fields the command mentions (day-only keeps the time, time-only keeps the day).
+    ai_task: the AI's reading of the same sentence (one-call mode), so a hard date needs no second AI call."""
+    action = "update"
     if not change:
         return {"action": action, "num": num, "nothing": True}
     changes, tokens, path = {}, 0, "rules"
@@ -1113,6 +1295,11 @@ def work_out_command(sentence: str, now: str, categories: list, tasks: list, cho
             if rules:
                 parsed = {"due": resolve_due(rules, datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"), load_memory()["times"]),
                           "time": rules["time"], "tokens": 0}
+            elif ai_task:
+                memory = load_memory()
+                known = list(dict.fromkeys(categories + memory["categories"]))[:30]
+                parsed = check_task(dict(ai_task), clean_sentence(change), now, known, memory)  # Python reads the change words
+                path = "ai"
             else:
                 parsed = parse_task(change, now, categories)  # the AI reads the date words
                 path = "ai"

@@ -615,7 +615,8 @@ class SmallTalk(unittest.TestCase):
         # sentences not in the seed list reach the AI (short, no date, no task verb) and it says chat
         for text in ["you did well", "good job max", "nice one", "คุณช่วยได้ดีมาก", "how are you", "สบายดีไหม"]:
             self.assertTrue(server.maybe_chat(" ".join(text.lower().split())) or text in ("how are you", "สบายดีไหม"), text)
-            r = ask(text, ai=self.CHAT)
+            with mock.patch.object(server, "ONE_CALL", False):   # this is the old two-call road (gate call, then parse)
+                r = ask(text, ai=self.CHAT)
             # a Thai sentence with an English reply: the reply is dropped (the page uses its own Thai line)
             want = "" if re.search("[฀-๿]", text) else "Thanks! What can I do for you?"
             self.assertEqual((r["action"], r["kind"], r["reply"]), ("smalltalk", "chat", want), text)
@@ -750,3 +751,124 @@ class ThaiTitleLinkingWords(unittest.TestCase):
     def test_english_titles_are_not_touched(self):
         clean = lambda *a, **k: {**fake_ai(*a), "text": "check in at hotel", "when": "none", "time": "15:00"}
         self.assertEqual(ask("check in at hotel at 3pm", ai=clean)["text"], "Check in at hotel")
+
+
+class OneCallUnderstand(unittest.TestCase):
+    """Job 0h-1: ONE AI call understands the sentence; Python checks every part of the answer."""
+
+    def setUp(self):   # these tests are about the one-call road, whatever the server.py switch says
+        patcher = mock.patch.object(server, "ONE_CALL", True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def run_ai(self, sentence, tasks=(), **fields):
+        """Ask with a fake AI that answers `fields` on top of a plain task. Returns (result, number of AI calls)."""
+        calls = []
+
+        def ai(prompt, *a, **k):
+            calls.append(1)
+            row = {**fake_ai(prompt), "intent": "add", "target": "", "change": "", "reply": "", "tokens": 7}
+            row.update(fields)
+            return row
+        return ask(sentence, tasks, ai=ai), len(calls)
+
+    def test_plain_task_is_one_call(self):
+        r, n = self.run_ai("buy bread tomorrow", when="tomorrow", text="Buy bread")
+        self.assertEqual((r["action"], r["text"], r["due"], n), ("add", "Buy bread", "2026-10-29T09:00", 1))
+
+    def test_clear_questions_and_commands_need_no_ai(self):
+        for text in ["what's due today", "done #2", "move #1 to friday", "hi max", "thanks"]:
+            self.assertNotEqual(ask(text, TASKS, ai=no_ai)["action"], "add", text)
+
+    def test_done_by_the_ais_target(self):
+        r, n = self.run_ai("done with dentist", DENTIST, intent="done", target="dentist")
+        self.assertEqual((r["action"], r["num"], n), ("complete", 4, 1))
+        r, n = self.run_ai("I finished the slides", [{"num": 7, "text": "Finish the slides", "done": False}], intent="done", target="slides")
+        self.assertEqual((r["action"], r["num"]), ("complete", 7))
+        r, n = self.run_ai("ซื้อนมแล้ว", [{"num": 3, "text": "ซื้อนม", "done": False}], intent="done", target="ซื้อนม")
+        self.assertEqual((r["action"], r["num"]), ("complete", 3))
+
+    def test_no_command_word_means_no_delete_or_done(self):
+        for sentence, intent in [("cancel dentist", "delete"), ("finish the report", "done"), ("dentist friday", "undo")]:
+            r, n = self.run_ai(sentence, DENTIST, intent=intent, target="dentist")
+            self.assertEqual((r["action"], n), ("add", 1), sentence)   # a plain task, the AI's idea is ignored
+
+    def test_ai_target_must_be_a_real_task(self):
+        r, n = self.run_ai("delete the unicorn task", DENTIST, intent="delete", target="unicorn")
+        self.assertEqual((r["action"], r.get("missing"), n), ("delete", "unicorn", 1))
+        r, n = self.run_ai("undo dentist", DENTIST, intent="undo", target="dentist")   # open task: undo only looks at done ones
+        self.assertEqual((r["action"], r.get("missing")), ("uncomplete", "dentist"))
+
+    def test_change_keeps_what_was_not_mentioned(self):
+        r, n = self.run_ai("push the dentist to monday", DENTIST, intent="change", target="dentist", change="monday",
+                           when="weekday", weekday="Monday")
+        self.assertEqual((r["action"], r["num"], r["changes"], n), ("update", 4, {"due": "2026-11-02T16:30"}, 1))   # time stays 16:30
+
+    def test_change_needs_a_change_word(self):
+        r, n = self.run_ai("dentist monday", DENTIST, intent="change", target="dentist", change="monday", when="weekday", weekday="Monday")
+        self.assertEqual(r["action"], "add")
+
+    def test_chat_and_question_are_checked(self):
+        r, n = self.run_ai("you did well", intent="chat", reply="Thanks! What can I do for you?")
+        self.assertEqual((r["action"], r["reply"], n), ("smalltalk", "Thanks! What can I do for you?", 1))
+        r, n = self.run_ai("คุณช่วยได้ดีมาก", intent="chat", reply="Thanks!")
+        self.assertEqual(r["reply"], "")   # a Thai sentence with an English reply: dropped
+        r, n = self.run_ai("buy milk", intent="chat", reply="Hello!")
+        self.assertEqual(r["action"], "add")   # a plain task can't be turned into small talk
+        r, n = self.run_ai("buy milk", intent="question")
+        self.assertEqual(r["action"], "add")
+        r, n = self.run_ai("could there be something I should know on friday", TASKS, intent="question")
+        self.assertEqual((r["action"], r["nums"]), ("answer", [1]))   # the filter is Python's own reading of the words
+
+    def test_command_words_without_a_found_task_ask_the_ai(self):
+        # rules: "dentist task" is not a title; the AI's target "dentist" is
+        r, n = self.run_ai("delete the dentist task", DENTIST, intent="delete", target="dentist")
+        self.assertEqual((r["action"], r["num"], n), ("delete", 4, 1))
+        # the AI sees no command: Python's "not found" answer stays (no task named "delete the unicorn task")
+        r, n = self.run_ai("delete the unicorn task", DENTIST)
+        self.assertEqual((r["action"], r.get("missing")), ("delete", "unicorn task"))
+
+    def test_loose_find(self):
+        tasks = [{"num": 1, "text": "Ask Bink for Claude access"}, {"num": 2, "text": "Call mom"}, {"num": 3, "text": "Call dad"}]
+        self.assertEqual(server.find_task_loose("bink thing", tasks), (1, []))
+        self.assertEqual(server.find_task_loose("the call", tasks)[0], None)   # two tasks have "call": no guess
+        self.assertEqual(server.find_task_loose("unicorn", tasks), (None, []))
+
+    def test_afternoon_is_not_noon(self):
+        self.assertEqual(ask("call grandma on friday afternoon")["due"], "2026-10-30T14:00")
+
+    def test_old_road_is_still_there(self):
+        with mock.patch.object(server, "ONE_CALL", False):
+            self.assertEqual(ask("buy milk tomorrow")["action"], "add")
+            self.assertEqual(ask("done #2", TASKS, ai=no_ai)["action"], "complete")
+
+
+class NextWeekdayOnThatWeekday(unittest.TestCase):
+    """Owner bug 30 Oct (a Friday): "what to do next friday" answered for today. "next X" is never today."""
+    FRIDAY = datetime(2026, 10, 30, 10, 0)
+
+    def date(self, text):
+        return server.question_filter(text, self.FRIDAY, [])["date"]
+
+    def test_next_friday_is_seven_days_on(self):
+        for text in ["what to do next friday", "what's due next friday?", "งานวันศุกร์หน้ามีอะไรบ้าง", "ศุกร์หน้ามีอะไร"]:
+            self.assertEqual(self.date(text), "2026-11-06", text)
+
+    def test_plain_friday_on_a_friday_is_today(self):
+        self.assertEqual(self.date("what to do friday"), "2026-10-30")
+        self.assertEqual(self.date("งานวันศุกร์มีอะไรบ้าง"), "2026-10-30")
+
+    def test_other_days_and_sunday(self):
+        self.assertEqual(self.date("what do i have on next monday"), "2026-11-02")
+        self.assertEqual(self.date("วันอาทิตย์หน้ามีอะไร"), "2026-11-08")
+
+    def test_next_week_is_not_a_weekday(self):
+        f = server.question_filter("what is due next week", self.FRIDAY, [])
+        self.assertEqual((f["when"], f["date"]), ("nextweek", ""))
+        self.assertEqual(server.question_filter("อาทิตย์หน้ามีอะไรบ้าง", self.FRIDAY, [])["when"], "nextweek")
+
+    def test_adding_next_friday_on_a_friday(self):
+        with mock.patch.object(server, "parse_with_ollama", fake_ai), default_memory():
+            for text in ["call the bank next friday", "ส่งรายงานวันศุกร์หน้า"]:
+                r = server.run_command(text, "2026-10-30T10:00", [], [])
+                self.assertEqual(r["due"], "2026-11-06T09:00", text)
