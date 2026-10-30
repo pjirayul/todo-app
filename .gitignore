@@ -8,3 +8,4 @@ data/
 max-memory.json
 backups-test/
 decisions.json
+decisions-archive.json

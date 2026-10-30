@@ -181,6 +181,8 @@
     .dec-hl { padding: 0 6px 4px; font-size: .84rem; color: var(--muted); }
     .dec-hl div { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); }
     .dec-hl .ok { color: var(--dec-ok); white-space: nowrap; }
+    .dec-arch { display: block; width: 100%; min-height: 44px; margin-top: 4px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: inherit; font-weight: 600; }
+    .dec-arch:disabled { opacity: .6; cursor: wait; }
     .dec-msg { margin: 0; font-size: .84rem; color: var(--red); }
     @media (prefers-reduced-motion: reduce) { .dec .chev { transition: none; } }
     button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -287,7 +289,7 @@
       "not started": "ยังไม่เริ่ม", "reset — ask Toto to refresh": "รีเซ็ตแล้ว บอก Toto ให้รีเฟรช", "unknown": "ไม่ทราบ",
       "used": "ใช้ไปแล้ว", "left": "เหลือ", "resets in": "รีเซ็ตใน",
       "Decisions": "การตัดสินใจ", "Waiting for your Go / No-go": "รอคุณกด ไป / ไม่ไป", "Nothing waiting for you": "ไม่มีอะไรรอคุณ",
-      "new": "ใหม่", "Cost:": "ค่าใช้จ่าย:", "Toto's pick": "ตัวเลือกของโทโท", "History": "ประวัติ",
+      "new": "ใหม่", "Cost:": "ค่าใช้จ่าย:", "Toto's pick": "ตัวเลือกของโทโท", "History": "ประวัติ", "Archive answered": "เก็บที่ตอบแล้ว", "Archived": "เก็บแล้ว", "Nothing to archive": "ไม่มีอะไรให้เก็บ", "Couldn't archive:": "เก็บไม่สำเร็จ:",
       "Add a note (optional)": "เพิ่มโน้ต (ไม่บังคับ)", "Go": "ไป", "No-go": "ไม่ไป",
       "Couldn't save the answer:": "บันทึกคำตอบไม่สำเร็จ:",
       "Ready": "พร้อม", "Offline": "ออฟไลน์",
@@ -472,7 +474,7 @@
     }
 
     // ---------- Decisions (Go / No-go) ----------
-    let decOpen = false, decHistOpen = false, decShown = "", decError = "";
+    let decOpen = false, decHistOpen = false, decShown = "", decError = "", decInfo = "";
     const decNotes = {};  // text typed in a note box, kept when the card is redrawn
     async function loadDecisions() {
       const box = document.getElementById("dec");
@@ -504,19 +506,33 @@
         </article>`).join("");
       const hist = done.length ? `
         <button type="button" class="dec-hist" aria-expanded="${decHistOpen}" id="dec-hb"><svg class="i"><use href="#i-hist"/></svg>${L("History")} (${done.length})<svg class="i chev" style="margin-left:auto"><use href="#i-chev"/></svg></button>
-        ${decHistOpen ? `<div class="dec-hl">${done.map((d) => `<div><span>${esc(d.title)}</span><span class="${d.answer === "Go" ? "ok" : ""}">${esc(L(d.answer))}</span></div>`).join("")}</div>` : ""}` : "";
+        ${decHistOpen ? `<div class="dec-hl">${done.map((d) => `<div><span>${esc(d.title)}</span><span class="${d.answer === "Go" ? "ok" : ""}">${esc(L(d.answer))}</span></div>`).join("")}
+          <button type="button" class="dec-arch" id="dec-arch">${L("Archive answered")}</button></div>` : ""}` : "";
       box.innerHTML = `
         <button type="button" class="dec-h" aria-expanded="${decOpen}" id="dec-hd">
           <span class="dec-ic"><svg class="i"><use href="#i-decide"/></svg></span>
           <span class="dec-t">${L("Decisions")}<small>${L(open.length ? "Waiting for your Go / No-go" : "Nothing waiting for you")}</small></span>
           ${badge}<svg class="i chev"><use href="#i-chev"/></svg>
         </button>
-        ${decOpen ? `<div class="dec-body">${cards}${decError ? `<p class="dec-msg" role="alert">${esc(decError)}</p>` : ""}${hist}</div>` : ""}`;
+        ${decOpen ? `<div class="dec-body">${cards}${decError ? `<p class="dec-msg" role="alert">${esc(decError)}</p>` : ""}${hist}${decInfo ? `<p class="dec-hl" role="status">${esc(decInfo)}</p>` : ""}</div>` : ""}`;
       box.hidden = false;
     }
     document.getElementById("dec").addEventListener("click", async (e) => {
       if (e.target.closest("#dec-hd")) { decOpen = !decOpen; decShown = ""; return loadDecisions(); }
       if (e.target.closest("#dec-hb")) { decHistOpen = !decHistOpen; decShown = ""; return loadDecisions(); }
+      if (e.target.closest("#dec-arch")) {
+        const ab = e.target.closest("#dec-arch");
+        ab.disabled = true;
+        try {
+          const res = await fetch("api/decisions/archive", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal: AbortSignal.timeout(8000) });
+          const out = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(out.error || res.status);
+          decError = ""; decInfo = out.moved ? `${L("Archived")}: ${out.moved}` : L("Nothing to archive");
+        } catch (err) {
+          decInfo = ""; decError = `${L("Couldn't archive:")} ${err.message}`;
+        } finally { ab.disabled = false; }  // the button always recovers
+        decShown = ""; return loadDecisions();
+      }
       const btn = e.target.closest("button[data-answer]");
       if (!btn) return;
       const item = btn.closest(".dec-item");
