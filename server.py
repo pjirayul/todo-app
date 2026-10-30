@@ -10,6 +10,7 @@ Test copy:  python server.py --test   then open http://127.0.0.1:8001  (own data
 """
 
 import difflib
+import ipaddress
 import json
 import os
 import re
@@ -963,6 +964,10 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(data)
 
     def host_ok(self) -> bool:
+        # Who is asking: only this PC or a Tailscale device (see TAILSCALE_NETS)
+        if not client_ip_ok(self.client_address[0]):
+            self.send_error(403, "Not allowed")
+            return False
         # DNS-rebinding protection: a strange website can point its own name at 127.0.0.1, but the
         # browser still sends that name in the Host header, so we only answer our own names.
         if self.headers.get("Host") in ALLOWED_HOSTS:
@@ -1508,9 +1513,31 @@ def max_status() -> dict:
 
 # ---------- Command inbox (Team Status page) ----------
 INBOX_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inbox.json")
-# The names this server answers to. To use the app from your phone over Tailscale later,
-# add the PC's Tailscale name here (e.g. "my-pc.tailnet-name.ts.net:8000") and listen on that address.
-ALLOWED_HOSTS = ("127.0.0.1:8000", "localhost:8000")
+# The names this server answers to (without the port). To add another device or name, add one line here.
+HOST_NAMES = ("127.0.0.1", "localhost",
+              "100.66.1.68", "desktop-ldeu8ir", "desktop-ldeu8ir.tailea71da.ts.net")  # this PC on Tailscale
+# Only these computers may connect: this PC and the owner's Tailscale network (private, logged-in
+# devices only). The server listens on 0.0.0.0, so this check is what keeps home Wi-Fi/LAN and
+# the internet out even if the firewall lets them through.
+TAILSCALE_NETS = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
+
+
+def client_ip_ok(ip: str) -> bool:
+    """True for this PC (loopback) or a Tailscale address; anything else (LAN, internet) is refused."""
+    try:
+        addr = ipaddress.ip_address(ip.split("%")[0])  # drop an IPv6 zone like "%12"
+    except ValueError:
+        return False
+    if addr.is_loopback:
+        return True
+    return any(addr in net for net in TAILSCALE_NETS if addr.version == net.version)
+
+
+def make_allowed_hosts(port: int) -> tuple:
+    return tuple(f"{name}:{port}" for name in HOST_NAMES)
+
+
+ALLOWED_HOSTS = make_allowed_hosts(8000)
 ALLOWED_ORIGINS = tuple("http://" + host for host in ALLOWED_HOSTS)
 # The only files the server hands out; everything else in the folder stays private
 PUBLIC_FILES = {"/", "/index.html", "/style.css", "/script.js", "/status.html",
@@ -1561,7 +1588,7 @@ def use_test_mode():
     global MEMORY_FILE, STATUS_FILE, INBOX_FILE, IDEAS_FILE
     here = os.path.dirname(os.path.abspath(__file__))
     PORT = 8001
-    ALLOWED_HOSTS = ("127.0.0.1:8001", "localhost:8001")
+    ALLOWED_HOSTS = make_allowed_hosts(8001)
     ALLOWED_ORIGINS = tuple("http://" + host for host in ALLOWED_HOSTS)
     DATA_DIR = os.path.join(here, "data")                      # same gitignored folder...
     DB_FILE = os.path.join(DATA_DIR, "test-tasks.db")           # ...but its own database
@@ -1582,6 +1609,6 @@ if __name__ == "__main__":
     if TEST_MODE:
         use_test_mode()
     daily_db_copy()  # also at start-up, so a day without edits still gets its backups
-    print(f"To-do app {'TEST MODE ' if TEST_MODE else ''}running at http://127.0.0.1:{PORT}  (AI: {AI_PROVIDER})")
+    print(f"To-do app {'TEST MODE ' if TEST_MODE else ''}running at http://127.0.0.1:{PORT} (also Tailscale, port {PORT})  (AI: {AI_PROVIDER})")
     here = os.path.dirname(os.path.abspath(__file__))
-    ThreadingHTTPServer(("127.0.0.1", PORT), partial(Handler, directory=here)).serve_forever()
+    ThreadingHTTPServer(("0.0.0.0", PORT), partial(Handler, directory=here)).serve_forever()

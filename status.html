@@ -331,7 +331,9 @@
     };
     const LABELS = { working: L("Working"), done: L("Done"), idle: L("Idle"), new: L("Waiting") };
     // On this PC with server.py? GitHub Pages has no server, so nothing is fetched there.
-    const LOCAL = ["127.0.0.1", "localhost"].includes(location.hostname);
+    // (the PC's Tailscale names/IP, used from the phone, count as the server too)
+    const LOCAL = ["127.0.0.1", "localhost", "desktop-ldeu8ir"].includes(location.hostname) ||
+      location.hostname.endsWith(".ts.net") || location.hostname.startsWith("100.");
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
     function timeAgo(iso) {

@@ -506,3 +506,18 @@ class AskMax(unittest.TestCase):
         f = dict(server.EMPTY_FILTER, when="today")
         self.assertEqual(server.count_tasks(QTASKS, f, NOW), 2)
         self.assertEqual([t["num"] for t in server.TOOLS["list_tasks"](QTASKS, dict(f, priority="high"), NOW)], [1])
+
+
+class TailscaleAccessTests(unittest.TestCase):
+    def test_client_ip(self):
+        for ip in ("127.0.0.1", "::1", "100.66.1.68", "100.103.242.114", "fd7a:115c:a1e0::1"):
+            self.assertTrue(server.client_ip_ok(ip), ip)
+        for ip in ("192.168.1.10", "8.8.8.8", "100.128.0.1", "fd00::1", "nonsense"):
+            self.assertFalse(server.client_ip_ok(ip), ip)
+
+    def test_host_allowlist(self):
+        hosts = server.make_allowed_hosts(8000)
+        for h in ("127.0.0.1:8000", "100.66.1.68:8000", "desktop-ldeu8ir:8000", "desktop-ldeu8ir.tailea71da.ts.net:8000"):
+            self.assertIn(h, hosts)
+        self.assertNotIn("evil.com:8000", hosts)
+        self.assertIn("100.66.1.68:8001", server.make_allowed_hosts(8001))
