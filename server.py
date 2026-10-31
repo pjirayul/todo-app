@@ -795,9 +795,12 @@ def add_task(s: str, now: str, categories: list) -> dict:
     return finish_add(parse_task(s, now, categories), s)
 
 
+REMINDER = re.compile(r"\bremind(?:er)?\b|เตือน", re.I)
+
+
 def finish_add(task: dict, s: str) -> dict:
     time = task.pop("time")  # only updates need it...
-    if not task["due"] and ask_words(s):
+    if not task["due"] and (ask_words(s) or REMINDER.search(s)):   # a reminder with no day is useless: ask "When?" too
         # ...and "When?": "meeting with Tom at 3pm" has a time but no day. The page asks for the day
         # and uses this time (or the owner's morning time).
         task["askWhen"] = True
@@ -1232,6 +1235,16 @@ def understand(s: str, now: str, categories: list, tasks: list, greeted: bool = 
         found = TOOLS["list_tasks"](tasks, f, datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"))
         return {"action": "answer", "filter": f, "nums": [t["num"] for t in found], "tokens": tokens}
 
+    if intent == "question" and not asked:
+        # The AI hears a question that Python's gate did not: a card, but only when a real task is named (never for a plain add)
+        target = " ".join(str(r.get("target") or "").split())
+        num, _ = find_task_loose(target, tasks) if target else (None, [])
+        if num is not None:
+            f = question_filter(fix_date_typos(low), datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"), categories) | {"text": target.lower()}
+            found = TOOLS["list_tasks"](tasks, f, datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"))
+            answer = {"action": "answer", "filter": f, "nums": [t["num"] for t in found]}
+            return clarify("question", [num], lambda n: answer, as_new()) | {"tokens": tokens}
+
     if intent in INTENT_WORDS and INTENT_WORDS[intent].search(low):
         action, target = INTENT_ACTION[intent], " ".join(str(r.get("target") or "").split())
         target = target or low   # the AI named nothing: look for a task word anywhere in the sentence
@@ -1290,7 +1303,7 @@ def clarify(case: str, nums: list, make_do, add_do: dict = None) -> dict:
         options.append({"label": "opt_add", "do": add_do})
     # The page writes the sentences from its own text table (EN/TH); "more" is for "Tell Max more…" (0q-2)
     return {"action": "clarify", "case": case, "id": uuid.uuid4().hex[:8], "q": "clarifyQ_" + case,
-            "nums": nums, "options": options, "more": True}
+            "nums": nums, "options": options, "more": True} | auto_flag(case)
 
 
 def pick_card(action: str, tasks: list) -> dict:
@@ -1340,6 +1353,20 @@ def join_pending(text: str, earlier, age, tasks: list):
     if len(low.split()) > 6 and not (set(re.findall(r"\w+", low)) & known):
         return text, False
     return (earlier + ", " + text)[:500], True
+
+
+def vague_date_card(s: str, result: dict, now: str) -> dict:
+    """"dentist next week": an appointment with no weekday. Python builds the dates (Mon / Fri of next week) + No date."""
+    low = " ".join(s.lower().split())
+    if result.get("action") != "add" or not WEEK_AFTER.search(low) or weekday_in(low) or not ask_words(low):
+        return result   # "write blog post next week" is fine as it is: only appointments need a real day
+    monday = datetime.strptime(now[:10], "%Y-%m-%d") + timedelta(days=7 - datetime.strptime(now[:10], "%Y-%m-%d").weekday())
+    hhmm = (result.get("due") or "")[11:16] or load_memory()["times"]["morning"]
+    adds = [{k: v for k, v in result.items() if k not in ("due", "askWhen", "time")} | {"due": f"{(monday + timedelta(days=d)).date()}T{hhmm}"}
+            for d in (0, 4)]   # Monday and Friday
+    adds.append({k: v for k, v in result.items() if k not in ("due", "askWhen", "time")} | {"due": ""})
+    return {"action": "clarify", "case": "vague", "id": uuid.uuid4().hex[:8], "q": "clarifyQ_vague", "nums": [], "more": False,
+            "options": [{"label": "opt_add", "do": a} for a in adds], "tokens": result.get("tokens", 0)}
 
 
 JOINER = re.compile(r"\s(?:and|also|then)\s|,\s*then\s|และ|แล้วก็", re.I)
@@ -1399,7 +1426,7 @@ def several_card(s: str, result: dict, now: str, categories: list) -> dict:
     one = {k: v for k, v in result.items() if k != "tokens"}
     return {"action": "clarify", "case": "several", "id": uuid.uuid4().hex[:8], "q": "clarifyQ_several", "nums": [],
             "options": [{"label": "opt_several", "do": {"action": "add_many", "tasks": adds}}, {"label": "opt_one", "do": one}],
-            "more": True, "tokens": result.get("tokens", 0) + r.get("tokens", 0)}
+            "more": True, "tokens": result.get("tokens", 0) + r.get("tokens", 0)} | auto_flag("several")
 
 
 def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: int = None,
@@ -1411,7 +1438,8 @@ def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: 
     if joined and result.get("action") == "clarify":
         result["more"] = False   # the owner already told Max more: a second card, but no "Tell Max more…" loop
     elif not joined and chosen is None:
-        result = several_card(" ".join(strip_greeting(" ".join(sentence.split()))[0].split()), result, now, categories)
+        plain = " ".join(strip_greeting(" ".join(sentence.split()))[0].split())
+        result = vague_date_card(plain, several_card(plain, result, now, categories), now)
     result.setdefault("path", "ai" if result.get("tokens") else "rules")  # AI calls report their tokens
     return result
 
@@ -2257,17 +2285,42 @@ CLARIFY_LOG_FILE = os.path.join(DATA_DIR, "clarify-log.json")
 CLARIFY_LOG_MAX = 500
 
 
-def add_clarify_answer(body: dict) -> bool:
-    """Save {case, picked, at} from the page. picked = an option label (opt_several...), "more" or "none" (ignored/cancelled)."""
-    case, picked = str(body.get("case", "")), str(body.get("picked", ""))
-    if not re.fullmatch(r"[a-z]{2,12}", case) or not re.fullmatch(r"[a-z_]{2,20}", picked):
-        return False
+def load_clarify_log() -> list:
     try:
         with open(CLARIFY_LOG_FILE, encoding="utf-8-sig") as f:
             log = json.load(f)
     except (OSError, ValueError):
-        log = []
-    log = (log if isinstance(log, list) else []) + [{"case": case, "picked": picked, "at": datetime.now().strftime("%Y-%m-%d %H:%M")}]
+        return []
+    return log if isinstance(log, list) else []
+
+
+def pick_kind(picked: str) -> str:
+    """The page sends the button label (opt_complete, opt_add...): act = any button that did what Max offered first."""
+    if picked in ("act", "add", "more", "none", "undo"):
+        return picked
+    return "add" if picked in ("opt_add", "opt_one") else "act"
+
+
+# Learning: when the owner nearly always taps the first button, Max just does it (and shows Undo). Exact things never switch.
+SWITCHABLE = {"done", "change", "several", "question"}   # never delete/cancel, similar, pick or a vague date
+SWITCH_LAST, SWITCH_MIN, SWITCH_SHARE = 30, 20, 0.9
+
+
+def auto_flag(case: str) -> dict:
+    """{"auto": True} when the last 30 answers of this case were 90%+ "act" (at least 20 answers). "undo" counts against act."""
+    if case not in SWITCHABLE:
+        return {}
+    last = [pick_kind(str(e.get("picked", ""))) for e in load_clarify_log() if e.get("case") == case][-SWITCH_LAST:]
+    return {"auto": True} if len(last) >= SWITCH_MIN and last.count("act") / len(last) >= SWITCH_SHARE else {}
+
+
+def add_clarify_answer(body: dict) -> bool:
+    """Save {id, case, picked, at} from the page. picked = act | add | more | undo | none (no sentences, they are private)."""
+    case, picked, card_id = str(body.get("case", "")), pick_kind(str(body.get("picked", ""))), str(body.get("id", ""))
+    ok_case = re.fullmatch(r"[a-z]{2,12}", case) and re.fullmatch(r"[a-z_]{2,20}", str(body.get("picked", "")))
+    if not ok_case or not re.fullmatch(r"[0-9a-f]{0,8}", card_id):
+        return False
+    log = load_clarify_log() + [{"id": card_id, "case": case, "picked": picked, "at": datetime.now().strftime("%Y-%m-%d %H:%M")}]
     os.makedirs(os.path.dirname(CLARIFY_LOG_FILE), exist_ok=True)
     with open(CLARIFY_LOG_FILE, "w", encoding="utf-8") as f:
         json.dump(log[-CLARIFY_LOG_MAX:], f, ensure_ascii=False, indent=1)

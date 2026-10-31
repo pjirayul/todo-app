@@ -42,7 +42,8 @@ const TEXT = {
     notifyNone: "This browser can't show reminders.", limitSaved: (n) => `Daily AI limit: ${n} tokens`,
     sureClear: (n) => `Delete ${n} done task${n === 1 ? "" : "s"}?`, yesClear: "Yes, delete",
     clarifyQ_done: "Mark this done?", clarifyQ_delete: "Cancel (delete) this task?", clarifyQ_change: "Change this task?",
-    clarifyQ_similar: "Which one?", clarifyQ_pick: "Which task?", clarifyQ_several: "Add as separate tasks?",
+    clarifyQ_similar: "Which one?", clarifyQ_pick: "Which task?", clarifyQ_several: "Add as separate tasks?", clarifyQ_question: "Is this a question?", clarifyQ_vague: "Which day next week?",
+    opt_answer: "Show the answer", undoChip: "Undo", undone: "Undone.",
     opt_several: (names) => `Add ${names.length} tasks: ${names.map((x) => `"${x}"`).join(", ")}`, opt_one: "One task", tellMore: "Tell Max more…",
     answeringMax: "Answering Max:", addedMany: (nums) => `Max added ${nums.map((n) => "#" + n).join(", ")}`,
     opt_complete: "Done", opt_delete: "Cancel", opt_update: "Change", opt_edit: "Edit", opt_uncomplete: "Reopen", opt_add: "Add as new task",
@@ -120,7 +121,8 @@ const TEXT = {
     notifyNone: "เบราว์เซอร์นี้แสดงการแจ้งเตือนไม่ได้", limitSaved: (n) => `ขีดจำกัด AI ต่อวัน: ${n} โทเคน`,
     sureClear: (n) => `ลบงานที่เสร็จแล้ว ${n} งาน ใช่ไหม?`, yesClear: "ใช่ ลบเลย",
     clarifyQ_done: "ทำเครื่องหมายว่าเสร็จ?", clarifyQ_delete: "ยกเลิก (ลบ) งานนี้?", clarifyQ_change: "แก้งานนี้?",
-    clarifyQ_similar: "หมายถึงงานไหน?", clarifyQ_pick: "งานไหน?", clarifyQ_several: "เพิ่มเป็นหลายงานไหม?",
+    clarifyQ_similar: "หมายถึงงานไหน?", clarifyQ_pick: "งานไหน?", clarifyQ_several: "เพิ่มเป็นหลายงานไหม?", clarifyQ_question: "นี่เป็นคำถามใช่ไหม?", clarifyQ_vague: "สัปดาห์หน้าวันไหน?",
+    opt_answer: "ดูคำตอบ", undoChip: "เลิกทำ", undone: "เลิกทำแล้ว",
     opt_several: (names) => `เพิ่ม ${names.length} งาน: ${names.map((x) => `"${x}"`).join(", ")}`, opt_one: "งานเดียว", tellMore: "บอก Max เพิ่ม…",
     answeringMax: "กำลังตอบ Max:", addedMany: (nums) => `Max เพิ่ม ${nums.map((n) => "#" + n).join(", ")} แล้ว`,
     opt_complete: "เสร็จแล้ว", opt_delete: "ยกเลิก", opt_update: "แก้", opt_edit: "แก้ไข", opt_uncomplete: "เปิดใหม่", opt_add: "เพิ่มเป็นงานใหม่",
@@ -1030,20 +1032,28 @@ async function askWhichTask(text, cmd) {
 // Nothing is saved until a button is clicked. Cancel / Escape / ignoring = no change, the text stays in the box.
 const clarifyLabel = (o) => {
   if (o.do.action === "add_many") return t(o.label)(o.do.tasks.map((x) => x.text)); // "Add 2 tasks: …"
-  if (!o.num) return t(o.label);                       // "Add as new task" / "One task"
+  if (!o.num) return t(o.label) + (o.do.due ? " → " + shortDate(o.do.due) : ""); // "Add as new task" / "One task" / a vague-date choice
   const x = todos.find((y) => y.num === o.num);
   if (!x) return `${t(o.label)} #${o.num}`;
   const when = o.do.changes?.due ? " → " + shortDate(o.do.changes.due) : "";
   return `${t(o.label)} "${x.text.length > 30 ? x.text.slice(0, 29) + "…" : x.text}" #${x.num}${when}`;
 };
 async function askClarify(card, text = "") {
+  if (card.auto) return runAuto(card); // the owner nearly always says yes to this case: do it, offer Undo
   const choices = card.options.map((o, i) => ({ label: clarifyLabel(o), value: i, primary: i === 0 }));
   if (card.more && text) choices.push({ label: t("tellMore"), value: "more" }); // free text: Max keeps the sentence and waits
   const answer = await askMax(t("clarifyQ_" + card.case), [...choices, { label: t("cancel"), value: null }]);
-  logClarify(card.case, !answer ? "none" : answer.value === "more" ? "more" : card.options[answer.value].label);
+  logClarify(card, !answer ? "none" : answer.value === "more" ? "more" : card.options[answer.value].label);
   if (!answer) return; // ignored or cancelled: nothing changes
   if (answer.value === "more") return setPending(text);
-  const act = card.options[answer.value].do;
+  doClarified(card.options[answer.value].do);
+}
+
+function doClarified(act) {
+  if (act.action === "answer") { // "Show the answer": the question card
+    $("todo-input").value = "";
+    return showAnswer(act);
+  }
   if (act.action === "add_many") { // "Add 2 tasks": one message for all of them
     const nums = [];
     for (const task of act.tasks) { addTask(task, "quiet"); nums.push(todos[todos.length - 1].num); }
@@ -1056,6 +1066,38 @@ async function askClarify(card, text = "") {
     return;
   }
   finishCommand(act);
+}
+
+// Auto-act (Python decided from the owner's last answers). ONE snapshot is kept, so [Undo] puts things back for ~10 s.
+let undoTimer = 0;
+function runAuto(card) {
+  const act = card.options[0].do;
+  const before = new Set(todos.map((x) => x.id));
+  const index = todos.findIndex((x) => x.num === card.nums[0]);
+  const old = index >= 0 ? JSON.parse(JSON.stringify(todos[index])) : null; // the task as it was
+  doClarified(act);
+  logClarify(card, "act");
+  if (act.action === "answer") return; // nothing changed, nothing to undo
+  const added = todos.filter((x) => !before.has(x.id)).map((x) => x.id); // new tasks (an add / several)
+  const chip = document.createElement("button");
+  chip.type = "button";
+  chip.className = "chip";
+  chip.textContent = t("undoChip");
+  chip.addEventListener("click", () => {
+    clearTimeout(undoTimer);
+    todos = todos.filter((x) => !added.includes(x.id));
+    if (old) {
+      const at = todos.findIndex((x) => x.num === old.num);
+      if (at >= 0) todos[at] = old; else todos.splice(Math.min(index, todos.length), 0, old); // a deleted task comes back
+    }
+    update();
+    showMessage(t("undone"));
+    logClarify(card, "undo"); // counts against "act": too many undos and Max asks again
+  });
+  const box = $("cmd-msg");
+  box.append(" ", chip);
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => chip.remove(), 10000);
 }
 
 // A meeting/flight/trip… with no day: "When?" Today · Tomorrow · Pick date · No date (= add it as it is)
@@ -1113,10 +1155,10 @@ function setPending(text) {
   $("todo-input").focus();
 }
 // Which button was picked (private log on this PC for Max's learning; no sentences). Never blocks anything.
-function logClarify(caseName, picked) {
+function logClarify(card, picked) {
   if (!LOCAL) return;
   fetch("api/max/clarify", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ case: caseName, picked }), signal: AbortSignal.timeout(5000) }).catch(() => {});
+    body: JSON.stringify({ id: card.id, case: card.case, picked }), signal: AbortSignal.timeout(5000) }).catch(() => {});
 }
 
 $("todo-form").addEventListener("submit", async (e) => {

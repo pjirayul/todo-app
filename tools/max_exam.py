@@ -35,7 +35,7 @@ def norm(text):
 
 def ask_ok(case, r):
     """ask = false: no card. ask = "done"/"delete"/...: a clarify card of that case that offers every expected task.
-    "pick" (no task named) is the card or the old pickTask. Cases with step 3 are for job 0q-3 (not built yet)."""
+    "pick" (no task named) is the card or the old pickTask."""
     want = case["ask"]
     asked = r.get("action") == "clarify" or bool(r.get("pickTask"))
     if want is False:
@@ -107,7 +107,8 @@ def main():
     scores = {k: [0, 0] for k in FIELDS}   # field -> [right, total]
     seconds, ai_counts, wrong, results = [], [], [], []
     with mock.patch.object(server, "parse_with_ollama", counting_ai), \
-         mock.patch.object(server, "load_memory", return_value=server.clean_memory({})):
+         mock.patch.object(server, "load_memory", return_value=server.clean_memory({})), \
+         mock.patch.object(server, "load_clarify_log", return_value=[]):   # no auto-switch in the exam
         for case in exam["cases"]:
             calls["n"] = 0
             start = time.time()

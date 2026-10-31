@@ -112,7 +112,7 @@ class ClarifyLog(unittest.TestCase):
                 self.assertFalse(server.add_clarify_answer({"case": "done", "picked": "<script>"}))
                 with open(path, encoding="utf-8") as f:
                     log = server.json.load(f)
-            self.assertEqual([(e["case"], e["picked"]) for e in log], [("several", "opt_one")])
+            self.assertEqual([(e["case"], e["picked"]) for e in log], [("several", "add")])
             self.assertNotIn("secret", str(log))
 
 
