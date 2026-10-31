@@ -986,4 +986,4 @@ body.fest-halloween .fest-flybat { display: block; position: fixed; top: 18vh; l
 @media (max-width: 480px) {
   .ask-pick { padding: 10px 8px; gap: 10px; }
 }
-.cmd-msg.ask .undo-chip { justify-self: start; min-width: 96px; min-height: 44px; }   /* Undo keeps its own width; the card is a grid, which would stretch it full width */
+.cmd-msg .undo-chip { justify-self: start; min-width: 96px; min-height: 44px; }   /* Undo keeps its own width; the card is a grid, which would stretch it full width */

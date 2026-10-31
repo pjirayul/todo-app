@@ -1403,9 +1403,10 @@ async function planOneLate(todo, i, total) {
       if (REPEATS.includes(todo.repeat)) { // a repeating task skips this round and keeps its series
         todo.due = nextDue(todo.due, todo.repeat);
         todo.notified = false;
-      } else {
-        todos = todos.filter((x) => x !== todo); // its files stay until the undo is gone (clearUndo)
+        update();
+        return "moved"; // it was moved, not deleted, so count it as moved
       }
+      todos = todos.filter((x) => x !== todo); // its files stay until the undo is gone (clearUndo)
       update();
       return "dropped";
     }
