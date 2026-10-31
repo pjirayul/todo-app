@@ -124,6 +124,8 @@ def resolve_due(task: dict, now: datetime, times: dict = None) -> str:
             date = today + timedelta(days=max(5 - today.weekday(), 0))
         elif task.get("special") == "month_end":
             date = first_next - timedelta(days=1)
+        elif task.get("special") == "month_end_next":  # "end of next month": the day before the 1st after next
+            date = add_months(first_next, 1) - timedelta(days=1)
         elif task.get("special") == "month_start":  # "start of next month"
             date = first_next
     elif when == "date" and 1 <= task.get("day", 0) <= 31:
@@ -218,6 +220,42 @@ EXAMPLES = """Examples:
 "buy a birthday gift for dad in 3 days" -> {"text":"Buy a birthday gift for dad","priority":"med","category":"Shopping","when":"in_days","in_days":3,"weekday":"","next_week":false,"day":0,"month":0,"next_month":false,"time":""}"""
 
 
+# ---------- Month names, English + Thai (calendar data, one table for every reader) ----------
+# Each month: full English name, 3-letter English, full Thai name, Thai short form.
+_MONTH_ROWS = (("january", "jan", "มกราคม", "ม.ค."), ("february", "feb", "กุมภาพันธ์", "ก.พ."),
+               ("march", "mar", "มีนาคม", "มี.ค."), ("april", "apr", "เมษายน", "เม.ย."),
+               ("may", "", "พฤษภาคม", "พ.ค."), ("june", "jun", "มิถุนายน", "มิ.ย."),
+               ("july", "jul", "กรกฎาคม", "ก.ค."), ("august", "aug", "สิงหาคม", "ส.ค."),
+               ("september", "sep", "กันยายน", "ก.ย."), ("october", "oct", "ตุลาคม", "ต.ค."),
+               ("november", "nov", "พฤศจิกายน", "พ.ย."), ("december", "dec", "ธันวาคม", "ธ.ค."))
+MONTHS = {name: number for number, row in enumerate(_MONTH_ROWS, 1) for name in row if name}
+MONTHS["sept"] = 9
+# "may" and "march" are also normal words ("I may call Tom"), so they only count next to a day number
+_AMBIGUOUS_MONTHS = ("may", "march")
+
+
+def _month_pattern(names) -> str:
+    return "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
+
+
+EN_MONTH = _month_pattern(n for n in MONTHS if n.isascii())
+TH_MONTH = _month_pattern(n for n in MONTHS if not n.isascii())
+# "5 dec", "20th of November", "december 5", "5 ธันวาคม", "12 พ.ย." (not "nov 5pm")
+MONTH_DAY = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(" + EN_MONTH + r")\b|"
+                       r"\b(" + EN_MONTH + r")\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b(?!:|\s*(?:am|pm)\b)|"
+                       r"(\d{1,2})\s*(?:เดือน\s*)?(" + TH_MONTH + r")", re.I)
+
+
+def month_day(lower: str):
+    """'pay insurance 5 december' / 'จ่ายค่าประกัน 5 ธันวาคม' -> (5, 12); (0, 0) if no day + month is there."""
+    m = MONTH_DAY.search(lower)
+    if not m:
+        return 0, 0
+    day = int(m.group(1) or m.group(4) or m.group(5))
+    month = MONTHS.get((m.group(2) or m.group(3) or m.group(6)).lower(), 0)
+    return (day, month) if 1 <= day <= 31 and month else (0, 0)
+
+
 # Date words people often mistype; close matches get corrected before the AI sees them
 DATE_WORDS = ["today", "tonight", "tomorrow", "next", "week", "month", "morning", "evening", "afternoon", "urgent"] + \
     [d.lower() for d in WEEKDAYS] + \
@@ -229,6 +267,10 @@ SHORTCUTS = {"tmr": "tomorrow", "tmrw": "tomorrow", "tml": "tomorrow", "2moro": 
 SHORT_DAYS = {"mon": "monday", "tue": "tuesday", "tues": "tuesday", "wed": "wednesday", "thu": "thursday",
               "thur": "thursday", "thurs": "thursday", "fri": "friday", "sat": "saturday", "sun": "sunday"}
 THAI_TYPOS = {"พรุ่งนี": "พรุ่งนี้", "พุ่งนี้": "พรุ่งนี้", "พรุ้งนี้": "พรุ่งนี้", "พรุงนี้": "พรุ่งนี้", "วันนี": "วันนี้", "มะรือ": "มะรืน"}
+
+
+# Real words that look like a date word ("weekly" is not "week"): never "fixed"
+NOT_TYPOS = {"weekly", "monthly", "daily", "nightly", "weekend", "weekends", "weekday", "weekdays", "mornings", "evenings"}
 
 
 def fix_date_typos(sentence: str) -> str:
@@ -245,7 +287,7 @@ def fix_date_typos(sentence: str) -> str:
             word = SHORTCUTS[low]
         elif low in SHORT_DAYS and (after == "" or after[0].isdigit() or after in ("morning", "evening", "afternoon", "night", "at")):
             word = SHORT_DAYS[low]
-        elif len(low) >= 4 and low.isalpha() and low not in DATE_WORDS:
+        elif len(low) >= 4 and low.isalpha() and low not in DATE_WORDS and low not in NOT_TYPOS:
             # Same first letter + very similar, so normal words like "rent" never turn into "urgent"
             match = difflib.get_close_matches(low, [w for w in DATE_WORDS if w[0] == low[0]], n=1, cutoff=0.8)
             if match:
@@ -296,9 +338,10 @@ CLOCK_TIME = re.compile(r"\d\s*(:\s*\d\d|\.\d\d|am\b|pm\b|น\.|โมง|ทุ
                         AT_HOUR.pattern + "|" + THAI_TIME_ANY, re.I)
 # A little linking word stuck to a date ("ในวันศุกร์", "ภายในพรุ่งนี้", "ตอนบ่ายสาม") goes away with it; the same
 # word anywhere else ("ของในตู้เย็น") stays. The lead word is tried first, so "ตอนบ่ายสาม" is cut whole.
-THAI_DATE_WORDS = (r"(?<!ทุก)(?:(?:ภายใน|ใน|ตอน|เมื่อ)\s*)?(?:มะรืนนี้|มะรืน|พรุ่งนี้|วันนี้|คืนนี้|ตอนเช้า|ตอนเย็น|ตอนบ่าย|ด่วน|ไม่รีบ|"
+THAI_DATE_WORDS = (r"(?<!ทุก)(?:(?:ภายใน|ใน|ตอน|เมื่อ|ก่อน)\s*)?(?:มะรืนนี้|มะรืน|พรุ่งนี้|วันนี้|คืนนี้|ตอนเช้า|ตอนเย็น|ตอนบ่าย|ด่วน|ไม่รีบ|"
                    r"(วัน)?(จันทร์|อังคาร|พุธ|พฤหัส(บดี)?|ศุกร์|เสาร์|อาทิตย์)(หน้า|นี้)?|วันที่\s*\d+|"
-                   r"(" + THAI_TIME_ANY + r")(\s*ครึ่ง)?|\d+\s*(โมง|ทุ่ม)|(สัปดาห์|เดือน)หน้า|อีก\s*\d+\s*(วัน|สัปดาห์|อาทิตย์)|สิ้นเดือน|ปลายเดือน|ต้นเดือนหน้า|สุดสัปดาห์(นี้)?)")
+                   r"(" + THAI_TIME_ANY + r")(\s*ครึ่ง)?|\d+\s*(โมง|ทุ่ม)|(สัปดาห์|เดือน)หน้า|อีก\s*\d+\s*(วัน|สัปดาห์|อาทิตย์)|(สิ้น|ปลาย)เดือน(หน้า)?|ต้นเดือนหน้า|สุดสัปดาห์(นี้)?|"
+                   r"(\d{1,2}\s*)?(เดือน\s*)?(" + TH_MONTH + r"))")
 THAI_LETTERS = re.compile(r"[฀-๿]")
 # "ทุกวันนี้" means "nowadays", not "today": the lookbehind above keeps it in titles, and date reading
 # looks at the sentence with this word blanked out so "วันนี้" inside it never makes a due date.
@@ -339,8 +382,10 @@ DAY_WORDS = ((("มะรืน", "day after tomorrow"), "day_after_tomorrow"),
 WEEKS_AHEAD = re.compile(r"\bin\s+(\d+|a|one|two|three)\s+weeks?\b|อีก\s*(\d+)\s*(?:สัปดาห์|อาทิตย์)")
 WEEKEND = re.compile(r"\bweekend\b|สุดสัปดาห์|เสาร์อาทิตย์")
 MONTH_END = re.compile(r"\bend of (?:the |this )?month\b|สิ้นเดือน|ปลายเดือน")
+# "end of next month" / "สิ้นเดือนหน้า": the last day of NEXT month (checked before MONTH_END, which also finds สิ้นเดือน)
+MONTH_END_NEXT = re.compile(r"\bend of next month\b|(?:สิ้น|ปลาย)เดือนหน้า")
 MONTH_START = re.compile(r"\b(?:start|beginning) of next month\b|ต้นเดือนหน้า")
-SPECIAL_DAYS = (WEEKS_AHEAD, WEEKEND, MONTH_END, MONTH_START)
+SPECIAL_DAYS = (WEEKS_AHEAD, WEEKEND, MONTH_END_NEXT, MONTH_END, MONTH_START)
 WEEK_COUNTS = {"a": 1, "one": 1, "two": 2, "three": 3}
 
 
@@ -350,7 +395,8 @@ def special_day(lower: str) -> dict:
     if m:
         n = m.group(1) or m.group(2)
         return {"when": "in_days", "in_days": 7 * int(WEEK_COUNTS.get(n) or n)}
-    for pattern, label in ((WEEKEND, "weekend"), (MONTH_END, "month_end"), (MONTH_START, "month_start")):
+    for pattern, label in ((WEEKEND, "weekend"), (MONTH_END_NEXT, "month_end_next"), (MONTH_END, "month_end"),
+                           (MONTH_START, "month_start")):
         if pattern.search(lower):
             return {"when": "special", "special": label}
     return {}
@@ -500,7 +546,21 @@ def keep_capitals(title: str, sentence: str) -> str:
 FILLER_WORDS = {"a", "an", "the", "to", "me", "my", "remind", "remember", "please", "i", "need", "must", "should",
                 "have", "for", "and", "of", "with"}
 CAPITALS = re.compile(r"[A-Z][A-Z0-9]+")
-TIME_LIKE = re.compile(r"\d+([:.]\d\d)?(am|pm|st|nd|rd|th|น\.?)?|\d{1,2}/\d{1,2}")
+# Times and days are 1-2 digits; a longer number is an amount or a phone number and stays a title word
+TIME_LIKE = re.compile(r"\d{1,2}([:.]\d\d)?(am|pm|st|nd|rd|th|น\.?)?|\d{1,2}/\d{1,2}")
+# An amount the owner typed: 3+ digits ("12000", "12,000", "0812345678"), with baht/บาท/฿ if given
+AMOUNT = re.compile(r"(฿\s*)?(?<![\d.:/#-])(?:\d{1,3}(?:,\d{3})+|\d{3,})(?:\.\d+)?(?![\d:/])(\s*(?:baht\b|บาท|฿))?", re.I)
+
+
+def keep_amounts(title: str, sentence: str) -> str:
+    """'Pay rent of 12000 baht' must not lose the 12000: the AI sometimes drops numbers. Put it back at the end."""
+    for m in AMOUNT.finditer(sentence):
+        digits = re.sub(r"[^\d.]", "", m.group(0))
+        if re.fullmatch(r"20[2-4]\d", digits) and not (m.group(1) or m.group(2)):
+            continue   # a year ("5 December 2026"), not money
+        if digits not in title.replace(",", ""):
+            title = f"{title} {m.group(0).strip()}"
+    return title
 
 
 def own_words(sentence: str) -> list:
@@ -508,11 +568,13 @@ def own_words(sentence: str) -> list:
     skip = set(DATE_WORDS) | set(SHORTCUTS) | set(SHORT_DAYS) | set(PRIORITY_WORDS) | \
         {"am", "pm", "at", "on", "by", "in", "next", "this", "after", "day", "days", "noon", "night", "midnight"}
     s = re.sub(THAI_DATE_WORDS, " ", REPEAT_WORDS.sub(" ", sentence))   # "every monday" / "ทุกวัน" are not title words
-    for pattern in SPECIAL_DAYS + (DAYS_AHEAD,):
-        s = pattern.sub(" ", s)   # "this weekend", "in 2 weeks", "end of month" are dates, not title words
+    for pattern in SPECIAL_DAYS + (DAYS_AHEAD, MONTH_DAY):
+        s = pattern.sub(" ", s)   # "this weekend", "in 2 weeks", "end of month", "5 dec" are dates, not title words
     s = re.sub(r"(on )?(the )?\d{1,2}(st|nd|rd|th)\b", " ", s)   # "pay rent on the 5th"
     s = re.sub(r"\s(เช้า|เย็น|บ่าย|ค่ำ|ดึก)(\s|$)", " ", " " + s + " ")
-    return [w for w in s.split() if w.lower().strip(",.!?") not in skip and not TIME_LIKE.fullmatch(w.lower().strip(",.!?"))]
+    words = [w for w in s.split() if w.lower().strip(",.!?") not in skip and not TIME_LIKE.fullmatch(w.lower().strip(",.!?"))]
+    # a lone "," or "-" is not a word; neither is a year ("5 December 2026")
+    return [w for w in words if re.search(r"\w", w) and not re.fullmatch(r"20[2-4]\d", w.strip(",.!?"))]
 
 
 OWN_WORDS_CHECK_ONLY = True   # job 0h-2 S4a switch
@@ -640,6 +702,23 @@ def parse_task(sentence: str, now: str, categories: list) -> dict:
     return check_task(task, sentence, now, known, memory)
 
 
+# "weekly" / "daily" in the middle of a title is part of the name ("Do the weekly report"); only at the end it is a repeat word
+BARE_REPEAT = re.compile(r"\b(?:weekly|monthly|daily|nightly)\b", re.I)
+TRAILING_TIME = re.compile(r"\s+(?:at\s+\d{1,2}(?:[:.]\d\d)?(?:\s*(?:am|pm))?|\d{1,2}(?:[:.]\d\d)?\s*(?:am|pm))\s*$", re.I)
+
+
+def drop_repeat_words(title: str) -> str:
+    """'gym every monday' -> 'gym', 'Water plants daily' -> 'Water plants', but 'Do the weekly report' keeps 'weekly'."""
+    last = len(title.rstrip())
+    # hide a bare word that is not at the end from REPEAT_WORDS with a zero-width marker, then show it again
+    hidden = BARE_REPEAT.sub(lambda m: m.group(0) if m.end() >= last else m.group(0)[:1] + chr(0) + m.group(0)[1:], title)
+    return " ".join(REPEAT_WORDS.sub(" ", hidden).split()).replace(chr(0), "") or title
+
+
+# "in two days" / "in a week" / "อีกสามวัน": the count is a word, so the AI's in_days is right
+COUNTED_AHEAD = re.compile(r"\b(?:in|after)\s+\w+\s+(?:days?|weeks?)\b|อีก")
+
+
 def check_task(task: dict, sentence: str, now: str, known: list, memory: dict) -> dict:
     """Python checks what the AI said (dates, time, title, category) and returns the safe task.
     Shared by parse_task (one task per call) and understand() (one call for every kind of sentence)."""
@@ -648,7 +727,9 @@ def check_task(task: dict, sentence: str, now: str, known: list, memory: dict) -
     repeat, repeat_day = read_repeat(lower)   # "every monday" / "ทุกเช้า": Python reads it, the AI never does
     # A named weekday is certain too: "วันศุกร์" on a Thursday is tomorrow, not next week's Friday
     day = weekday_in(lower)
-    if day and task.get("when") != "date":
+    typed_day = bool(re.search(r"\d", CLOCK_TIME.sub(" ", lower)))   # a day number was typed ("the 5th"); "3pm" is a time
+    guessed = task.get("when") in ("date", "in_days") and not typed_day   # the AI gave a date nobody typed
+    if day and (task.get("when") != "date" or not typed_day):   # the AI's "date" with no number typed is its guess
         task.update(when="weekday", weekday=day, next_week=bool(NEXT_WEEK.search(lower)),
                     week_after=bool(WEEK_AFTER.search(lower)))
     elif days_ahead(lower):  # "in 3 days" / "อีก 3 วัน": the count is exact, so Python sets it
@@ -657,6 +738,10 @@ def check_task(task: dict, sentence: str, now: str, known: list, memory: dict) -
         if any(w in lower for w in words):
             task["when"] = when
             break
+    # "5 december" / "5 ธันวาคม": Python reads the day and the month itself (the AI's month was often wrong)
+    md_day, md_month = month_day(lower)
+    if md_day:
+        task.update(when="date", day=md_day, month=md_month, next_month=False)
     # "this weekend", "in 2 weeks", "end of month": exact phrases the AI has no label for
     task.update(special_day(lower))
     # "tonight" / "this evening" without a clock time: the owner's own time, not the AI's guess
@@ -670,6 +755,11 @@ def check_task(task: dict, sentence: str, now: str, known: list, memory: dict) -
     # Only a time ("ส่งรายงานบ่ายสาม", "call mom at 5pm"): today, like "tonight"
     if not DAY_HINTS.search(lower):
         task["when"] = "today" if time_said(lower) else "none"
+    # The AI said "a date" (or "in 30 days") but no day number was typed ("book dentist next month", "before March"): it made the day up.
+    # No date, and finish_add asks "When?" (times like "3pm" do not count as a day number)
+    vague = guessed and task.get("when") in ("date", "in_days") and not COUNTED_AHEAD.search(lower)
+    if vague:
+        task["when"] = "none"
     if repeat:   # a repeating task always has a due; the named weekday / day of month is its anchor
         named_day = weekday_in(lower) or days_ahead(lower) or special_day(lower) or any(w in lower for words, _ in DAY_WORDS for w in words)
         if repeat_day:
@@ -686,7 +776,10 @@ def check_task(task: dict, sentence: str, now: str, known: list, memory: dict) -
         clean = re.sub(r"\s(เช้า|เย็น|บ่าย|ค่ำ|ดึก)(\s|$)", " ", " " + clean + " ")
         title = " ".join(clean.split()) or title
     if repeat:   # "gym every monday" -> "gym": the repeat is its own field now
-        title = " ".join(REPEAT_WORDS.sub(" ", title).split()) or title
+        title = drop_repeat_words(title)
+    if task.get("time") and not THAI_LETTERS.search(title):   # "Take vitamins at 7": the time is in the due field
+        title = TRAILING_TIME.sub("", title).strip() or title
+    title = keep_amounts(title, sentence)   # before keep_own_words: the amount is a title word
     title = keep_own_words(title, sentence)
     title = keep_capitals(title, sentence)
     now_time = datetime.strptime(now[:16], "%Y-%m-%dT%H:%M")
@@ -701,6 +794,7 @@ def check_task(task: dict, sentence: str, now: str, known: list, memory: dict) -
         "priority": task.get("priority") if task.get("priority") in ("low", "med", "high") else "med",
         "category": pick_category(task.get("category", ""), sentence, known),
         "tokens": task.get("tokens", 0),
+        **({"askWhen": True} if vague and not due else {}),   # finish_add turns this into the "When?" card
     }
 
 
@@ -861,10 +955,12 @@ def find_task_loose(target: str, tasks: list):
 
 
 # Did the change text name a day, or a clock time? Only then may the task's date/time change.
+# A month name alone is a date hint ("pay in december"), except may/march: they need a day number (MONTH_DAY)
+BARE_MONTHS = r"\b(?:" + _month_pattern(n for n in MONTHS if n.isascii() and n not in _AMBIGUOUS_MONTHS) + r")\b|"
 DAY_HINTS = re.compile(
     r"\b(today|tonight|tomorrow|next|week|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
-    r"january|february|march|april|may|june|july|august|september|october|november|december|"
-    r"jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec|in \d+ days?|in (\d+|a|one|two|three) weeks?|weekend|end of (the |this )?month|(start|beginning) of next month|\d{1,2}(st|nd|rd|th))\b|\d{1,2}/\d{1,2}|"
+    r"in \d+ days?|in (\d+|a|one|two|three) weeks?|weekend|end of (the |this )?month|(start|beginning) of next month|\d{1,2}(st|nd|rd|th))\b|\d{1,2}/\d{1,2}|"
+    + BARE_MONTHS + MONTH_DAY.pattern + "|" + TH_MONTH + "|"
     r"มะรืน|พรุ่งนี้|วันนี้|คืนนี้|จันทร์|อังคาร|พุธ|พฤหัส|ศุกร์|เสาร์|วันอาทิตย์|วันที่\s*\d+|(สัปดาห์|อาทิตย์|เดือน)หน้า|อีก\s*\d+\s*(วัน|สัปดาห์|อาทิตย์)|สิ้นเดือน|ปลายเดือน|ต้นเดือนหน้า|สุดสัปดาห์|เสาร์อาทิตย์", re.I)
 
 
@@ -899,7 +995,7 @@ REMINDER = re.compile(r"\bremind(?:er)?\b|เตือน", re.I)
 
 def finish_add(task: dict, s: str) -> dict:
     time = task.pop("time")  # only updates need it...
-    if not task["due"] and (ask_words(s) or REMINDER.search(s)):   # a reminder with no day is useless: ask "When?" too
+    if not task["due"] and (task.pop("askWhen", False) or ask_words(s) or REMINDER.search(s)):   # a reminder with no day is useless: ask "When?" too
         # ...and "When?": "meeting with Tom at 3pm" has a time but no day. The page asks for the day
         # and uses this time (or the owner's morning time).
         task["askWhen"] = True
@@ -949,7 +1045,7 @@ NATURAL_Q = re.compile(r"\bwhat (?:to do|should i|shall i|do i (?:have|need|got)
 # The loose "maybe a question" gate: a question word anywhere, a "?", or a greeting. Only then is the AI asked.
 QUESTION_WORD_ANYWHERE = re.compile(r"\b(what|how|which|should|when|where|who|why|anything)\b|อะไร|ไหม|มั้ย|กี่|ยังไง|ไร")
 ORDER_START = re.compile(r"^(show|list|tell me|give me)\b")  # also normal verbs ("show Tom the report"): stricter
-QUESTION_TH = re.compile(r"มีอะไร|อะไรบ้าง|กี่งาน|งานอะไร|งานค้าง|เลยกำหนด|เกินกำหนด|^แสดง")
+QUESTION_TH = re.compile(r"มีอะไร|อะไรบ้าง|กี่งาน|งานอะไร|งานไหน|อันไหน|งานค้าง|เลยกำหนด|เกินกำหนด|^แสดง")
 TASK_WORDS = re.compile(r"\b(tasks?|to-?dos?|left|remaining|pending|outstanding|open|have)\b|งาน")
 ABOUT = re.compile(r"(?:about|regarding|containing|เกี่ยวกับ|เรื่อง)\s*(.+?)"
                    r"(?=\s+(?:due|today|tomorrow|this|next|on|by|before|overdue|high|urgent|in)\b|วันนี้|พรุ่งนี้|สัปดาห์|อาทิตย์|[?.!]|$)")
@@ -1005,6 +1101,10 @@ def question_filter(low: str, now: datetime, categories: list) -> dict:
     f = dict(EMPTY_FILTER)
     today = now.date()
     names = list(dict.fromkeys(list(categories) + DEFAULT_CATEGORIES))  # known category names
+    num = NUMBER_FORMS.search(low)   # "what is task 12?": one task, any filter
+    if num:
+        f["num"] = int(num.group(1))
+        return f
     day_words = special_day(low) or ({"when": "in_days", "in_days": days_ahead(low)} if days_ahead(low) else {})
     # "anything about rent due this week": the words after "about" are a text search
     m = ABOUT.search(low)
@@ -1114,13 +1214,13 @@ def parse_question(sentence: str, now: str, categories: list):
     """The filter if the sentence is a question about the tasks, else None (then it is a normal command)."""
     raw = " ".join(strip_greeting(sentence)[0].split()).lower()
     if re.search(r"#\s*\d", raw):
-        return None  # "#3" always means a command
+        return None  # "#3" always means a command ("what is task 12?" is a question: see NUMBER_FORMS)
     if not (QUESTION_START.match(raw) or raw.endswith("?") or QUESTION_TH.search(raw) or NATURAL_Q.search(raw)):
         return None
     # Typos are fixed only for the filter ("tomorow"); the fixer would turn "many" into "may"
     low = fix_date_typos(raw)
     f = question_filter(low, datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"), categories)
-    something = f["when"] or f.get("unread") or f["priority"] or f["cat"] or f["text"] or f["status"] == "done"
+    something = f.get("num") or f["when"] or f.get("unread") or f["priority"] or f["cat"] or f["text"] or f["status"] == "done"
     if ORDER_START.match(low):
         # "show Tom the report tomorrow" is a task; "show high priority work" is a question
         return f if TASK_WORDS.search(raw) or f["priority"] or f["cat"] or f["when"] == "overdue" else None
@@ -1205,6 +1305,8 @@ def due_range(f: dict, now: datetime):
 # ----- Tools: small, exact functions (a future Max agent can call these by name) -----
 def list_tasks(tasks: list, f: dict, now: datetime) -> list:
     """Tasks that match the filter, soonest first. A task is {num, text, done, due, priority, cat}."""
+    if f.get("num"):   # "what is task 12?": just that task, open or done
+        return [t for t in tasks if t["num"] == f["num"]]
     now_text = now.strftime("%Y-%m-%dT%H:%M")
     first, last = due_range(f, now) if f["when"] in ("today", "tomorrow", "week", "weekend", "nextweek", "date") else ("", "")
     found = []
@@ -1235,6 +1337,9 @@ def count_tasks(tasks: list, f: dict, now: datetime) -> int:
 TOOLS = {"list_tasks": list_tasks, "count_tasks": count_tasks}
 
 
+DONE_ASK = re.compile(r"\b(?:finish(?:ed)?|done|complete[d]?)\b|เสร็จ")
+
+
 def question_answer(sentence: str, now: str, categories: list, tasks: list, use_ai: bool = True):
     """The answer-card data if the sentence is a question, else None. Questions never add tasks."""
     plain, greeted = strip_greeting(sentence)
@@ -1249,6 +1354,10 @@ def question_answer(sentence: str, now: str, categories: list, tasks: list, use_
         return {"action": "smalltalk", "kind": "chat", "reply": f["reply"], "tokens": f["tokens"]}
     if f.pop("unread", False):  # honest answer instead of a list that only looks like an answer
         thai = re.search(r"[฀-๿]", sentence)
+        if DONE_ASK.search(low):   # "what did I finish yesterday?": we do not store the finish day yet, say so
+            return {"action": "smalltalk", "kind": "chat", "tokens": f.get("tokens", 0),
+                    "reply": "ตอนนี้ผมยังไม่ได้บันทึกว่างานเสร็จวันไหนครับ" if thai else
+                             "I don't record the day a task was finished yet, so I can't answer that."}
         return {"action": "smalltalk", "kind": "chat", "tokens": f.get("tokens", 0),
                 "reply": "ขอโทษครับ อ่านวันนั้นไม่ออก ลองถามว่า วันนี้ พรุ่งนี้ สัปดาห์นี้ หรือชื่อวันดูนะ" if thai else
                          "Sorry, I couldn't read that day. Try today, tomorrow, this week or a weekday."}

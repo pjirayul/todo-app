@@ -272,6 +272,14 @@
     {"s": "Mark #2, #4 and #7 as done", "action": ["complete", "clarify"], "num": 2, "ask": false},
     {"s": "Do I have anything overdue?", "action": "answer", "filter": {"when": "overdue"}},
     {"s": "งานไหนสำคัญที่สุดตอนนี้", "action": "answer", "filter": {"priority": "high"}},
-    {"s": "ขอบคุณนะ Max", "action": "smalltalk"}
+    {"s": "ขอบคุณนะ Max", "action": "smalltalk"},
+    {"s": "Renew passport before March", "action": "add", "due": ""},
+    {"s": "ไปตรวจสุขภาพประจำปีเดือนธันวาคม", "action": "add", "due": ""},
+    {"s": "จ่ายค่าประกัน 5 ธันวาคม", "action": "add", "due": "2026-12-05T09:00"},
+    {"s": "I may call Tom friday", "action": "add", "due": "2026-10-30T09:00"},
+    {"s": "What is task 12?", "action": "answer", "filter": {"num": 12}},
+    {"s": "ส่งงานก่อนวันศุกร์", "action": "add", "title": ["ส่งงาน"]},
+    {"s": "Call 0812345678 tomorrow", "action": "add", "title": ["call 0812345678"], "due": "2026-10-31T09:00"},
+    {"s": "Take vitamins every morning at 7", "action": "add", "title": ["take vitamins"], "repeat": "day"}
   ]
 }
