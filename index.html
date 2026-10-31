@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
   <!-- ?v= makes browsers fetch the new file after an update (raise it on each release) -->
-  <link rel="stylesheet" href="style.css?v=48">
+  <link rel="stylesheet" href="style.css?v=49">
 </head>
 <body>
   <!-- Line icons, drawn once and reused with <use href="#i-..."> -->
@@ -24,7 +24,8 @@
     <symbol id="h-pencil" viewBox="0 0 24 24"><path d='M20 4c-8 0-13 5-13 12l-3 4M20 4c0 7-5 12-12 12M10 14l6-6'/></symbol>
     <symbol id="h-trash" viewBox="0 0 24 24"><path d='M9 2.5h6L18 9l-3 12.5H9L6 9z'/><path d='M12 8v7M9.5 10.5h5'/></symbol>
     <symbol id="h-history" viewBox="0 0 24 24"><path d='M3.5 12a8.5 8.5 0 1 0 2.5-6'/><path d='M3.5 3.5V8H8'/><path d='M12 9c-3 0-4.5 1.5-4.5 3.5S9 16 12 16s4.5-1.5 4.5-3.5S15 9 12 9z'/></symbol>
-    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 4h6l-1 6 3 3.5H7L10 10 9 4zM12 13.5V20"/></symbol>
+    <symbol id="i-moon"viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></symbol>
     <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
     <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></symbol>
     <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></symbol>
@@ -75,6 +76,8 @@
         <!-- Max (the AI assistant): green dot = ready, grey = offline. Opens Max's card on the status page -->
         <a href="status.html#max" class="max-status" id="max-status"><i></i><span id="max-text">Max</span></a>
       </p>
+      <!-- Plan my day: shown by script.js when something is overdue or due today and today is not planned yet -->
+      <p class="plan-row" id="plan-row" hidden><button type="button" id="plan-btn" class="plan-chip"><span class="plan-icon" aria-hidden="true"></span><span id="plan-label">Plan my day</span></button><span class="plan-why" id="plan-why"></span></p>
       <p class="fest-line" id="fest-line" data-i18n="festHalloween"></p>
     </header>
 
@@ -174,6 +177,6 @@
   </div>
 
   <script src="hints.js?v=2"></script>
-  <script src="script.js?v=52"></script>
+  <script src="script.js?v=53"></script>
 </body>
 </html>

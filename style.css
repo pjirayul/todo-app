@@ -933,3 +933,38 @@ body.fest-halloween .fest-flybat { display: block; position: fixed; top: 18vh; l
   7%   { opacity: 0;   transform: translate(105vw, -4vh) scale(.8); }
   100% { opacity: 0;   transform: translate(105vw, -4vh) scale(.8); }
 }
+
+/* ---------- Plan my day (basic styling by Kimi, George polishes; see mockups/plan-my-day.html) ---------- */
+.plan-row { display: flex; align-items: center; gap: 8px; margin: 8px 2px 0; flex-wrap: wrap; }
+.plan-row[hidden] { display: none; }
+.plan-chip { position: relative; display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 6px 14px 6px 10px; border-radius: 999px; border: 1px solid var(--chip-on-line); background: var(--chip-on); color: var(--chip-on-text); font-size: .9rem; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.plan-icon { width: 24px; height: 24px; border-radius: 50%; background: var(--wave-white) center / 13px no-repeat, var(--ai-grad); }
+.plan-why { font-size: .8rem; color: var(--muted); }
+.cmd-msg.ask .ask-when { color: var(--muted); font-size: .85rem; }
+.cmd-msg.ask .ask-prog { display: flex; align-items: center; gap: 10px; font-size: .8rem; color: var(--muted); }
+.ask-bars { display: flex; gap: 4px; flex: 1; }
+.ask-bars i { flex: 1; height: 4px; border-radius: 2px; background: var(--border); }
+.ask-bars i.on { background: var(--ai-grad); }
+.cmd-msg .chip.drop { color: var(--high-text, #c42f35); }
+.cmd-msg .chip.quiet { color: var(--muted); border-color: transparent; background: none; }
+.cmd-msg.ask .ask-count { font-size: .8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ask-picks, .ask-res { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.ask-pick { display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 52px; padding: 10px; border-radius: 12px; border: 1px solid transparent; border-left: 4px solid transparent; background: none; text-align: left; color: var(--text); cursor: pointer; font: inherit; }
+.ask-pick.p-high { border-left-color: var(--high); }
+.ask-pick.p-med { border-left-color: var(--med); }
+.ask-pick.p-low { border-left-color: var(--low); }
+.ask-pick[aria-pressed="true"] { background: var(--chip-on); border-color: var(--chip-on-line); }
+.pick-box { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--border); background: var(--card); }
+.ask-pick[aria-pressed="true"] .pick-box { background: var(--accent); border-color: var(--accent); }
+.pick-body { flex: 1; min-width: 0; }
+.pick-text { display: block; }
+.badge-max { font-size: .72rem; font-weight: 600; color: var(--chip-on-text); background: var(--accent-soft); padding: 0 8px; border-radius: 999px; }
+.ask-res { gap: 6px; }
+.ask-res li { display: flex; gap: 10px; align-items: flex-start; }
+.ask-res .n { width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: .78rem; font-weight: 700; display: grid; place-items: center; flex: none; }
+.ask-sub { font-size: .8rem; color: var(--muted); }
+/* pinned tasks at the top of the list */
+.pin-head { display: flex; align-items: center; gap: 6px; padding: 8px 4px 2px; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: var(--accent); }
+.pin-sep { height: 1px; background: var(--border); margin: 6px 4px; }
+.pin-mark { display: inline-flex; align-items: center; color: var(--accent); }
+.todo-item.pinned { background: color-mix(in srgb, var(--accent-soft) 55%, var(--card)); }

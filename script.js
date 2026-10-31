@@ -43,6 +43,14 @@ const TEXT = {
     sureClear: (n) => `Delete ${n} done task${n === 1 ? "" : "s"}?`, yesClear: "Yes, delete",
     clarifyQ_done: "Mark this done?", clarifyQ_delete: "Delete this task?", clarifyQ_change: "Change this task?",
     clarifyQ_similar: "Which one?", clarifyQ_pick: "Which task?", clarifyQ_several: "Add as separate tasks?", clarifyQ_question: "Is this a question?", clarifyQ_vague: "Which day next week?",
+    planChip: "Plan my day", planWhy: (o, d) => [o ? `${o} overdue` : "", d ? `${d} due today` : ""].filter(Boolean).join(", "),
+    planWhen: (d) => `was due ${d}`, planOf: (i, n) => `${i} of ${n}`, planAsk: "When should it happen?", planPick: "Pick a day", planDrop: "Drop",
+    planStop: "Stop planning", planEsc: "or press Esc", planSet: "Set date", planBack: "Back", planPast: "Pick today or a later day.",
+    planHere: "Here is today. I picked these for you.", planChosen: (n) => `${n} of 3 chosen - tap one to swap`, planMax: "Max pick",
+    planPin: (n) => (n === 1 ? "Pin this one" : `Pin these ${n}`), planSkip: "Skip", planHead: "Top for today", planPinned: "Pinned for today",
+    planResult: (n) => (n === 1 ? "Your top task for today" : `Your top ${n} for today`),
+    planDone: (moved, dropped) => [moved ? `${moved} moved` : "", dropped ? `${dropped} dropped` : ""].filter(Boolean).join(", "),
+    planNote: "Pinned at the top for today only.", planStopped: "Plan stopped. What you did stays.", planNothing: "Nothing to plan: no open tasks.", planSkipped: "Plan done. Nothing pinned.",
     opt_answer: "Show the answer", undoChip: "Undo", undone: "Undone.", nothingToUndo: "Nothing to undo.",
     undoneWhat: (x) => `Undone: ${x}`, undoAdded: (nums) => `added ${nums.map((n) => "#" + n).join(", ")}`,
     undoDeleted: (nums) => `deleted ${nums.map((n) => "#" + n).join(", ")}`, undoChanged: (nums) => `change to ${nums.map((n) => "#" + n).join(", ")}`,
@@ -127,6 +135,14 @@ const TEXT = {
     sureClear: (n) => `ลบงานที่เสร็จแล้ว ${n} งาน ใช่ไหม?`, yesClear: "ใช่ ลบเลย",
     clarifyQ_done: "ทำเครื่องหมายว่าเสร็จ?", clarifyQ_delete: "ลบงานนี้?", clarifyQ_change: "แก้งานนี้?",
     clarifyQ_similar: "หมายถึงงานไหน?", clarifyQ_pick: "งานไหน?", clarifyQ_several: "เพิ่มเป็นหลายงานไหม?", clarifyQ_question: "นี่เป็นคำถามใช่ไหม?", clarifyQ_vague: "สัปดาห์หน้าวันไหน?",
+    planChip: "วางแผนวันนี้", planWhy: (o, d) => [o ? `เลยกำหนด ${o}` : "", d ? `ถึงกำหนดวันนี้ ${d}` : ""].filter(Boolean).join(" "),
+    planWhen: (d) => `ครบกำหนด${d}`, planOf: (i, n) => `${i} จาก ${n}`, planAsk: "จะทำเมื่อไหร่?", planPick: "เลือกวัน", planDrop: "ทิ้ง",
+    planStop: "หยุดวางแผน", planEsc: "หรือกด Esc", planSet: "ตั้งวันที่", planBack: "ย้อนกลับ", planPast: "เลือกวันนี้หรือวันหลังจากนี้",
+    planHere: "นี่คือวันนี้ ฉันเลือกงานเหล่านี้ให้", planChosen: (n) => `เลือกแล้ว ${n} จาก 3 - แตะเพื่อสลับ`, planMax: "Max เลือก",
+    planPin: (n) => (n === 1 ? "ปักหมุดงานนี้" : `ปักหมุด ${n} งานนี้`), planSkip: "ข้าม", planHead: "งานเด่นวันนี้", planPinned: "ปักหมุดวันนี้",
+    planResult: (n) => (n === 1 ? "งานเด่นของวันนี้" : `${n} งานเด่นของวันนี้`),
+    planDone: (moved, dropped) => [moved ? `ย้าย ${moved} งาน` : "", dropped ? `ทิ้ง ${dropped} งาน` : ""].filter(Boolean).join(" "),
+    planNote: "ปักหมุดไว้บนสุดเฉพาะวันนี้", planStopped: "หยุดวางแผนแล้ว สิ่งที่ทำไปแล้วยังอยู่", planNothing: "ไม่มีอะไรให้วางแผน: ไม่มีงานค้าง", planSkipped: "วางแผนเสร็จแล้ว ไม่ได้ปักหมุดงานใด",
     opt_answer: "ดูคำตอบ", undoChip: "เลิกทำ", undone: "เลิกทำแล้ว", nothingToUndo: "ไม่มีอะไรให้เลิกทำ",
     undoneWhat: (x) => `เลิกทำแล้ว: ${x}`, undoAdded: (nums) => `เพิ่ม ${nums.map((n) => "#" + n).join(", ")}`,
     undoDeleted: (nums) => `ลบ ${nums.map((n) => "#" + n).join(", ")}`, undoChanged: (nums) => `แก้ ${nums.map((n) => "#" + n).join(", ")}`,
@@ -213,6 +229,12 @@ let settings = { lang: "en", theme: "light", aiLimit: 20000, repeatMin: 0, ...lo
 const todayKey = () => new Date().toLocaleDateString("en-CA");
 let usage = load("usage", { day: todayKey(), tokens: 0 });
 const usageToday = () => (usage.day === todayKey() ? usage.tokens : 0);
+// Plan my day (section 8e): the day it was planned and the ids of that day's top tasks. Pins end by themselves
+// (they only count when day is today), so nothing needs cleaning up tomorrow. Kept in this browser only.
+let plan = load("plan", { day: "", ids: [] });
+const isPlanned = () => plan.day === todayKey();
+const isPinned = (x) => isPlanned() && !x.done && plan.ids.includes(x.id);
+let planning = false; // the plan flow is open
 function addUsage(tokens) {
   usage = { day: todayKey(), tokens: usageToday() + (tokens || 0) };
   save("usage", usage);
@@ -340,6 +362,9 @@ function render() {
   });
   if (view.sort === "due") visible.sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
   if (view.sort === "priority") visible.sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
+  // Today's top tasks (Plan my day) go first in every sort; the others keep their order
+  const pinnedCount = visible.filter(isPinned).length;
+  visible = [...visible.filter(isPinned), ...visible.filter((x) => !isPinned(x))];
 
   // "Filtered: … ×" chip while an answer's list is applied
   $("num-filter").hidden = !view.nums;
@@ -352,13 +377,16 @@ function render() {
     : `<li class="empty"><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg>${t("empty")}</li>`;
   const canDrag = view.sort === "manual" && !view.search;
 
-  for (const todo of visible) {
+  visible.forEach((todo, index) => {
+    // Heading above the pinned tasks, a thin line under them (not .todo-item: drag and drop only reads .todo-item)
+    if (pinnedCount && index === 0) list.insertAdjacentHTML("beforeend", `<li class="pin-head"><svg class="i sm" aria-hidden="true"><use href="#i-pin"/></svg>${t("planHead")}</li>`);
+    if (pinnedCount && index === pinnedCount && index < visible.length) list.insertAdjacentHTML("beforeend", `<li class="pin-sep" aria-hidden="true"></li>`);
     const li = document.createElement("li");
-    li.className = `todo-item p-${todo.priority}${todo.done ? " done" : ""}`;
+    li.className = `todo-item p-${todo.priority}${todo.done ? " done" : ""}${isPinned(todo) ? " pinned" : ""}`;
     li.dataset.id = todo.id;
     li.dataset.num = todo.num;
     li.dataset.fest = todo.num % 5; // which little Halloween icon this card gets (style.css)
-    li.draggable = canDrag;
+    li.draggable = canDrag && !isPinned(todo);
 
     // Manual editing: text, date, priority and category in one small form
     if (todo.id === editingId) {
@@ -380,7 +408,7 @@ function render() {
           </div>
         </form>`;
       list.append(li);
-      continue;
+      return;
     }
 
     const due = todo.due
@@ -393,7 +421,7 @@ function render() {
       <input type="checkbox" class="check" ${todo.done ? "checked" : ""}>
       <div class="body">
         <div class="text" title="${t("editHint")}">${escapeHtml(todo.text)}</div>
-        <div class="meta"><span class="num">#${todo.num}</span>${due}${todo.cat ? `<span class="tag">#${escapeHtml(todo.cat)}</span>` : ""}${progress}${todo.repeat ? `<span class="repeat-mark"><svg class="i sm" aria-hidden="true"><use href="#i-repeat"/></svg>${t("repeatsMark")[todo.repeat]}</span>` : ""}</div>
+        <div class="meta">${isPinned(todo) ? `<span class="pin-mark" title="${t("planPinned")}"><svg class="i sm" aria-hidden="true"><use href="#i-pin"/></svg></span>` : ""}<span class="num">#${todo.num}</span>${due}${todo.cat ? `<span class="tag">#${escapeHtml(todo.cat)}</span>` : ""}${progress}${todo.repeat ? `<span class="repeat-mark"><svg class="i sm" aria-hidden="true"><use href="#i-repeat"/></svg>${t("repeatsMark")[todo.repeat]}</span>` : ""}</div>
         ${todo.notes ? `<div class="notes">${escapeHtml(todo.notes)}</div>` : ""}
         ${todo.files.length ? `<div class="files">${todo.files.map((f) =>
           `<a class="file" href="#" data-file="${f.id}" title="Open"><svg class="i sm" aria-hidden="true"><use href="#i-paperclip"/></svg>${escapeHtml(f.name)}<button class="rm" data-rm="${f.id}" title="Remove" aria-label="Remove"><svg class="i sm" aria-hidden="true"><use href="#i-x"/></svg></button></a>`).join("")}</div>` : ""}
@@ -405,7 +433,7 @@ function render() {
       <button class="edit" title="Edit" aria-label="Edit"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg></button>
       <button class="delete" title="Delete" aria-label="Delete"><svg class="i" aria-hidden="true"><use href="#i-trash"/></svg></button>`;
     list.append(li);
-  }
+  });
 
   const left = todos.filter((x) => !x.done).length;
   $("counter").textContent = t(festTheme() === "halloween" ? "leftFest" : "left")(left);
@@ -437,6 +465,10 @@ function drawGreeting() {
   if (!dueToday && !overdue) parts.push(" · " + t("nothingDue"));
   parts.push(" · ");
   $("summary").replaceChildren(...parts);
+  // "Plan my day" chip: only when something needs a plan and today has not been planned yet
+  $("plan-row").hidden = planning || isPlanned() || !(overdue + dueToday);
+  $("plan-label").textContent = t("planChip");
+  $("plan-why").textContent = t("planWhy")(overdue, dueToday);
   drawMax(); // "Max ready" in the chosen language
 }
 
@@ -602,7 +634,8 @@ function closeAsk() {
   openAsk = null;
   resolve(null);
 }
-function askMax(question, choices, { inputs = [], box = $("cmd-msg") } = {}) {
+// extra: ready-made nodes shown under the question (the plan flow's "1 of 5" line); choice.cls: extra chip class
+function askMax(question, choices, { inputs = [], box = $("cmd-msg"), extra = [] } = {}) {
   closeAsk(); // only one question at a time
   return new Promise((resolve) => {
     const q = document.createElement("span");
@@ -635,7 +668,7 @@ function askMax(question, choices, { inputs = [], box = $("cmd-msg") } = {}) {
     for (const c of choices) {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = c.primary ? "chip active" : "chip";
+      b.className = (c.primary ? "chip active" : "chip") + (c.cls ? " " + c.cls : "");
       b.textContent = c.label;
       b.addEventListener("click", () => {
         if (c.value === null) return finish(null); // Cancel
@@ -652,7 +685,7 @@ function askMax(question, choices, { inputs = [], box = $("cmd-msg") } = {}) {
     };
     openAsk = { box, resolve };
     box.className = "cmd-msg ask";
-    box.replaceChildren(q, ...fields, chips);
+    box.replaceChildren(q, ...extra, ...fields, chips);
     (box.querySelector("input") || chips.firstChild)?.focus({ preventScroll: true });
     box.scrollIntoView({ block: "nearest" });
   });
@@ -1258,12 +1291,16 @@ function undoLast() {
     if (at >= 0) todos[at] = o.task; else todos.splice(Math.min(o.index, todos.length), 0, o.task); // a deleted task comes back
   }
   update();
+  s.onUndo?.(); // Plan my day: take the pins back too
   const what = deleted ? t("undoDeleted")(changedNums) : s.old.length || !addedTasks.length ? t("undoChanged")(changedNums) : t("undoAdded")(changedNums);
   showMessage(spooky(t("undoneWhat")(what)));
   if (s.card) logClarify(s.card, "undo"); // counts against "act": too many undos and Max asks again
-  // Learning loop: Max got it wrong. A plain add reuses noteIfMistake; the rest says what kind of action it was
-  if (addedTasks.length === 1 && !s.old.length) noteIfMistake(addedTasks[0]);
-  else noteUndo(deleted ? "delete" : flipped ? "complete" : addedTasks.length > 1 ? "add_many" : addedTasks.length ? "complete" : "update");
+  // Learning loop: Max got it wrong. A plain add reuses noteIfMistake; the rest says what kind of action it was.
+  // A plan the owner chose step by step is not a Max mistake (onUndo is only set by Plan my day).
+  if (!s.onUndo) {
+    if (addedTasks.length === 1 && !s.old.length) noteIfMistake(addedTasks[0]);
+    else noteUndo(deleted ? "delete" : flipped ? "complete" : addedTasks.length > 1 ? "add_many" : addedTasks.length ? "complete" : "update");
+  }
   if (!deleted && !addedTasks.length) flash(changedNums[0]);
 }
 // Same private log as noteIfMistake (api/max/mistake), action "undo" + what was undone. Never blocks the undo.
@@ -1299,15 +1336,203 @@ async function askWhenThenAdd(task) {
     date = day(answer.value);
   }
   // The server sends the time it heard ("at 3pm"), or the owner's morning time
-  let due = /^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(task.time) ? `${date}T${task.time}` : "";
-  if (due && new Date(due) <= new Date()) {
-    // That time already passed today (it would be overdue at once): use the next full hour instead
-    const next = new Date();
-    next.setHours(next.getHours() + 1, 0, 0, 0);
-    due = next.toLocaleDateString("en-CA") === date ? `${date}T${String(next.getHours()).padStart(2, "0")}:00` : `${date}T23:59`;
-  }
+  const due = /^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(task.time) ? dueOn(date, task.time) : "";
   addTask({ ...task, due });
 }
+
+// A due date for this day and time. A time that already passed today would be overdue at once,
+// so it becomes the next full hour (or 23:59 when that is already tomorrow). Used by "When?" and Plan my day.
+function dueOn(date, time) {
+  if (new Date(`${date}T${time}`) > new Date()) return `${date}T${time}`;
+  const next = new Date();
+  next.setHours(next.getHours() + 1, 0, 0, 0);
+  return next.toLocaleDateString("en-CA") === date ? `${date}T${String(next.getHours()).padStart(2, "0")}:00` : `${date}T23:59`;
+}
+
+// ---------- 8e. Plan my day ----------
+// All in the page, no AI: (1) each overdue task gets Today / Tomorrow / Pick a day / Drop, one at a time,
+// (2) Max proposes up to 3 of today's tasks, the owner taps to swap, (3) the 3 are pinned at the top for today.
+// The whole flow is ONE shared undo (startUndo/endUndo) and Drop deletes (the Undo brings it back).
+// The pins (plan) live in this browser only; a server column would be needed to share them between devices.
+const PLAN_DAY = /^(?:please\s+)?(?:plan|organi[sz]e)\s+my\s+day(?:\s+please)?$|^(?:ช่วย)?วางแผน(?:วันนี้)?(?:ให้)?(?:หน่อย)?(?:ครับ|ค่ะ|คะ)?$/;
+const setPlan = (value) => { plan = value; save("plan", value); render(); };
+const planEl = (tag, cls, text = "") => {
+  const node = document.createElement(tag);
+  node.className = cls;
+  node.textContent = text; // textContent: task text never runs as HTML
+  return node;
+};
+const dayOffset = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return dateKey(d); };
+
+// Today's tasks in the order Max proposes them: high priority first, then the ones that were overdue,
+// then the earliest time, then the lowest #. Fewer than 3? Add high-priority tasks with no date, then the soonest this week.
+function planRank(movedIds) {
+  const today = todayKey();
+  const open = todos.filter((x) => !x.done);
+  const dayOf = (x) => x.due.slice(0, 10);
+  const byRank = (a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]
+    || Number(movedIds.has(b.id)) - Number(movedIds.has(a.id))
+    || (a.due || "9999").localeCompare(b.due || "9999") || a.num - b.num;
+  const list = open.filter((x) => x.due && dayOf(x) === today).sort(byRank);
+  if (list.length < 3) {
+    list.push(...open.filter((x) => !x.due && x.priority === "high").sort(byRank));
+    list.push(...open.filter((x) => x.due && dayOf(x) > today && dayOf(x) <= dayOffset(7)).sort((a, b) => a.due.localeCompare(b.due) || byRank(a, b)));
+  }
+  return list.slice(0, 8);
+}
+
+// One overdue task: returns "moved", "dropped", or null (Stop / Escape)
+async function planOneLate(todo, i, total) {
+  const time = todo.due.slice(11, 16) || "09:00";
+  const bars = planEl("span", "ask-bars");
+  for (let n = 0; n < total; n++) bars.append(planEl("i", n <= i ? "on" : ""));
+  const lateDay = new Date(todo.due).toLocaleDateString(t("locale"), { weekday: "short", day: "numeric", month: "short" });
+  const prog = planEl("span", "ask-prog");
+  prog.append(planEl("span", "ask-count", t("planOf")(i + 1, total)), bars);
+  const head = [planEl("span", "ask-when", `${t("planWhen")(lateDay)} - ${t("planAsk")}`), prog];
+  const setDue = (date) => { todo.due = dueOn(date, time); todo.notified = false; update(); return "moved"; };
+  for (;;) {
+    const a = await askMax(`#${todo.num} ${todo.text}`, [
+      { label: t("today"), value: "today" }, { label: t("tomorrow"), value: "tomorrow" }, { label: t("planPick"), value: "pick" },
+      { label: t("planDrop"), value: "drop", cls: "drop" }, { label: t("planStop"), value: null, cls: "quiet" },
+    ], { extra: head });
+    if (!a) return null;
+    if (a.value === "today") return setDue(todayKey());
+    if (a.value === "tomorrow") return setDue(dayOffset(1));
+    if (a.value === "drop") {
+      if (REPEATS.includes(todo.repeat)) { // a repeating task skips this round and keeps its series
+        todo.due = nextDue(todo.due, todo.repeat);
+        todo.notified = false;
+      } else {
+        todos = todos.filter((x) => x !== todo); // its files stay until the undo is gone (clearUndo)
+      }
+      update();
+      return "dropped";
+    }
+    // Pick a day: a date box; a day before today is asked again
+    let question = t("askDate");
+    for (;;) {
+      const b = await askMax(question, [
+        { label: t("planSet"), value: "ok", primary: true }, { label: t("planBack"), value: "back" }, { label: t("planStop"), value: null, cls: "quiet" },
+      ], { inputs: [{ name: "date", type: "date", value: dayOffset(1) }], extra: head.slice(1) });
+      if (!b) return null;
+      if (b.value === "back") break;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(b.values.date) && b.values.date >= todayKey()) return setDue(b.values.date);
+      question = t("planPast");
+    }
+  }
+}
+
+// The "choose your top 3" card: a list to tap. Resolves with the chosen ids (list order), or null for Skip / Escape.
+function askPlanPicks(list) {
+  closeAsk();
+  const box = $("cmd-msg");
+  return new Promise((resolve) => {
+    const proposed = new Set(list.slice(0, 3).map((x) => x.id));
+    const chosen = new Set(proposed);
+    const count = planEl("div", "ask-count");
+    const ul = planEl("ul", "ask-picks");
+    const pin = planEl("button", "chip active");
+    const skip = planEl("button", "chip quiet", t("planSkip"));
+    pin.type = skip.type = "button";
+    const buttons = list.map((x) => {
+      const b = planEl("button", `ask-pick p-${x.priority}`);
+      b.type = "button";
+      const body = planEl("span", "pick-body");
+      const meta = planEl("span", "meta");
+      meta.append(planEl("span", "num", `#${x.num}`));
+      if (x.due) meta.append(planEl("span", "", shortDate(x.due)));
+      if (proposed.has(x.id)) meta.append(planEl("span", "badge-max", t("planMax")));
+      body.append(planEl("span", "pick-text", x.text), meta);
+      b.append(planEl("span", "pick-box"), body);
+      b.addEventListener("click", () => {
+        if (chosen.has(x.id)) chosen.delete(x.id);
+        else if (chosen.size < 3) chosen.add(x.id);
+        draw();
+      });
+      const li = document.createElement("li");
+      li.append(b);
+      ul.append(li);
+      return { x, b };
+    });
+    const draw = () => {
+      buttons.forEach(({ x, b }) => b.setAttribute("aria-pressed", chosen.has(x.id)));
+      count.textContent = t("planChosen")(chosen.size);
+      pin.textContent = t("planPin")(chosen.size);
+      pin.disabled = !chosen.size;
+    };
+    const finish = (answer) => {
+      if (openAsk?.resolve !== resolve) return; // already closed
+      openAsk = null;
+      box.onkeydown = null;
+      box.replaceChildren();
+      box.className = "cmd-msg";
+      resolve(answer);
+    };
+    pin.addEventListener("click", () => finish(list.filter((x) => chosen.has(x.id)).map((x) => x.id)));
+    skip.addEventListener("click", () => finish(null));
+    box.onkeydown = (e) => { if (e.key === "Escape") { e.preventDefault(); finish(null); $("todo-input").focus(); } };
+    const acts = planEl("div", "ask-chips chips");
+    acts.append(pin, skip);
+    openAsk = { box, resolve };
+    box.className = "cmd-msg ask";
+    box.replaceChildren(planEl("span", "ask-q", t("planHere")), count, ul, acts);
+    draw();
+    pin.focus({ preventScroll: true });
+    box.scrollIntoView({ block: "nearest" });
+  });
+}
+
+async function planMyDay() {
+  if (planning) return;
+  planning = true;
+  const planBefore = plan;
+  const snapBefore = undoSnap;
+  startUndo();
+  backup("before plan my day", true);
+  hideAnswer();
+  showMessage("");
+  render(); // hides the chip
+  let moved = 0, dropped = 0;
+  try {
+    // Step 1: the overdue ones, oldest first (the list is fixed now, so moving one to Today does not add it again)
+    const late = todos.filter((x) => !x.done && isOverdue(x)).sort((a, b) => a.due.localeCompare(b.due));
+    const movedIds = new Set();
+    let stopped = false;
+    for (let i = 0; i < late.length && !stopped; i++) {
+      if (!todos.includes(late[i])) continue; // the owner deleted it meanwhile
+      const result = await planOneLate(late[i], i, late.length);
+      if (result === "moved") { moved++; movedIds.add(late[i].id); }
+      else if (result === "dropped") dropped++;
+      else stopped = true;
+    }
+    if (stopped) return showMessage(t("planStopped"));
+    // Step 2: Max proposes, the owner swaps
+    const ranked = planRank(movedIds);
+    if (!ranked.length) return showMessage(t(moved || dropped ? "planSkipped" : "planNothing"));
+    const ids = await askPlanPicks(ranked);
+    setPlan({ day: todayKey(), ids: ids || [] });
+    if (!ids) return showMessage(t("planSkipped"));
+    // Step 3: show the result (the Undo chip is added under it when the flow ends)
+    const box = $("cmd-msg");
+    const ol = planEl("ol", "ask-res");
+    ids.forEach((id, n) => {
+      const li = document.createElement("li");
+      li.append(planEl("span", "n", String(n + 1)), planEl("span", "", todos.find((x) => x.id === id)?.text || ""));
+      ol.append(li);
+    });
+    const done = [t("planDone")(moved, dropped), t("planNote")].filter(Boolean).join(". ");
+    box.className = "cmd-msg ask";
+    box.replaceChildren(planEl("span", "ask-q", t("planResult")(ids.length)), ol, planEl("div", "ask-sub", done));
+    setTimeout(() => { if (box.querySelector(".ask-res")) showMessage(""); }, 15000); // the result card tidies itself away
+  } finally {
+    planning = false;
+    endUndo();
+    if (undoSnap && undoSnap !== snapBefore) undoSnap.onUndo = () => setPlan(planBefore); // Undo takes the pins back too
+    render();
+  }
+}
+$("plan-btn").addEventListener("click", () => { planMyDay(); });
 
 // "Tell Max more…": the page holds the first sentence for 5 minutes (not saved: a reload forgets it, which is safe).
 // The next message goes to the server together with it; Python joins them and runs the normal road.
@@ -1350,6 +1575,11 @@ $("todo-form").addEventListener("submit", async (e) => {
     $("todo-input").value = "";
     hideAnswer();
     return undoLast(); // keep lastSentence = the sentence Max got wrong, for the learning loop
+  }
+  // "plan my day" / "วางแผนวันนี้" (the whole sentence, greeting allowed) opens the plan flow: no server, no AI
+  if (PLAN_DAY.test(stripGreeting(text).toLowerCase().replace(/[\s.!?]+$/, ""))) {
+    $("todo-input").value = "";
+    return planMyDay();
   }
   lastSentence = text.slice(0, 200);
   if (isGreetingOnly(text)) { // just "hi max": say hello, add nothing
