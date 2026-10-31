@@ -252,6 +252,26 @@
     {"s": "every time I call mom she is late", "action": ["add", "smalltalk"], "title": ["she is late"], "repeat": "", "ask": false},
     {"s": "ask everyone about the party friday", "action": "add", "repeat": "", "due": "2026-10-30T09:00", "ask": false},
     {"s": "ทุกวันนี้รถติดมาก", "action": ["add", "smalltalk"], "title": ["ทุกวันนี้รถติดมาก"], "due": "", "repeat": "", "ask": false},
-    {"s": "บอกทุกคนเรื่องงานเลี้ยง", "action": "add", "repeat": "", "ask": false}
+    {"s": "บอกทุกคนเรื่องงานเลี้ยง", "action": "add", "repeat": "", "ask": false},
+    {"s": "Email the vendor about the delayed sensor order, high priority", "action": "add", "title": ["email the vendor about the delayed sensor order"], "due": "", "priority": "high", "category": ["Work"], "repeat": ""},
+    {"s": "ส่งใบเสนอราคาให้ลูกค้าภายในวันพุธ", "action": "add", "title": ["ส่งใบเสนอราคาให้ลูกค้า"], "due": "2026-11-04T09:00"},
+    {"s": "Pack bag for Hat Yai trip tomorrow night 8pm", "action": "add", "title": ["pack bag for hat yai trip"], "due": "2026-10-31T20:00"},
+    {"s": "โทรหาแม่ทุกวันอาทิตย์", "action": "add", "title": ["โทรหาแม่"], "due": "2026-11-01T09:00", "repeat": "week"},
+    {"s": "พาลูกไปฉีดวัคซีนวันที่ 12 พ.ย.", "action": "add", "title": ["พาลูกไปฉีดวัคซีน"], "due": "2026-11-12T09:00"},
+    {"s": "Buy a birthday gift for dad, his birthday is 15 Nov", "action": "add", "title": ["buy a birthday gift for dad"], "due": "2026-11-15T09:00"},
+    {"s": "Pay electricity bill by the 5th", "action": "add", "title": ["pay electricity bill"], "due": "2026-11-05T09:00"},
+    {"s": "Pay rent on the 1st of every month, it is 12000 baht", "action": "add", "title": ["pay rent", "pay rent 12000 baht"], "due": "2026-11-01T09:00", "repeat": "month"},
+    {"s": "Transfer 5000 to my sister today", "action": "add", "title": ["transfer 5000 to my sister"], "due": "2026-10-30T09:00"},
+    {"s": "ต่อภาษีรถก่อนสิ้นเดือนหน้า", "action": "add", "title": ["ต่อภาษีรถ"], "due": "2026-11-30T09:00"},
+    {"s": "Do the weekly report every Friday at 3pm", "action": "add", "title": ["do the weekly report"], "due": "2026-10-30T15:00", "repeat": "week"},
+    {"s": "Book dentist next month", "action": "add", "title": ["book dentist"], "due": ""},
+    {"s": "Buy milk and call the plumber tomorrow", "action": "clarify", "ask": "several", "parts": 2},
+    {"s": "Add 3 tasks: print the badge, book room B, order lunch", "action": "clarify", "ask": "several", "parts": 3},
+    {"s": "Rename #6 to Call the vendor about the invoice", "action": "update", "num": 6, "change": {"text": "Call the vendor about the invoice"}},
+    {"s": "Make #9 low priority and put it under Home", "action": "update", "num": 9, "change": {"priority": "low", "category": "Home"}},
+    {"s": "Mark #2, #4 and #7 as done", "action": ["complete", "clarify"], "num": 2, "ask": false},
+    {"s": "Do I have anything overdue?", "action": "answer", "filter": {"when": "overdue"}},
+    {"s": "งานไหนสำคัญที่สุดตอนนี้", "action": "answer", "filter": {"priority": "high"}},
+    {"s": "ขอบคุณนะ Max", "action": "smalltalk"}
   ]
 }
