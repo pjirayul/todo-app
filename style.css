@@ -549,6 +549,12 @@ footer { display: flex; justify-content: space-between; align-items: center; mar
   .ib { width: 44px; height: 44px; } /* bigger finger targets */
   .add { padding-left: 14px; }
   .chip { padding: 8px 14px; }
+  /* Footer: each text stays on one line; the counter shrinks (ellipsis) instead of wrapping */
+  footer { gap: 4px; }
+  footer #counter { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .85rem; }
+  footer .link, #clear-done { flex: none; white-space: nowrap; font-size: .8rem; }
+  #clear-done { padding: 10px 8px; }
+  #fest-toggle { padding-left: 0; padding-right: 0; }
   .primary { padding: 12px 16px; }
   .hint-ph { font-size: .85rem; }
   .cmd-msg { font-size: .85rem; padding: 8px 10px; }
