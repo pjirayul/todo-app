@@ -884,7 +884,6 @@ body.fest-halloween .answer-card::after {
 @media (prefers-reduced-motion: no-preference) {
   /* G1: candle flicker, the jack-o'-lanterns' glow breathes (3 s) */
   body.fest-halloween .list::after { animation: fest-candle 3s ease-in-out infinite; }
-  body.fest-halloween .mark { animation: fest-mark 3s ease-in-out infinite; }
   @keyframes fest-candle {
     0%, 100% { opacity: 1; filter: drop-shadow(0 0 5px rgba(255, 181, 71, .6)); }
     35% { opacity: .85; filter: drop-shadow(0 0 2px rgba(255, 181, 71, .3)); }
