@@ -56,6 +56,9 @@ const TEXT = {
     alreadyDone: (n) => `#${n} is already done.`,
     maxAdded: (n, text, when) => `Max added #${n}: ${text}${when ? " · " + when : ""}`, maxUpdated: (n) => `Max updated #${n}`, deleted: (n) => `Deleted #${n}`,
     maxDone: (n) => `Max marked #${n} done`, maxUndone: (n) => `Max reopened #${n}`,
+    repeatLabel: "Repeat", repeatNone: "No repeat", repeatDay: "Daily", repeatWeek: "Weekly", repeatMonth: "Monthly",
+    repeatsMark: { day: "Repeats daily", week: "Repeats weekly", month: "Repeats monthly" },
+    doneNext: (n, next, when) => `Done #${n}. Next: #${next} ${when}`,
     // Ask Max (answers to questions): the filter is turned into words by filterBits() below
     whenLabel: { today: "due today", tomorrow: "due tomorrow", week: "due this week", nextweek: "due next week", weekend: "this weekend", overdue: "overdue", none: "with no date" },
     dateLabel: (d) => `due ${d}`, priLabel: { high: "high priority", low: "low priority" }, catLabel: (c) => c,
@@ -135,6 +138,9 @@ const TEXT = {
     alreadyDone: (n) => `#${n} เสร็จไปแล้ว`,
     maxAdded: (n, text, when) => `Max เพิ่ม #${n}: ${text}${when ? " · " + when : ""} แล้ว`, maxUpdated: (n) => `Max แก้ #${n} แล้ว`, deleted: (n) => `ลบ #${n} แล้ว`,
     maxDone: (n) => `Max ทำเครื่องหมาย #${n} ว่าเสร็จแล้ว`, maxUndone: (n) => `Max เปิด #${n} ใหม่แล้ว`,
+    repeatLabel: "ทำซ้ำ", repeatNone: "ไม่ทำซ้ำ", repeatDay: "ทุกวัน", repeatWeek: "ทุกสัปดาห์", repeatMonth: "ทุกเดือน",
+    repeatsMark: { day: "ทำซ้ำทุกวัน", week: "ทำซ้ำทุกสัปดาห์", month: "ทำซ้ำทุกเดือน" },
+    doneNext: (n, next, when) => `เสร็จแล้ว #${n} ครั้งต่อไป: #${next} ${when}`,
     whenLabel: { today: "วันนี้", tomorrow: "พรุ่งนี้", week: "สัปดาห์นี้", nextweek: "สัปดาห์หน้า", weekend: "สุดสัปดาห์นี้", overdue: "ที่เลยกำหนด", none: "ที่ไม่มีวันที่" },
     dateLabel: (d) => `วันที่ ${d}`, priLabel: { high: "สำคัญ", low: "ไม่รีบ" }, catLabel: (c) => `หมวด ${c}`,
     ansDone: "ที่เสร็จแล้ว", ansAbout: (x) => `เกี่ยวกับ "${x}"`,
@@ -171,10 +177,12 @@ const save = (key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 };
 
-// A task looks like: { id, num, text, done, due, priority, cat, notified, notes, files, steps }
+// A task looks like: { id, num, text, done, due, priority, cat, notified, notes, files, steps, repeat }
+// repeat: "" | "day" | "week" | "month" (the next copy appears when the task is ticked done)
 // steps is the task's checklist from "Break it down": [{ text, done }]
 // detailsAsked: Max already asked the trip details for Break it down (answered or skipped), so not again
-let todos = load("todos", []).map((x) => ({ due: "", priority: "med", cat: "", notified: false, notes: "", files: [], steps: [], detailsAsked: false, ...x }));
+const REPEATS = ["day", "week", "month"];
+let todos = load("todos", []).map((x) => ({ due: "", priority: "med", cat: "", notified: false, notes: "", files: [], steps: [], detailsAsked: false, repeat: "", ...x }));
 
 // Every task gets a number (#1, #2…) to refer to it in commands. Numbers never change and are
 // never reused, even after a delete, so "#3" always means the same task.
@@ -360,6 +368,7 @@ function render() {
             <input class="e-due" type="datetime-local" value="${todo.due}">
             <select class="e-priority">${opt("low")}${opt("med")}${opt("high")}</select>
             <input class="e-cat" list="cat-list" value="${escapeHtml(todo.cat)}" placeholder="${t("category")}">
+            <select class="e-repeat" title="${t("repeatLabel")}" aria-label="${t("repeatLabel")}">${repeatOpts(todo.repeat)}</select>
             <textarea class="e-notes" placeholder="${t("notes")}">${escapeHtml(todo.notes)}</textarea>
             <input class="e-files" type="file" multiple title="Attach files">
             <button type="submit" class="primary">${t("save")}</button>
@@ -380,7 +389,7 @@ function render() {
       <input type="checkbox" class="check" ${todo.done ? "checked" : ""}>
       <div class="body">
         <div class="text" title="${t("editHint")}">${escapeHtml(todo.text)}</div>
-        <div class="meta"><span class="num">#${todo.num}</span>${due}${todo.cat ? `<span class="tag">#${escapeHtml(todo.cat)}</span>` : ""}${progress}</div>
+        <div class="meta"><span class="num">#${todo.num}</span>${due}${todo.cat ? `<span class="tag">#${escapeHtml(todo.cat)}</span>` : ""}${progress}${todo.repeat ? `<span class="repeat-mark"><svg class="i sm" aria-hidden="true"><use href="#i-repeat"/></svg>${t("repeatsMark")[todo.repeat]}</span>` : ""}</div>
         ${todo.notes ? `<div class="notes">${escapeHtml(todo.notes)}</div>` : ""}
         ${todo.files.length ? `<div class="files">${todo.files.map((f) =>
           `<a class="file" href="#" data-file="${f.id}" title="Open"><svg class="i sm" aria-hidden="true"><use href="#i-paperclip"/></svg>${escapeHtml(f.name)}<button class="rm" data-rm="${f.id}" title="Remove" aria-label="Remove"><svg class="i sm" aria-hidden="true"><use href="#i-x"/></svg></button></a>`).join("")}</div>` : ""}
@@ -747,6 +756,52 @@ function simpleCommand(text) {
 
 // Carry out a command from the server (or simpleCommand). Returns a message to show,
 // "" when it worked, or null when there is nothing more to show (e.g. waiting for Yes/No).
+// The Repeat select in the edit form: none / daily / weekly / monthly
+const repeatOpts = (current) => [["", "repeatNone"], ["day", "repeatDay"], ["week", "repeatWeek"], ["month", "repeatMonth"]]
+  .map(([v, key]) => `<option value="${v}" ${current === v ? "selected" : ""}>${t(key)}</option>`).join("");
+
+// Next due date of a repeating task. Same rule as server.py next_due: step at least once, then until it is
+// in the future (a daily task ticked 3 days late gives tomorrow). The time of day is kept.
+function nextDue(due, repeat, now = new Date()) {
+  const [date, time] = due.split("T");
+  const [y, m, d] = date.split("-").map(Number);
+  let step = 0;
+  let next;
+  do {
+    step++;
+    if (repeat === "month") {
+      // same day next month; the 31st becomes the month's last day (day 0 of the month after = its last day)
+      const target = new Date(y, m - 1 + step, 1);
+      const last = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+      target.setDate(Math.min(d, last));
+      next = target;
+    } else {
+      next = new Date(y, m - 1, d + step * (repeat === "week" ? 7 : 1));
+    }
+    const [hh, mm] = time.split(":").map(Number);
+    next.setHours(hh, mm, 0, 0);
+  } while (next <= now && step < 5000);
+  return `${next.toLocaleDateString("en-CA")}T${time}`;
+}
+
+// ONE place that marks a task done (checkbox, Max, reminder banner, focus timer). A repeating task leaves a
+// fresh copy with the next date and MOVES the repeat to it, so the old one is a plain done task (ticking it
+// again can never make a second copy). The copy has no attached files (they would be shared and deleted twice).
+// Returns the copy, or null. Callers do backup() first and update() after.
+function markDone(todo) {
+  todo.done = true;
+  if (!REPEATS.includes(todo.repeat) || !todo.due) return null;
+  const copy = {
+    ...todo, id: Date.now() + Math.random(), num: newNum(), done: false, notified: false, files: [],
+    due: nextDue(todo.due, todo.repeat),
+    steps: todo.steps.map((s) => ({ text: s.text, done: false })),
+  };
+  todo.repeat = "";
+  todos.push(copy);
+  showMessage(spooky(t("doneNext")(todo.num, copy.num, shortDate(copy.due))));
+  return copy;
+}
+
 function applyCommand(cmd) {
   if (cmd.missing !== undefined) {
     // Not found, or several tasks match: don't guess
@@ -764,7 +819,8 @@ function applyCommand(cmd) {
     // Nothing to change: say so instead of "Max reopened #4" for a task that was never done
     if (todo.done === (cmd.action === "complete")) return t(todo.done ? "alreadyDone" : "notDoneYet")(todo.num);
     backup(`before ${cmd.action === "complete" ? "done" : "undo"} #${todo.num}`);
-    todo.done = cmd.action === "complete";
+    if (cmd.action === "complete") cmd.copy = markDone(todo); // finishCommand keeps the "Next: #N" message
+    else todo.done = false;
   } else {
     // update: the server only sends the fields the command mentioned, so nothing else is wiped
     const c = cmd.changes;
@@ -809,7 +865,7 @@ function finishCommand(cmd) {
     $("todo-input").value = ""; // worked: clear the box
     // Say what was done, also for the simple commands that work without AI ("done #2")
     const done = { complete: "maxDone", uncomplete: "maxUndone", update: "maxUpdated" }[cmd.action];
-    if (done) showMessage(spooky(t(done)(cmd.num)));
+    if (done && !cmd.copy) showMessage(spooky(t(done)(cmd.num))); // a repeat copy already said "Done. Next: ..."
   }
   if (msg) showMessage(msg, !cmd.choices?.length); // "Which one?" is not a warning
   // A Yes/No question is waiting: put the focus on Yes, so Enter confirms the delete
@@ -819,7 +875,7 @@ function finishCommand(cmd) {
 function addTask(task, problem = "") {
   backup(`before add "${task.text.slice(0, 40)}"`);
   const num = newNum();
-  todos.push({ id: Date.now() + Math.random(), num, text: task.text, done: false, due: task.due || "", priority: task.priority || "med", cat: task.category || "", notified: false, notes: "", files: [], steps: [], detailsAsked: false });
+  todos.push({ id: Date.now() + Math.random(), num, text: task.text, done: false, due: task.due || "", priority: task.priority || "med", cat: task.category || "", notified: false, notes: "", files: [], steps: [], detailsAsked: false, repeat: REPEATS.includes(task.repeat) ? task.repeat : "" });
   $("todo-input").value = "";
   update();
   flash(num);
@@ -1311,7 +1367,8 @@ $("todo-list").addEventListener("click", async (e) => {
   } else if (e.target.classList.contains("check")) {
     backup(`before ${e.target.checked ? "done" : "undo"} #${findTodo(e.target).num}`);
     const ticked = findTodo(e.target);
-    ticked.done = e.target.checked;
+    if (e.target.checked) markDone(ticked);
+    else ticked.done = false;
     update();
     if (ticked.done) ghostPoof(ticked.id);
   } else if (e.target.classList.contains("delete")) {
@@ -1430,6 +1487,8 @@ $("todo-list").addEventListener("submit", async (e) => {
   todo.priority = form.querySelector(".e-priority").value;
   todo.cat = form.querySelector(".e-cat").value.trim();
   todo.notes = form.querySelector(".e-notes").value.trim();
+  todo.repeat = form.querySelector(".e-repeat").value;
+  if (todo.repeat && !todo.due) todo.due = `${todayKey()}T${"09:00"}`; // a repeating task always has a due date
   for (const file of form.querySelector(".e-files").files) {
     const id = `${todo.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     await putFile(id, file);
@@ -1654,7 +1713,7 @@ $("remind-snooze").addEventListener("click", () => {
 $("remind-close").addEventListener("click", () => { ringing.shift(); drawRemind(); });
 $("remind-done").addEventListener("click", () => {
   const todo = todos.find((x) => x.id === ringing[0]);
-  if (todo) { backup(`before done #${todo.num}`); todo.done = true; }
+  if (todo) { backup(`before done #${todo.num}`); markDone(todo); }
   $("remind-opts").hidden = true;
   update(); // render() redraws the banner
 });
@@ -1768,7 +1827,7 @@ $("focus-later").addEventListener("click", stopFocus);
 $("focus-done").addEventListener("click", () => {
   const todo = focusTodo();
   stopFocus();
-  if (todo && !todo.done) { backup(`before done #${todo.num}`); todo.done = true; update(); }
+  if (todo && !todo.done) { backup(`before done #${todo.num}`); markDone(todo); update(); }
 });
 
 // ---------- 9. Task backups ----------
@@ -1829,6 +1888,7 @@ function cleanTodos(list) {
       ? x.steps.filter((s) => s && typeof s.text === "string").map((s) => ({ text: s.text, done: s.done === true }))
       : [],
     detailsAsked: x.detailsAsked === true,
+    repeat: REPEATS.includes(x.repeat) ? x.repeat : "", // only the 3 known values, else no repeat
   }));
 }
 
