@@ -833,10 +833,10 @@ function addTask(task, problem = "") {
 // ---------- Ask Max: answers to questions about the tasks ----------
 // Max (server.py) recognises the question and does the counting; this draws the answer card.
 // Questions never add a task. Offline (GitHub Pages, server off, AI limit) localQuestion() below
-// answers the simple ones (today / tomorrow / this week / overdue / priority / done) by itself.
+// answers the simple ones (today / tomorrow / week / weekend / a weekday / next friday / in N days / overdue / priority / done) by itself.
 const QUESTION_WORDS = /^(what|what's|whats|which|show|list|how many|how much|anything|any|is there|are there|do i have|have i got|tell me|give me)\b|มีอะไร|อะไรบ้าง|กี่งาน|งานอะไร|งานค้าง|เลยกำหนด|เกินกำหนด|^แสดง|ทำอะไรดี|ต้องทำ|ทำอะไร|\bwhat (to do|should i|shall i|do i (have|need|got)|am i (doing|supposed)|have i got|else)\b|\bwhat(')?s? (is )?(my|on|the plan)\b|^my (tasks?|to-?dos?|plan|day|schedule)\b/;
 // Same as GREETING in server.py: "Hi max, what to do today" -> "what to do today". Max (server) strips it too.
-const GREETING = /^\s*(?:(?:hi|hey|hello|yo|ok|okay)(?=[\s,!.]|$)[\s,!.]*(?:max(?=[\s,!.:]|$)[\s,!.:]*)?|max\s*[,:!]\s*|(?:สวัสดี|หวัดดี|โอเค)(?:ครับ|ค่ะ|คะ)?\s*(?:max|แม็กซ์|แม็ก)?\s*(?:ครับ|ค่ะ|คะ)?[\s,!]*|(?:แม็กซ์|แม็ก)(?:ครับ|ค่ะ|คะ)?\s*[,:!]?\s*)/i;
+const GREETING = /^\s*(?:(?:hi|hey|hello|yo|ok|okay|good\s+(?:morning|afternoon|evening))(?=[\s,!.]|$)[\s,!.]*(?:max(?=[\s,!.:]|$)[\s,!.:]*)?|morning(?=\s+max(?:[\s,!.:]|$))[\s,!.]*(?:max[\s,!.:]*)?|max\s*[,:!]\s*|(?:สวัสดี|หวัดดี|โอเค|อรุณสวัสดิ์)(?:ครับ|ค่ะ|คะ)?\s*(?:max|แม็กซ์|แม็ก)?\s*(?:ครับ|ค่ะ|คะ)?[\s,!]*|(?:แม็กซ์|แม็ก)(?:ครับ|ค่ะ|คะ)?\s*[,:!]?\s*)/i;
 const stripGreeting = (text) => text.replace(GREETING, "").trim() || text;
 // "hi max" alone: nothing is left after the greeting, so it is not a task
 const isGreetingOnly = (text) => GREETING.test(text) && !text.replace(GREETING, "").trim();
@@ -857,7 +857,8 @@ const shortDate = (due) => new Date(due).toLocaleString(t("locale"), { day: "num
 // First and last day of today / tomorrow / this week (until Sunday) / next week, as YYYY-MM-DD
 function dayRange(when) {
   const weekday = (new Date().getDay() + 6) % 7; // Monday = 0
-  const offsets = { today: [0, 0], tomorrow: [1, 1], week: [0, 6 - weekday], nextweek: [7 - weekday, 13 - weekday] }[when];
+  // weekend = the coming Saturday and Sunday (on a weekend: today until Sunday), same as due_range() in server.py
+  const offsets = { today: [0, 0], tomorrow: [1, 1], week: [0, 6 - weekday], weekend: [Math.max(5 - weekday, 0), 6 - weekday], nextweek: [7 - weekday, 13 - weekday] }[when];
   return offsets.map((n) => { const d = new Date(); d.setDate(d.getDate() + n); return dateKey(d); });
 }
 
@@ -869,28 +870,58 @@ function matchesFilter(x, f) {
   if (f.text && !x.text.toLowerCase().includes(f.text)) return false;
   if (f.when === "none") return !x.due;
   if (f.when === "overdue") return !!x.due && new Date(x.due) < new Date();
-  if (["today", "tomorrow", "week", "nextweek"].includes(f.when)) {
-    const [first, last] = dayRange(f.when);
+  if (["today", "tomorrow", "week", "weekend", "nextweek", "date"].includes(f.when)) {
+    const [first, last] = f.when === "date" ? [f.date, f.date] : dayRange(f.when);
     return !!x.due && x.due.slice(0, 10) >= first && x.due.slice(0, 10) <= last;
   }
   return true;
+}
+
+// Weekday names for the offline reader (Monday = 0). Thai Sunday needs "วัน": "อาทิตย์" alone means "week".
+const DAY_NAMES = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+const TH_DAY_NAMES = ["จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์", "วันอาทิตย์"];
+const weekdayIn = (low) => {
+  const en = low.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/);
+  if (en) return DAY_NAMES.indexOf(en[1]);
+  const th = low.match(/จันทร์|อังคาร|พุธ|พฤหัส|ศุกร์|เสาร์|วันอาทิตย์/);
+  return th ? TH_DAY_NAMES.indexOf(th[0]) : -1;
+};
+// Same as weekday_date() in server.py: "friday" = on or after today, "next friday" = strictly after today
+function weekdayKey(index, after) {
+  const gap = index - (new Date().getDay() + 6) % 7;
+  const d = new Date();
+  d.setDate(d.getDate() + (after ? (((gap - 1) % 7) + 7) % 7 + 1 : ((gap % 7) + 7) % 7));
+  return dateKey(d);
 }
 
 // A small offline copy of the server's question reader. null = not a question, or too tricky for here.
 function localQuestion(text) {
   const low = stripGreeting(text).toLowerCase().trim();
   if (!(QUESTION_WORDS.test(low) || low.endsWith("?")) || /#\s*\d/.test(low)) return null;
-  if (/monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d(st|nd|rd|th)\b|จันทร์|อังคาร|พุธ|พฤหัส|ศุกร์|เสาร์|วันอาทิตย์|วันที่|มะรืน/.test(low)) return null;
+  // Days it cannot read (ordinal "5th", a month, yesterday): leave them to the server
+  if (/\d(st|nd|rd|th)\b|วันที่|yesterday|\blast (week|month)|\bmonth\b|\d{1,2}\/\d{1,2}|(jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*\d|\d\s*(jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)|เมื่อวาน|เดือน/.test(low)) return null;
   const f = { when: "", date: "", priority: "", cat: "", status: "open", text: "" };
   let rest = low;
-  const about = low.match(/(?:about|regarding|เกี่ยวกับ)\s*(.+?)(?=\s+(?:due|today|tomorrow|this|next|overdue)\b|[?.!]|$)/);
+  const about = low.match(/(?:about|regarding|containing|เกี่ยวกับ|เรื่อง)\s*(.+?)(?=\s+(?:due|today|tomorrow|this|next|on|by|before|overdue|high|urgent|in)\b|[?.!]|$)/);
   if (about) { f.text = about[1].trim(); rest = low.replace(about[0], " "); }
-  if (/overdue|\blate\b|เลยกำหนด|เกินกำหนด|งานค้าง/.test(rest)) f.when = "overdue";
+  const inDays = rest.match(/\bin (\d+) days?\b|อีก\s*(\d+)\s*วัน/);
+  const nextDay = rest.match(/\bnext (monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/) || rest.match(/(จันทร์|อังคาร|พุธ|พฤหัส|ศุกร์|เสาร์|วันอาทิตย์)(?:บดี)?หน้า/);
+  const dateAt = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return dateKey(d); };
+  // Same order as question_filter() in server.py
+  if (/overdue|\blate\b|past due|เลยกำหนด|เกินกำหนด|งานค้าง|ค้างอยู่/.test(rest)) f.when = "overdue";
+  else if (/no (due )?date|without (a )?(due )?date|undated|ไม่มีวันที่|ไม่มีกำหนด/.test(rest)) f.when = "none";
+  else if (/day after tomorrow|มะรืน/.test(rest)) { f.when = "date"; f.date = dateAt(2); }
+  else if (nextDay) { f.when = "date"; f.date = weekdayKey(weekdayIn(nextDay[0]), true); }
+  else if (/\bweekend\b|สุดสัปดาห์|เสาร์อาทิตย์/.test(rest)) f.when = "weekend";
+  else if (inDays) { f.when = "date"; f.date = dateAt(Number(inDays[1] || inDays[2])); }
+  else if (/in (\d+|a|one|two|three) weeks?|อีก\s*\d+\s*(สัปดาห์|อาทิตย์)|end of (the |this )?month|สิ้นเดือน|ปลายเดือน/.test(rest)) return null; // server counts these
   else if (/next week|สัปดาห์หน้า|อาทิตย์หน้า/.test(rest)) f.when = "nextweek";
   else if (/\bweek\b|สัปดาห์นี้|อาทิตย์นี้/.test(rest)) f.when = "week";
   else if (/tomorrow|พรุ่งนี้/.test(rest)) f.when = "tomorrow";
   else if (/\btoday\b|\btonight\b|วันนี้|คืนนี้/.test(rest)) f.when = "today";
+  else if (weekdayIn(rest) >= 0) { f.when = "date"; f.date = weekdayKey(weekdayIn(rest), false); }
   if (/\b(high|urgent|important|asap)\b|ด่วน|สำคัญ/.test(rest)) f.priority = "high";
+  else if (/\blow\b|ไม่รีบ/.test(rest)) f.priority = "low";
   if (/\b(done|completed|finished)\b|เสร็จแล้ว/.test(rest)) f.status = "done";
   f.cat = (todos.map((x) => x.cat.toLowerCase()).find((c) => c && rest.includes(c))) || "";
   const taskWord = /\b(tasks?|to-?dos?|left|remaining|pending|outstanding|open|have)\b|งาน/.test(low);
