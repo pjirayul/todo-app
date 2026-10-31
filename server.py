@@ -465,6 +465,9 @@ def own_words(sentence: str) -> list:
     return [w for w in s.split() if w.lower().strip(",.!?") not in skip and not TIME_LIKE.fullmatch(w.lower().strip(",.!?"))]
 
 
+OWN_WORDS_CHECK_ONLY = True   # job 0h-2 S4a switch
+
+
 def keep_own_words(title: str, sentence: str) -> str:
     """Safety net: the AI sometimes drops real words ("TEST dentist friday 3pm" -> "TEST").
     If a word the owner typed is missing from the title, use the owner's own words instead."""
@@ -479,7 +482,11 @@ def keep_own_words(title: str, sentence: str) -> str:
         return any(difflib.SequenceMatcher(None, low, t).ratio() >= 0.75 for t in title_words)
 
     thai_typed = len(THAI_LETTERS.findall(" ".join(words)))
-    if words and (not all(present(w) for w in words) or len(THAI_LETTERS.findall(title)) < thai_typed * 0.6):
+    missing = sum(1 for w in words if not present(w))
+    # Experiment S4a (OWN_WORDS_CHECK_ONLY): one lost word is the AI's tidy-up; only when more than a third is gone
+    # do we fall back to the owner's own words. False = the old rule (any lost word).
+    too_many = missing > len(words) / 3 if OWN_WORDS_CHECK_ONLY else missing > 0
+    if words and (too_many or len(THAI_LETTERS.findall(title)) < thai_typed * 0.6):
         return " ".join(words)
     return title
 
