@@ -539,12 +539,34 @@ def clean_sentence(sentence: str) -> str:
     return fix_date_typos(strip_lead_in(sentence))
 
 
-def ai_prompt(sentence: str, categories: list, examples: str = None):
-    """The fixed start (examples, About me, categories) comes first so Ollama can reuse it. Returns (prompt, known, memory)."""
+# Job 0h-2 S3: the AI sees the newest open task titles, so "the Ploy thing is finished" can name a real task.
+# Ollama only (private titles never go to an online API). False = the old prompt without the list.
+CONTEXT_TASKS = True
+CONTEXT_MAX_TASKS, CONTEXT_MAX_CHARS, CONTEXT_TITLE_CHARS = 10, 300, 40
+
+
+def open_titles(tasks: list) -> str:
+    """Up to 10 newest open titles, each trimmed, about 300 characters in all (the 3B gets lost in long prompts)."""
+    newest = sorted((t for t in tasks or [] if not t.get("done") and t.get("text")), key=lambda t: t.get("num", 0), reverse=True)
+    out, size = [], 0
+    for t in newest[:CONTEXT_MAX_TASKS]:
+        title = " ".join(str(t["text"]).split())[:CONTEXT_TITLE_CHARS]
+        if size + len(title) + 2 > CONTEXT_MAX_CHARS:
+            break
+        out.append(title)
+        size += len(title) + 2
+    return "; ".join(out)
+
+
+def ai_prompt(sentence: str, categories: list, examples: str = None, tasks: list = None):
+    """The fixed start (examples, About me, categories) comes first so Ollama can reuse it; the open tasks change
+    most often, so they come last, right before the sentence. Returns (prompt, known, memory)."""
     memory = load_memory()
     known = list(dict.fromkeys(categories + memory["categories"]))[:30]  # existing + the owner's own, no repeats
     about = memory_summary(memory)
-    prompt = f"{examples or EXAMPLES}\n\n{about + chr(10) if about else ''}Existing categories: {', '.join(known) or 'none'}\nSentence: {sentence}"
+    titles = open_titles(tasks) if CONTEXT_TASKS and AI_PROVIDER == "ollama" else ""
+    prompt = (f"{examples or EXAMPLES}\n\n{about + chr(10) if about else ''}Existing categories: {', '.join(known) or 'none'}\n"
+              f"{'Open tasks: ' + titles + chr(10) if titles else ''}Sentence: {sentence}")
     return prompt, known, memory
 
 
@@ -1183,6 +1205,8 @@ UNDERSTAND_INSTRUCTIONS = INSTRUCTIONS + (
     "reply: only for chat, ONE short friendly sentence (max 80 characters) in the language of the user, no emoji, "
     "that invites them to give a task; else \"\". Always fill text, whatever the intent."
 )
+# Added only when the prompt really has an "Open tasks" line (a changed system text also changes plain adds)
+CONTEXT_NOTE = "\nOpen tasks lists tasks that already exist: use it only to word target. Never copy it into text."
 
 
 def _example(sentence: str, **fields) -> str:
@@ -1220,8 +1244,12 @@ def understand(s: str, now: str, categories: list, tasks: list, greeted: bool = 
     """One AI call, then Python checks. Returns the result dict, or None = "not sure, use the old road".
     rules_result: Python already read a command but could not find the task (the AI's target may help)."""
     sentence = clean_sentence(s)
-    prompt, known, memory = ai_prompt(sentence, categories, UNDERSTAND_EXAMPLES)
-    r = parse_with_ollama(prompt, UNDERSTAND_INSTRUCTIONS, UNDERSTAND_SCHEMA, timeout=60)
+    # The list only helps when the sentence may talk about an existing task (a command word); a plain add keeps the
+    # short prompt: in the exam the list leaked into titles of plain adds and cost speed
+    may_name_task = any(p.search(s.lower()) for p in INTENT_WORDS.values())
+    prompt, known, memory = ai_prompt(sentence, categories, UNDERSTAND_EXAMPLES, tasks if may_name_task else None)
+    note = CONTEXT_NOTE if "\nOpen tasks: " in prompt else ""
+    r = parse_with_ollama(prompt, UNDERSTAND_INSTRUCTIONS + note, UNDERSTAND_SCHEMA, timeout=60)
     as_new = lambda: finish_add(check_task(dict(r), sentence, now, known, memory), s)   # the card's "Add as new task" button
     tokens = r.get("tokens", 0)
     low = " ".join(s.split()).lower()   # the owner's raw words (fix_date_typos would turn "many" into "may")
