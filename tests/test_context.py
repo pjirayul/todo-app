@@ -34,9 +34,10 @@ class OwnWordsCheckOnly(unittest.TestCase):
         try:
             server.OWN_WORDS_CHECK_ONLY = True
             self.assertEqual(server.keep_own_words("Take vitamins", "take vitamins every morning"), "Take vitamins")
-            self.assertEqual(server.keep_own_words("Take", "take vitamins every morning please"), "take vitamins every please")  # "morning" is a time word, not a title word
+            # "every morning" is a repeat (job 7), not title words: only "vitamins" is lost, 1 of 3 words
+            self.assertEqual(server.keep_own_words("Take", "take vitamins every morning please"), "Take")
             server.OWN_WORDS_CHECK_ONLY = False
-            self.assertEqual(server.keep_own_words("Take vitamins", "take vitamins every morning"), "take vitamins every")
+            self.assertEqual(server.keep_own_words("Take", "take vitamins every morning"), "take vitamins")
         finally:
             server.OWN_WORDS_CHECK_ONLY = old
 

@@ -256,8 +256,8 @@ def fix_date_typos(sentence: str) -> str:
 
 # Parts of the day: when no clock time is said, Python uses the owner's own times (About me).
 # Thai words are kept specific ("ตอนเย็น", not "เย็น", which is also in ตู้เย็น = fridge).
-DAY_PARTS = ((r"\b(to)?night\b|คืนนี้", "tonight"), (r"\bevening\b|ตอนเย็น|เย็นนี้|พรุ่งนี้เย็น", "evening"),
-             (r"\bafternoon\b|ตอนบ่าย", "afternoon"), (r"\bmorning\b|ตอนเช้า|เช้านี้|พรุ่งนี้เช้า", "morning"))
+DAY_PARTS = ((r"\b(to)?night\b|คืนนี้|ทุกคืน", "tonight"), (r"\bevening\b|ตอนเย็น|เย็นนี้|พรุ่งนี้เย็น|ทุกเย็น", "evening"),
+             (r"\bafternoon\b|ตอนบ่าย|ทุกบ่าย", "afternoon"), (r"\bmorning\b|ตอนเช้า|เช้านี้|พรุ่งนี้เช้า|ทุกเช้า", "morning"))
 # Thai clock words: Python reads them (the AI turned "บ่ายสาม" into 13:00 instead of 15:00).
 # Each pattern gives the hour; "ครึ่ง" right after it means half past.
 THAI_NUMS = {"หนึ่ง": 1, "สอง": 2, "สาม": 3, "สี่": 4, "ห้า": 5, "หก": 6, "เจ็ด": 7, "แปด": 8, "เก้า": 9,
@@ -363,6 +363,53 @@ def days_ahead(lower: str) -> int:
     return int(m.group(1) or m.group(2)) if m else 0
 
 
+# ---------- Repeating tasks (job 7) ----------
+# Python reads the repeat words (a closed set of calendar units, like WEEKDAYS); the AI is never asked.
+# repeat = "" | "day" | "week" | "month". The weekday / day of month / time come from the task's due date (the anchor).
+# Not v1: "every other day", "every 2 weeks", "weekdays": no match = a plain task. "ทุกวันนี้" (nowadays) is NOT a repeat.
+_EN_DAYS = "|".join(d.lower() for d in WEEKDAYS)
+_TH_DAYS = "จันทร์|อังคาร|พุธ|พฤหัส|ศุกร์|เสาร์|อาทิตย์"
+_ORDINAL = r"\d{1,2}(?:st|nd|rd|th)"
+REPEAT_MONTH = re.compile(r"\b(?:every|each)\s+month\b(?:\s+on\s+the\s+" + _ORDINAL + r")?|\bmonthly\b|\bevery\s+" + _ORDINAL + r"\b|"
+                          r"ทุกเดือน|ทุกวันที่\s*\d{1,2}")
+REPEAT_WEEK = re.compile(r"\b(?:every|each)\s+(?:week|" + _EN_DAYS + r")\b|\bweekly\b|ทุกวัน(?:" + _TH_DAYS + r")|ทุก(?:สัปดาห์|อาทิตย์)")
+REPEAT_DAY = re.compile(r"\b(?:every|each)\s+(?:day|morning|afternoon|evening|night)\b|\b(?:daily|nightly)\b|ทุกวัน(?!นี้)|ทุก(?:เช้า|บ่าย|เย็น|คืน)")
+# All of them in one pattern: these words are not part of the title ("gym every monday" -> "gym")
+REPEAT_WORDS = re.compile("|".join(p.pattern for p in (REPEAT_MONTH, REPEAT_WEEK, REPEAT_DAY)))
+
+
+def read_repeat(lower: str):
+    """'gym every monday' -> ('week', {weekday fields}); ('', {}) when no repeat word is there.
+    The second part is what the task's date words become: the named weekday / day of month ({} = use today)."""
+    if REPEAT_MONTH.search(lower):
+        m = re.search(r"วันที่\s*(\d{1,2})|\b(\d{1,2})(?:st|nd|rd|th)\b", lower)
+        day = int(m.group(1) or m.group(2)) if m else 0
+        return "month", ({"when": "date", "day": day, "month": 0, "next_month": False} if 1 <= day <= 31 else {})
+    if REPEAT_WEEK.search(lower):
+        day = weekday_in(lower)
+        return "week", ({"when": "weekday", "weekday": day, "next_week": False, "week_after": False} if day else {})
+    if REPEAT_DAY.search(lower):
+        return "day", {}
+    return "", {}
+
+
+def next_due(due: str, repeat: str, now: datetime) -> str:
+    """The next due date of a repeating task: one step, then more steps until it is in the future
+    (a daily task ticked 3 days late gives tomorrow, not a backlog). Same rule as the JS copy nextDue."""
+    d = datetime.strptime(due, "%Y-%m-%dT%H:%M")
+    if repeat not in ("day", "week", "month"):
+        return due   # unknown value: change nothing (and never loop forever)
+    while True:
+        if repeat == "month":   # same day next month; the 31st becomes the month's last day (28th-30th)
+            first = add_months(d.replace(day=1), 1)
+            last_day = (add_months(first, 1) - timedelta(days=1)).day
+            d = first.replace(day=min(d.day, last_day), hour=d.hour, minute=d.minute)
+        else:
+            d += timedelta(days=1 if repeat == "day" else 7)
+        if d > now:
+            return d.strftime("%Y-%m-%dT%H:%M")
+
+
 def english_time(text: str) -> str:
     """'5pm' -> '17:00', '9:30 am' -> '09:30', '17:45' -> '17:45', 'noon' -> '12:00' ('' if none)."""
     m = re.search(r"\b(\d{1,2})(?:[:.]([0-5]\d))?\s*(am|pm)\b", text)
@@ -457,7 +504,7 @@ def own_words(sentence: str) -> list:
     """The owner's words without the date/time/priority words Python knows: 'TEST dentist friday 3pm' -> TEST, dentist."""
     skip = set(DATE_WORDS) | set(SHORTCUTS) | set(SHORT_DAYS) | set(PRIORITY_WORDS) | \
         {"am", "pm", "at", "on", "by", "in", "next", "this", "after", "day", "days", "noon", "night", "midnight"}
-    s = re.sub(THAI_DATE_WORDS, " ", sentence)
+    s = re.sub(THAI_DATE_WORDS, " ", REPEAT_WORDS.sub(" ", sentence))   # "every monday" / "ทุกวัน" are not title words
     for pattern in SPECIAL_DAYS + (DAYS_AHEAD,):
         s = pattern.sub(" ", s)   # "this weekend", "in 2 weeks", "end of month" are dates, not title words
     s = re.sub(r"(on )?(the )?\d{1,2}(st|nd|rd|th)\b", " ", s)   # "pay rent on the 5th"
@@ -595,6 +642,7 @@ def check_task(task: dict, sentence: str, now: str, known: list, memory: dict) -
     Shared by parse_task (one task per call) and understand() (one call for every kind of sentence)."""
     # Common day words are certain, so they override the AI
     lower = sentence.lower()
+    repeat, repeat_day = read_repeat(lower)   # "every monday" / "ทุกเช้า": Python reads it, the AI never does
     # A named weekday is certain too: "วันศุกร์" on a Thursday is tomorrow, not next week's Friday
     day = weekday_in(lower)
     if day and task.get("when") != "date":
@@ -619,6 +667,12 @@ def check_task(task: dict, sentence: str, now: str, known: list, memory: dict) -
     # Only a time ("ส่งรายงานบ่ายสาม", "call mom at 5pm"): today, like "tonight"
     if not DAY_HINTS.search(lower):
         task["when"] = "today" if time_said(lower) else "none"
+    if repeat:   # a repeating task always has a due; the named weekday / day of month is its anchor
+        named_day = weekday_in(lower) or days_ahead(lower) or special_day(lower) or any(w in lower for words, _ in DAY_WORDS for w in words)
+        if repeat_day:
+            task.update(repeat_day)
+        elif not named_day:
+            task["when"] = "today"   # "every day" / "every week": the AI may have invented a day
     # Small models sometimes slip; keep the result safe for the app
     title = strip_lead_in(task.get("text") or sentence)  # the AI may put "Remind me to" back
     if THAI_LETTERS.search(sentence) and not THAI_LETTERS.search(title):
@@ -628,11 +682,18 @@ def check_task(task: dict, sentence: str, now: str, known: list, memory: dict) -
         clean = re.sub(THAI_DATE_WORDS, " ", title)
         clean = re.sub(r"\s(เช้า|เย็น|บ่าย|ค่ำ|ดึก)(\s|$)", " ", " " + clean + " ")
         title = " ".join(clean.split()) or title
+    if repeat:   # "gym every monday" -> "gym": the repeat is its own field now
+        title = " ".join(REPEAT_WORDS.sub(" ", title).split()) or title
     title = keep_own_words(title, sentence)
     title = keep_capitals(title, sentence)
+    now_time = datetime.strptime(now[:16], "%Y-%m-%dT%H:%M")
+    due = resolve_due(task, now_time, memory["times"])
+    if repeat and due and due <= now[:16]:
+        due = next_due(due, repeat, now_time)   # "every day 7am" at 14:30: the first one is tomorrow, not already late
     return {
         "text": title[:1].upper() + title[1:],  # "pay rent" -> "Pay rent"
-        "due": resolve_due(task, datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"), memory["times"]),
+        "due": due,
+        "repeat": repeat if due else "",   # no date, no repeat (should not happen: a repeat always gets a due)
         "time": task.get("time", "") if HHMM.fullmatch(str(task.get("time", ""))) else "",  # used by updates
         "priority": task.get("priority") if task.get("priority") in ("low", "med", "high") else "med",
         "category": pick_category(task.get("category", ""), sentence, known),
@@ -2095,8 +2156,9 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.from_our_page():
             return
         try:
-            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-            if "todos" in body and not isinstance(body["todos"], list):
+            raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))   # no body at all = back up the database
+            body = json.loads(raw) if raw else {}
+            if not isinstance(body, dict) or ("todos" in body and not isinstance(body["todos"], list)):
                 return self.send_json({"error": "todos must be a list"}, 400)
             self.send_json({"ok": True, "name": save_backup(body)})
         except Exception as e:
@@ -2196,7 +2258,8 @@ def open_db():
         created TEXT NOT NULL,
         updated TEXT NOT NULL,
         steps TEXT NOT NULL DEFAULT '[]',     -- checklist as JSON: [{"text": "...", "done": false}]
-        details_asked INTEGER NOT NULL DEFAULT 0)""")  # Max already asked the trip details (or the owner skipped)
+        details_asked INTEGER NOT NULL DEFAULT 0,  -- Max already asked the trip details (or the owner skipped)
+        repeat TEXT NOT NULL DEFAULT '')""")      # '' | day | week | month: the next copy is made when it is ticked
     # Databases made before "Break it down" have no steps column yet: add it (existing tasks get [])
     columns = [row[1] for row in con.execute("PRAGMA table_info(tasks)")]
     if "steps" not in columns:
@@ -2205,6 +2268,10 @@ def open_db():
     # Same for "Max asks when unsure": existing tasks get 0 (not asked yet)
     if "details_asked" not in columns:
         con.execute("ALTER TABLE tasks ADD COLUMN details_asked INTEGER NOT NULL DEFAULT 0")
+        con.commit()
+    # Same for repeating tasks (job 7): existing tasks do not repeat
+    if "repeat" not in columns:
+        con.execute("ALTER TABLE tasks ADD COLUMN repeat TEXT NOT NULL DEFAULT ''")
         con.commit()
     con.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")  # nextNum, version
     return con
@@ -2218,11 +2285,11 @@ def get_meta(con, key, default):
 def load_tasks() -> dict:
     con = open_db()
     try:
-        rows = con.execute("SELECT id, num, text, done, due, priority, cat, notified, notes, files, steps, details_asked "
+        rows = con.execute("SELECT id, num, text, done, due, priority, cat, notified, notes, files, steps, details_asked, repeat "
                            "FROM tasks ORDER BY sort").fetchall()
         todos = [{"id": r[0], "num": r[1], "text": r[2], "done": bool(r[3]), "due": r[4], "priority": r[5],
                   "cat": r[6], "notified": bool(r[7]), "notes": r[8], "files": json.loads(r[9]),
-                  "steps": json.loads(r[10]), "detailsAsked": bool(r[11])} for r in rows]
+                  "steps": json.loads(r[10]), "detailsAsked": bool(r[11]), "repeat": r[12]} for r in rows]
         return {"todos": todos, "nextNum": get_meta(con, "nextNum", 1), "version": get_meta(con, "version", 0)}
     finally:
         con.close()
@@ -2256,6 +2323,7 @@ def clean_tasks(todos):
             "steps": [{"text": s["text"][:200], "done": s.get("done") is True}
                       for s in steps if isinstance(s, dict) and isinstance(s.get("text"), str)][:30],
             "detailsAsked": t.get("detailsAsked") is True,
+            "repeat": t.get("repeat") if t.get("repeat") in ("day", "week", "month") else "",   # a page that does not know it sends none
         })
     return clean
 
@@ -2277,17 +2345,17 @@ def _save_tasks(tasks: list, next_num, base_version):
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             # Keep each task's created time, and only touch "updated" when the task really changed
             old = {r[0]: r[1:] for r in con.execute(
-                "SELECT num, id, text, done, due, priority, cat, notes, files, notified, steps, details_asked, created, updated FROM tasks")}
+                "SELECT num, id, text, done, due, priority, cat, notes, files, notified, steps, details_asked, repeat, created, updated FROM tasks")}
             con.execute("DELETE FROM tasks")
             for sort, t in enumerate(tasks):
                 values = (t["id"], t["text"], int(t["done"]), t["due"], t["priority"], t["cat"], t["notes"],
                           json.dumps(t["files"], ensure_ascii=False), int(t["notified"]),
-                          json.dumps(t["steps"], ensure_ascii=False), int(t["detailsAsked"]))
+                          json.dumps(t["steps"], ensure_ascii=False), int(t["detailsAsked"]), t.get("repeat", ""))
                 before = old.get(t["num"])
                 created = before[-2] if before else now
                 updated = before[-1] if before and tuple(before[:-2]) == values else now
-                con.execute("INSERT INTO tasks (id, text, done, due, priority, cat, notes, files, notified, steps, details_asked, "
-                            "num, sort, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                con.execute("INSERT INTO tasks (id, text, done, due, priority, cat, notes, files, notified, steps, details_asked, repeat, "
+                            "num, sort, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                             values + (t["num"], sort, created, updated))
             next_num = max([int(next_num) if isinstance(next_num, int) else 1, get_meta(con, "nextNum", 1)]
                            + [t["num"] + 1 for t in tasks])  # numbers are never reused

@@ -26,7 +26,7 @@ server.use_test_mode()
 # Belt and braces: never run if the real database is still selected
 assert os.path.basename(server.DB_FILE) == "test-tasks.db", "exam must run in test mode"
 
-FIELDS = ["action", "title", "due", "priority", "category", "num", "change", "filter", "ask"]
+FIELDS = ["action", "title", "due", "priority", "category", "num", "change", "filter", "ask", "repeat"]
 
 
 def norm(text):
@@ -61,6 +61,8 @@ def check(case, r):
         out["title"] = norm(r.get("text")) in [norm(t) for t in case["title"]]
     if "due" in case:
         out["due"] = (r.get("due") or "") == case["due"]
+    if "repeat" in case:
+        out["repeat"] = (r.get("repeat") or "") == case["repeat"]
     if "priority" in case:
         out["priority"] = r.get("priority") == case["priority"]
     if "category" in case:

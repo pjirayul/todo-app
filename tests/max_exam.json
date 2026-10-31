@@ -235,6 +235,19 @@
     {"s": "tell mom I'm late", "action": "add", "ask": false},
     {"s": "บอกแม่ว่าจะกลับดึก", "action": "add", "ask": false},
     {"s": "send Kimi the report", "action": "add", "ask": false},
-    {"s": "any replies?", "action": "team_replies"}
+    {"s": "any replies?", "action": "team_replies"},
+    {"s": "gym every monday at 7am", "action": "add", "title": ["gym"], "due": "2026-11-02T07:00", "repeat": "week"},
+    {"s": "take vitamins every morning", "action": "add", "title": ["take vitamins"], "due": "2026-10-31T09:00", "repeat": "day"},
+    {"s": "water the plants every day", "action": "add", "title": ["water the plants"], "due": "2026-10-31T09:00", "repeat": "day"},
+    {"s": "pay rent every month on the 5th", "action": "add", "title": ["pay rent"], "due": "2026-11-05T09:00", "repeat": "month"},
+    {"s": "pay rent every 5th", "action": "add", "title": ["pay rent"], "due": "2026-11-05T09:00", "repeat": "month"},
+    {"s": "วิ่งทุกเช้า", "action": "add", "title": ["วิ่ง"], "due": "2026-10-31T09:00", "repeat": "day"},
+    {"s": "ประชุมทีมทุกวันจันทร์ 10 โมง", "action": "add", "title": ["ประชุมทีม"], "due": "2026-11-02T10:00", "repeat": "week"},
+    {"s": "จ่ายค่าเน็ตทุกวันที่ 5", "action": "add", "title": ["จ่ายค่าเน็ต"], "due": "2026-11-05T09:00", "repeat": "month"},
+    {"s": "รดน้ำต้นไม้ทุกวัน", "action": "add", "title": ["รดน้ำต้นไม้"], "due": "2026-10-31T09:00", "repeat": "day"},
+    {"s": "every time I call mom she is late", "action": ["add", "smalltalk"], "repeat": "", "ask": false},
+    {"s": "ask everyone about the party friday", "action": "add", "repeat": "", "due": "2026-10-30T09:00", "ask": false},
+    {"s": "ทุกวันนี้รถติดมาก", "action": ["add", "smalltalk"], "repeat": "", "ask": false},
+    {"s": "บอกทุกคนเรื่องงานเลี้ยง", "action": "add", "repeat": "", "ask": false}
   ]
 }
