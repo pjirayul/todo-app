@@ -199,14 +199,16 @@
     :root[data-theme="dark"] body.fest-halloween { --accent: #ea580c; --accent-soft: #2a1a2e;
       --bg-grad: radial-gradient(circle at 15% 0%, #2a2354 0, transparent 45%), radial-gradient(circle at 90% 10%, #3b1d12 0, transparent 40%); }
     .fest-decor { display: none; }
-    body.fest-halloween .topbar { position: relative; }
-    body.fest-halloween .topbar > :not(.fest-decor) { position: relative; z-index: 1; }
+    /* copied from the app's style.css so both headers look the same: decor behind the glass bar, not inside it */
+    body.fest-halloween .top { position: relative; }
+    body.fest-halloween .topbar { position: relative; z-index: 1; box-shadow: inset 0 1px 0 var(--glass-hi); }
     body.fest-halloween .fest-decor { display: block; position: absolute; inset: 0; pointer-events: none; z-index: 0; }
     .fest-decor > * { position: absolute; pointer-events: none; }
     .fest-decor .moon { inset: -30px -10px auto auto; width: 70%; height: 150px; background: radial-gradient(ellipse at 85% 30%, var(--fest-moon), transparent 65%); }
-    .fest-decor .web { top: 0; right: 0; width: 56px; height: 56px; background: var(--fest-2); opacity: .8; transform: scaleX(-1);
+    .fest-decor .web { top: 0; right: 0; width: 64px; height: 64px; background: var(--fest-2); opacity: .8; transform: scaleX(-1);
       -webkit-mask: var(--fest-web) center / contain no-repeat; mask: var(--fest-web) center / contain no-repeat; }
-    .fest-decor .hang { top: 100%; width: 18px; transform-origin: 50% 0; }
+    @media (max-width: 480px) { .fest-decor .sp { display: none; } .fest-decor .web { width: 56px; height: 56px; } }
+    .fest-decor .hang { top: 54px; width: 18px; transform-origin: 50% 0; }
     .fest-decor .hang::before { content: ""; display: block; width: 1px; height: var(--t); margin: 0 auto; background: var(--fest-2); opacity: .7; }
     .fest-decor .hang::after { content: ""; display: block; width: 18px; height: 18px; background: var(--accent);
       -webkit-mask: var(--fest-bat) center / contain no-repeat; mask: var(--fest-bat) center / contain no-repeat; }
@@ -217,9 +219,11 @@
       background: var(--fest-jack) right 12px bottom / 36px 36px no-repeat, var(--fest-jack) right 56px bottom / 22px 22px no-repeat, var(--fest-jack) left 14px bottom / 24px 24px no-repeat; }
     :root[data-theme="dark"] body.fest-halloween .wrap::after { filter: drop-shadow(0 0 4px rgba(255, 181, 71, .55)); }
     @media (prefers-reduced-motion: no-preference) {
-      .fest-decor .hang { animation: fest-sway 4.5s ease-in-out infinite alternate; }
-      .fest-decor .b2 { animation-delay: -2s; }
-      @keyframes fest-sway { from { transform: rotate(-5deg); } to { transform: rotate(5deg); } }
+      .fest-decor .hang { animation: fest-sway 4s ease-in-out infinite alternate; }
+      .fest-decor .b2 { animation-duration: 5.2s; }
+      .fest-decor .sp { animation: fest-bob 3.4s ease-in-out infinite alternate; }
+      @keyframes fest-sway { from { transform: rotate(-6deg); } to { transform: rotate(6deg); } }
+      @keyframes fest-bob { to { transform: translateY(6px); } }
     }
   </style>
 </head>
@@ -248,13 +252,16 @@
     <symbol id="i-team" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c2 .7 3.2 2.5 3.5 5.2"/></symbol>
   </svg>
   <div class="wrap">
-    <header class="topbar">
-      <span class="fest-decor" aria-hidden="true"><i class="moon"></i><i class="web"></i><i class="hang b1"></i><i class="hang b2"></i><i class="hang sp"></i></span>
+    <!-- Same structure as the app: the decoration sits behind the glass bar, so the cobweb shows through it -->
+    <header class="top">
+      <span class="fest-decor" aria-hidden="true"><i class="moon"></i><i class="web"></i><i class="hang sp"></i><i class="hang b1"></i><i class="hang b2"></i></span>
+      <div class="topbar">
       <span class="brand">
         <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#i-wave"/></svg></span>
         Just Say It
       </span>
       <a href="./" class="back"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-back"/></svg>Back</a>
+      </div>
     </header>
     <h1 class="greet">Team</h1>
     <p class="updated" id="updated">Loading…</p>
