@@ -10,6 +10,9 @@ const TEXT = {
     sortManual: "My order", sortDue: "Due date", sortPriority: "Priority",
     all: "All", active: "Active", done: "Done", overdue: "Overdue", clear: "Clear done", festHalloween: "Spooky season. Let's clear your list before midnight.", festLabel: (m) => `Festive: ${m === "off" ? "Off" : "Auto"}`,
     empty: "Nothing here yet", left: (n) => `${n} task${n === 1 ? "" : "s"} left`,
+    // Halloween wording (only while the festive theme is on)
+    leftFest: (n) => `${n} task${n === 1 ? "" : "s"} left to banish`, emptyFest: "Boo! Nothing here. Tell Max something.",
+    tails: ["It shall be done… eventually 👻", "The spirits approve 🎃", "Muahaha, noted 🦇"],
     remind: "Task due", editHint: "Double-click to edit", locale: "en-GB", thinking: "…",
     notFound: (q) => `Couldn't find task "${q}"`, which: (nums) => `Which one? ${nums}`,
     nothing: "Nothing to change. Try e.g. \"move #2 to friday\".", sureDelete: (x) => `Delete ${x}?`, yes: "Yes, delete", no: "No",
@@ -85,6 +88,8 @@ const TEXT = {
     sortManual: "ลำดับของฉัน", sortDue: "วันครบกำหนด", sortPriority: "ความสำคัญ",
     all: "ทั้งหมด", active: "ยังไม่เสร็จ", done: "เสร็จแล้ว", overdue: "เลยกำหนด", clear: "ลบงานที่เสร็จ", festHalloween: "ฤดูฮาโลวีนแล้ว มาเคลียร์งานก่อนเที่ยงคืนกัน", festLabel: (m) => `เทศกาล: ${m === "off" ? "ปิด" : "อัตโนมัติ"}`,
     empty: "ยังไม่มีงาน", left: (n) => `เหลือ ${n} งาน`,
+    leftFest: (n) => `เหลือ ${n} งานให้ปราบ`, emptyFest: "บู้! ยังไม่มีงานเลย บอก Max สิ",
+    tails: ["จัดให้แล้ว… ด้วยมนต์ดำ 👻", "ผีรับทราบ 🎃", "ฮ่าๆ จดไว้แล้ว 🦇"],
     remind: "ถึงเวลางาน", editHint: "ดับเบิลคลิกเพื่อแก้ไข", locale: "th-TH", thinking: "…",
     notFound: (q) => `ไม่พบงาน "${q}"`, which: (nums) => `หมายถึงงานไหน? ${nums}`,
     nothing: "ไม่มีอะไรให้เปลี่ยน ลองพิมพ์ เช่น \"เลื่อน #2 เป็นวันศุกร์\"", sureDelete: (x) => `ลบ ${x} ใช่ไหม?`, yes: "ใช่ ลบเลย", no: "ไม่",
@@ -326,7 +331,9 @@ function render() {
     ? `<button class="chip active" data-clear-nums title="${t("ansClear")}">${t("ansFiltered")} ${escapeHtml(view.label)} ×</button>` : "";
 
   const list = $("todo-list");
-  list.innerHTML = visible.length ? "" : `<li class="empty"><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg>${t("empty")}</li>`;
+  list.innerHTML = visible.length ? "" : festTheme() === "halloween"
+    ? `<li class="empty fest-empty"><span class="g" aria-hidden="true"></span>${t("emptyFest")}</li>` // Halloween: ghost + spooky line
+    : `<li class="empty"><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg>${t("empty")}</li>`;
   const canDrag = view.sort === "manual" && !view.search;
 
   for (const todo of visible) {
@@ -384,7 +391,7 @@ function render() {
   }
 
   const left = todos.filter((x) => !x.done).length;
-  $("counter").textContent = t("left")(left);
+  $("counter").textContent = t(festTheme() === "halloween" ? "leftFest" : "left")(left);
 }
 
 // Header greeting by time of day, and today's summary ("Thu 29 Oct · 3 due today · 1 overdue").
@@ -538,6 +545,31 @@ const showMessage = (msg, warn = false, box = $("cmd-msg")) => {
   box.className = warn ? "cmd-msg warn" : "cmd-msg";
 };
 
+// Halloween: Max confirmations (added / moved / done / deleted) get one short random tail after the fact.
+// Never used for errors or questions. Plain strings, so it stays a client-side nicety.
+const spooky = (msg) => {
+  if (festTheme() !== "halloween") return msg;
+  const tails = t("tails");
+  return `${msg} ${tails[Math.floor(Math.random() * tails.length)]}`;
+};
+
+// Halloween: a little ghost floats up from the checkbox of a task that was just ticked (CSS does the motion).
+function ghostPoof(id) {
+  if (!document.body.classList.contains("fest-halloween") || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const li = $("todo-list").querySelector(`.todo-item[data-id="${CSS.escape(String(id))}"]`);
+  const box = li?.querySelector(".check");
+  if (!box) return;
+  const a = li.getBoundingClientRect(), b = box.getBoundingClientRect();
+  const ghost = document.createElement("span");
+  ghost.className = "ghost-poof";
+  ghost.setAttribute("aria-hidden", "true");
+  ghost.style.left = `${b.left - a.left + b.width / 2 - 13}px`;
+  ghost.style.top = `${b.top - a.top - 6}px`;
+  li.append(ghost);
+  ghost.addEventListener("animationend", () => ghost.remove());
+  setTimeout(() => ghost.remove(), 1500); // safety net
+}
+
 // ---------- Max asks when unsure ----------
 // One small, reusable question: a line of text, optional short inputs, and answer chips (buttons).
 //   const answer = await askMax("Which one?", [{ label: "#2 Send laundry", value: 2 }, { label: "Cancel", value: null }]);
@@ -666,7 +698,7 @@ function deleteNow(todo) {
   update();
   $("todo-input").value = "";
   $("todo-input").focus();
-  showMessage(t("deleted")(todo.num)); // confirm it is really gone
+  showMessage(spooky(t("deleted")(todo.num))); // confirm it is really gone
 }
 function askDelete(todo) {
   askYesNo($("cmd-msg"), t("sureDelete")(`#${todo.num} "${todo.text}"`), t("yes"), () => deleteNow(todo), () => $("todo-input").focus());
@@ -771,7 +803,7 @@ function finishCommand(cmd) {
     $("todo-input").value = ""; // worked: clear the box
     // Say what was done, also for the simple commands that work without AI ("done #2")
     const done = { complete: "maxDone", uncomplete: "maxUndone", update: "maxUpdated" }[cmd.action];
-    if (done) showMessage(t(done)(cmd.num));
+    if (done) showMessage(spooky(t(done)(cmd.num)));
   }
   if (msg) showMessage(msg, !cmd.choices?.length); // "Which one?" is not a warning
   // A Yes/No question is waiting: put the focus on Yes, so Enter confirms the delete
@@ -788,7 +820,7 @@ function addTask(task, problem = "") {
   rememberMade(num, task.text);
   if (!problem) {
     const when = task.due ? new Date(task.due).toLocaleString(t("locale"), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
-    showMessage(t("maxAdded")(num, task.text, when)); // textContent inside, so task text never runs as HTML
+    showMessage(spooky(t("maxAdded")(num, task.text, when))); // textContent inside, so task text never runs as HTML
   }
 }
 
@@ -901,7 +933,7 @@ function askMoveToTomorrow(found) {
     for (const x of found) { x.due = tomorrow + x.due.slice(10); x.notified = false; } // slice(10) = "THH:MM"
     update();
     hideAnswer();
-    showMessage(t("movedN")(found.length));
+    showMessage(spooky(t("movedN")(found.length)));
   }, () => $("todo-input").focus());
 }
 
@@ -1011,7 +1043,7 @@ async function askClarify(card, text = "") {
   if (act.action === "add_many") { // "Add 2 tasks": one message for all of them
     const nums = [];
     for (const task of act.tasks) { addTask(task, "quiet"); nums.push(todos[todos.length - 1].num); }
-    return showMessage(t("addedMany")(nums));
+    return showMessage(spooky(t("addedMany")(nums)));
   }
   if (act.action === "add") return act.askWhen ? askWhenThenAdd(act) : addTask(act);
   if (act.action === "edit") { // "move" alone: open that task's editor
@@ -1197,8 +1229,10 @@ $("todo-list").addEventListener("click", async (e) => {
     if (blob) window.open(URL.createObjectURL(blob), "_blank");
   } else if (e.target.classList.contains("check")) {
     backup(`before ${e.target.checked ? "done" : "undo"} #${findTodo(e.target).num}`);
-    findTodo(e.target).done = e.target.checked;
+    const ticked = findTodo(e.target);
+    ticked.done = e.target.checked;
     update();
+    if (ticked.done) ghostPoof(ticked.id);
   } else if (e.target.classList.contains("delete")) {
     const todo = findTodo(e.target);
     backup(`before delete #${todo.num}`, true);
@@ -1206,7 +1240,7 @@ $("todo-list").addEventListener("click", async (e) => {
     deleteTaskFiles(todo);
     todos = todos.filter((x) => x !== todo);
     update();
-    showMessage(t("deleted")(todo.num));
+    showMessage(spooky(t("deleted")(todo.num)));
   } else if (e.target.classList.contains("step-check")) {
     // Tick or untick one step of the checklist
     const todo = findTodo(e.target);

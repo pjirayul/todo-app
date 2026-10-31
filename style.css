@@ -845,3 +845,64 @@ body.fest-halloween .add:focus-within .primary { box-shadow: inset 0 1px 0 rgba(
 /* faint cobweb in the bar's top-left corner (ignores clicks, sits under the text because it is tiny and faint) */
 body.fest-halloween .add::before { content: ""; position: absolute; top: 1px; left: 1px; width: 22px; height: 22px; pointer-events: none; background: var(--fest-2); opacity: .4;
   -webkit-mask: var(--fest-cweb) center / contain no-repeat; mask: var(--fest-cweb) center / contain no-repeat; }
+
+/* ===== Halloween part 4: small extras (all under body.fest-halloween; motion only when reduced-motion is not requested) ===== */
+:root {
+  /* peeking ghost: pale body + violet line (coloured image, so it can carry its own fill) */
+  --fest-peek: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff' stroke='%237c3aed' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 21V11a7 7 0 0 1 14 0v10l-3-2-2 2-2-2-2 2-2-2z'/%3E%3Cpath d='M9.5 11h.01M14.5 11h.01'/%3E%3C/svg%3E");
+}
+[data-theme="dark"] {
+  --fest-peek: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232a1a2e' stroke='%23b69cff' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 21V11a7 7 0 0 1 14 0v10l-3-2-2 2-2-2-2 2-2-2z'/%3E%3Cpath d='M9.5 11h.01M14.5 11h.01'/%3E%3C/svg%3E");
+}
+
+/* G2: a ghost peeks over the top edge of Max's ask / answer card. It takes the notch's place (the ::after strip),
+   and the image is cropped by the strip's height so it looks like it hides behind the card. */
+body.fest-halloween .cmd-msg.ask,
+body.fest-halloween .answer-card { margin-top: 32px; }
+body.fest-halloween .cmd-msg.ask::after,
+body.fest-halloween .answer-card::after {
+  top: auto; bottom: calc(100% + 1px); left: 0; right: 0; width: auto; height: 24px; transform: none;
+  border: 0; border-radius: 0; pointer-events: none;
+  background: var(--fest-peek) no-repeat left 14px top 0 / 32px 32px;
+}
+@media (max-width: 340px) {
+  body.fest-halloween .cmd-msg.ask::after, body.fest-halloween .answer-card::after { display: none; }
+  body.fest-halloween .cmd-msg.ask, body.fest-halloween .answer-card { margin-top: 12px; }
+}
+
+/* W1: ghost poof from a ticked checkbox (span added by ghostPoof() in script.js, removed when the animation ends) */
+.ghost-poof { position: absolute; width: 26px; height: 26px; pointer-events: none; z-index: 2; background: var(--fest-2);
+  -webkit-mask: var(--fest-ghost) center / contain no-repeat; mask: var(--fest-ghost) center / contain no-repeat; }
+[data-theme="dark"] .ghost-poof { background: #b69cff; }
+
+/* L4: empty list */
+.empty.fest-empty { flex-direction: column; text-align: center; gap: 10px; padding: 28px 16px 20px; line-height: 1.5; }
+.empty.fest-empty .g { width: 56px; height: 56px; background: var(--fest-2); opacity: .75;
+  -webkit-mask: var(--fest-ghost) center / contain no-repeat; mask: var(--fest-ghost) center / contain no-repeat; }
+[data-theme="dark"] .empty.fest-empty .g { background: #b69cff; }
+
+@media (prefers-reduced-motion: no-preference) {
+  /* G1: candle flicker, the jack-o'-lanterns' glow breathes (3 s) */
+  body.fest-halloween .list::after { animation: fest-candle 3s ease-in-out infinite; }
+  body.fest-halloween .mark { animation: fest-mark 3s ease-in-out infinite; }
+  @keyframes fest-candle {
+    0%, 100% { opacity: 1; filter: drop-shadow(0 0 5px rgba(255, 181, 71, .6)); }
+    35% { opacity: .85; filter: drop-shadow(0 0 2px rgba(255, 181, 71, .3)); }
+    60% { opacity: .95; filter: drop-shadow(0 0 4px rgba(255, 181, 71, .5)); }
+    80% { opacity: .8; filter: drop-shadow(0 0 2px rgba(255, 181, 71, .25)); }
+  }
+  @keyframes fest-mark {
+    0%, 100% { opacity: 1; }
+    35% { opacity: .85; }
+    60% { opacity: .95; }
+    80% { opacity: .8; }
+  }
+  /* G2: the peeking ghost rises and sinks behind the card edge */
+  body.fest-halloween .cmd-msg.ask::after, body.fest-halloween .answer-card::after { animation: fest-peek 3.5s ease-in-out infinite; }
+  @keyframes fest-peek { 0%, 100% { background-position: left 14px top 5px; } 50% { background-position: left 14px top 0; } }
+  .ghost-poof { animation: fest-poof .8s ease-out forwards; }
+  @keyframes fest-poof {
+    from { opacity: .95; transform: translateY(0) scale(.7); }
+    to { opacity: 0; transform: translateY(-34px) scale(1.15) rotate(8deg); }
+  }
+}
