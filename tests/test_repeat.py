@@ -129,6 +129,14 @@ class CheckTask(unittest.TestCase):
             with self.subTest(sentence):
                 self.assertEqual(parse(sentence)["repeat"], "")
 
+    def test_nowadays_is_not_today(self):
+        # "ทุกวันนี้" = nowadays: title kept whole, no invented due, no repeat; "ทุกวัน" still repeats
+        r = parse("ทุกวันนี้รถติดมาก", "ทุกวันนี้รถติดมาก")
+        self.assertEqual((r["text"], r["due"], r["repeat"]), ("ทุกวันนี้รถติดมาก", "", ""))
+        r = parse("ทุกวันนี้รถติดมาก", "รถติดมาก")   # even if the AI dropped the word, nothing is invented
+        self.assertEqual((r["due"], r["repeat"]), ("", ""))
+        self.assertEqual(parse("รดน้ำต้นไม้ทุกวัน", "รดน้ำต้นไม้")["repeat"], "day")
+
     def test_plain_task_keeps_its_every_word(self):
         self.assertIn("everyone", parse("ask everyone about the party friday")["text"].lower())
 

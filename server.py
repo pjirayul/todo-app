@@ -296,10 +296,13 @@ CLOCK_TIME = re.compile(r"\d\s*(:\s*\d\d|\.\d\d|am\b|pm\b|น\.|โมง|ทุ
                         AT_HOUR.pattern + "|" + THAI_TIME_ANY, re.I)
 # A little linking word stuck to a date ("ในวันศุกร์", "ภายในพรุ่งนี้", "ตอนบ่ายสาม") goes away with it; the same
 # word anywhere else ("ของในตู้เย็น") stays. The lead word is tried first, so "ตอนบ่ายสาม" is cut whole.
-THAI_DATE_WORDS = (r"(?:(?:ภายใน|ใน|ตอน|เมื่อ)\s*)?(?:มะรืนนี้|มะรืน|พรุ่งนี้|วันนี้|คืนนี้|ตอนเช้า|ตอนเย็น|ตอนบ่าย|ด่วน|ไม่รีบ|"
+THAI_DATE_WORDS = (r"(?<!ทุก)(?:(?:ภายใน|ใน|ตอน|เมื่อ)\s*)?(?:มะรืนนี้|มะรืน|พรุ่งนี้|วันนี้|คืนนี้|ตอนเช้า|ตอนเย็น|ตอนบ่าย|ด่วน|ไม่รีบ|"
                    r"(วัน)?(จันทร์|อังคาร|พุธ|พฤหัส(บดี)?|ศุกร์|เสาร์|อาทิตย์)(หน้า|นี้)?|วันที่\s*\d+|"
                    r"(" + THAI_TIME_ANY + r")(\s*ครึ่ง)?|\d+\s*(โมง|ทุ่ม)|(สัปดาห์|เดือน)หน้า|อีก\s*\d+\s*(วัน|สัปดาห์|อาทิตย์)|สิ้นเดือน|ปลายเดือน|ต้นเดือนหน้า|สุดสัปดาห์(นี้)?)")
 THAI_LETTERS = re.compile(r"[฀-๿]")
+# "ทุกวันนี้" means "nowadays", not "today": the lookbehind above keeps it in titles, and date reading
+# looks at the sentence with this word blanked out so "วันนี้" inside it never makes a due date.
+NOWADAYS = "ทุกวันนี้"
 
 # Weekday names Python reads itself (the AI sometimes says "next week" when nobody did).
 # อาทิตย์ alone also means "week", so Sunday needs "วันอาทิตย์".
@@ -438,7 +441,7 @@ def english_time(text: str) -> str:
 def rules_date(text: str, times: dict):
     """Day/time words Python can read alone ("friday", "tomorrow 5pm", "บ่ายสาม") -> the dict resolve_due
     needs. None = something else is in there (a month, "next week"...), so the AI must read it."""
-    low = fix_date_typos(text).lower()
+    low = fix_date_typos(text).lower().replace(NOWADAYS, " ")
     task = {"when": "none", "time": thai_time(low) or english_time(low)}
     day = weekday_in(low)
     if day:
@@ -641,7 +644,7 @@ def check_task(task: dict, sentence: str, now: str, known: list, memory: dict) -
     """Python checks what the AI said (dates, time, title, category) and returns the safe task.
     Shared by parse_task (one task per call) and understand() (one call for every kind of sentence)."""
     # Common day words are certain, so they override the AI
-    lower = sentence.lower()
+    lower = sentence.lower().replace(NOWADAYS, " ")   # "ทุกวันนี้" is not a date
     repeat, repeat_day = read_repeat(lower)   # "every monday" / "ทุกเช้า": Python reads it, the AI never does
     # A named weekday is certain too: "วันศุกร์" on a Thursday is tomorrow, not next week's Friday
     day = weekday_in(lower)

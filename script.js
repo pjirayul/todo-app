@@ -1488,7 +1488,11 @@ $("todo-list").addEventListener("submit", async (e) => {
   todo.cat = form.querySelector(".e-cat").value.trim();
   todo.notes = form.querySelector(".e-notes").value.trim();
   todo.repeat = form.querySelector(".e-repeat").value;
-  if (todo.repeat && !todo.due) todo.due = `${todayKey()}T${"09:00"}`; // a repeating task always has a due date
+  if (todo.repeat && !todo.due) { // a repeating task always has a due date: the NEXT 09:00 (never one already past)
+    const next = new Date();
+    if (next.getHours() >= 9) next.setDate(next.getDate() + 1);
+    todo.due = `${localDue(next).slice(0, 10)}T09:00`;
+  }
   for (const file of form.querySelector(".e-files").files) {
     const id = `${todo.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     await putFile(id, file);

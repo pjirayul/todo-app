@@ -245,9 +245,9 @@
     {"s": "ประชุมทีมทุกวันจันทร์ 10 โมง", "action": "add", "title": ["ประชุมทีม"], "due": "2026-11-02T10:00", "repeat": "week"},
     {"s": "จ่ายค่าเน็ตทุกวันที่ 5", "action": "add", "title": ["จ่ายค่าเน็ต"], "due": "2026-11-05T09:00", "repeat": "month"},
     {"s": "รดน้ำต้นไม้ทุกวัน", "action": "add", "title": ["รดน้ำต้นไม้"], "due": "2026-10-31T09:00", "repeat": "day"},
-    {"s": "every time I call mom she is late", "action": ["add", "smalltalk"], "repeat": "", "ask": false},
+    {"s": "every time I call mom she is late", "action": ["add", "smalltalk"], "title": ["she is late"], "repeat": "", "ask": false},
     {"s": "ask everyone about the party friday", "action": "add", "repeat": "", "due": "2026-10-30T09:00", "ask": false},
-    {"s": "ทุกวันนี้รถติดมาก", "action": ["add", "smalltalk"], "repeat": "", "ask": false},
+    {"s": "ทุกวันนี้รถติดมาก", "action": ["add", "smalltalk"], "title": ["ทุกวันนี้รถติดมาก"], "due": "", "repeat": "", "ask": false},
     {"s": "บอกทุกคนเรื่องงานเลี้ยง", "action": "add", "repeat": "", "ask": false}
   ]
 }
