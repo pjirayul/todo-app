@@ -2572,12 +2572,18 @@ def load_mistakes() -> list:
 
 
 def add_mistake(body: dict) -> bool:
-    """Save {text, action, created, deletedAt} from the page. False if it is not a usable record."""
+    """Save {text, action, created, deletedAt} (+ undid for action "undo") from the page. False if it is not a usable record."""
     text = str(body.get("text", "")).strip()[:200]
-    if not text or body.get("action") != "add":
+    action = body.get("action")
+    if not text or action not in ("add", "undo"):
         return False
-    entry = {"text": text, "action": "add",
+    entry = {"text": text, "action": action,
              "created": str(body.get("created", ""))[:30], "deletedAt": str(body.get("deletedAt", ""))[:30]}
+    if action == "undo":
+        # Owner undid a Max action: which kind it was. Anything else is not a usable record.
+        if body.get("undid") not in ("complete", "update", "delete", "add_many"):
+            return False
+        entry["undid"] = body["undid"]
     mistakes = (load_mistakes() + [entry])[-MISTAKES_MAX:]
     os.makedirs(os.path.dirname(MISTAKES_FILE), exist_ok=True)
     with open(MISTAKES_FILE, "w", encoding="utf-8") as f:

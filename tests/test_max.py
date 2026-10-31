@@ -693,6 +693,16 @@ class MistakesLog(unittest.TestCase):
         server.add_mistake({"text": "y" * 999, "action": "add"})
         self.assertEqual(len(server.load_mistakes()[0]["text"]), 200)
 
+    def test_logs_an_undo(self):
+        ok = server.add_mistake({"text": "done #2", "action": "undo", "undid": "complete", "created": "a", "deletedAt": "b"})
+        self.assertTrue(ok)
+        self.assertEqual(server.load_mistakes()[0]["undid"], "complete")
+        self.assertFalse(server.add_mistake({"text": "x", "action": "undo", "undid": "banana"}))
+        self.assertFalse(server.add_mistake({"text": "x", "action": "undo"}))
+        server.add_mistake({"text": "y", "action": "add", "undid": "delete"})  # add records never carry undid
+        self.assertNotIn("undid", server.load_mistakes()[-1])
+        self.assertEqual(len(server.load_mistakes()), 2)
+
     def test_test_mode_uses_its_own_file(self):
         self.assertIn("max-mistakes", server.MISTAKES_FILE)
         self.assertTrue(server.__dict__["use_test_mode"].__doc__)
