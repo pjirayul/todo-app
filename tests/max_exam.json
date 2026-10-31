@@ -226,6 +226,15 @@
     {"s": "I called dad", "action": "clarify", "ask": "done", "nums": [8]},
     {"s": "forget about the laundry", "action": "clarify", "ask": "delete", "nums": [1]},
     {"s": "move the dad call to saturday", "action": "clarify", "ask": "change", "nums": [8]},
-    {"s": "ขอ Claude จาก Ploy เสร็จแล้ว", "action": "clarify", "ask": "done", "nums": [10]}
+    {"s": "ขอ Claude จาก Ploy เสร็จแล้ว", "action": "clarify", "ask": "done", "nums": [10]},
+    {"s": "tell Toto the build is done", "action": "team_send"},
+    {"s": "ask Kimi to check the login", "action": "team_send"},
+    {"s": "message Bono that tests pass", "action": "team_send"},
+    {"s": "บอก Toto ว่า build เสร็จแล้ว", "action": "team_send"},
+    {"s": "ถาม Lewis ว่า มีรายงานใหม่ไหม", "action": "team_send"},
+    {"s": "tell mom I'm late", "action": "add", "ask": false},
+    {"s": "บอกแม่ว่าจะกลับดึก", "action": "add", "ask": false},
+    {"s": "send Kimi the report", "action": "add", "ask": false},
+    {"s": "any replies?", "action": "team_replies"}
   ]
 }

@@ -1487,6 +1487,93 @@ def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: 
 
 
 
+# ---------- Max messages the team (job 0d) ----------
+# The six names are a closed set (data, not a phrase list). Python decides alone, no AI: sending is a side effect.
+TEAM_NAMES = ("Toto", "Kimi", "George", "Bono", "Lewis", "GP")
+THAI_TEAM_NAMES = {"โตโต้": "Toto", "โตโต": "Toto", "โทโท": "Toto", "คิมิ": "Kimi", "จอร์จ": "George",
+                   "โบโน่": "Bono", "โบโน": "Bono", "ลูอิส": "Lewis", "ลูอีส": "Lewis", "จีพี": "GP"}
+_LATIN_NAMES = "|".join(n.lower() for n in TEAM_NAMES)
+_THAI_NAMES = "|".join(sorted(THAI_TEAM_NAMES, key=len, reverse=True))
+# EN: the verb and a team name at the START of the sentence ("send" needs "to": "send Kimi the report" stays a task)
+TEAM_EN = re.compile(r"(tell|ask|message|send\s+(?:a\s+message\s+)?to)\s+(" + _LATIN_NAMES + r")(?![a-z0-9])\s*([,:;-]?)\s*(that\b|to\b|about\b)?\s*(.*)", re.I)
+# TH: Thai has no spaces, so the name ends at a space, ว่า or the end; Latin names work too ("บอก Toto ว่า...")
+TEAM_TH = re.compile(r"(บอก|ถาม|ส่งถึง|ฝากบอก)\s*(" + _THAI_NAMES + "|" + _LATIN_NAMES + r")(?![a-z0-9])\s*(ว่า)?\s*(.*)", re.I)
+# Without a clear marker ("tell George buy milk") only a statement or question is sent, not a command
+TEAM_STATEMENT = re.compile(r"(the|a|an|it|i|we|they|you|he|she|this|that|my|our|all|there|what|how|why|if|when|where|who|which)\b", re.I)
+TEAM_REPLIES = re.compile(r"(any|new|latest)\s+(replies|answers)\s*\??|มีตอบกลับ(ไหม)?|ตอบกลับ(อะไร)?ไหม", re.I)
+
+
+def is_thai(text: str) -> bool:
+    return any(0x0E00 <= ord(c) <= 0x0E7F for c in text)
+
+
+def team_message(s: str):
+    """'tell Toto that the build is done' -> {"action": "team_send", "to", "text"}. None = not for the team (a task)."""
+    m = TEAM_EN.match(s)
+    if m:
+        verb, name, punct, marker, text = m.groups()
+        clear = bool(punct or marker) or verb.lower() not in ("tell", "ask")   # "message" / "send to" are clear alone
+        to = next(n for n in TEAM_NAMES if n.lower() == name.lower())
+    else:
+        m = TEAM_TH.match(s)
+        if not m:
+            return None
+        verb, name, marker, text = m.groups()
+        clear = bool(marker) or verb == "ส่งถึง"
+        to = THAI_TEAM_NAMES.get(name) or next(n for n in TEAM_NAMES if n.lower() == name.lower())
+    text = text.strip()
+    if not text:   # "tell Toto" alone: nothing to send, ask what
+        return {"action": "team_send", "to": to, "text": ""}
+    if not clear and not TEAM_STATEMENT.match(text):
+        return None   # "tell George buy milk" could be the owner's own task: stays a task (a Send/Add card needs the page)
+    return {"action": "team_send", "to": to, "text": text}
+
+
+def team_replies(s: str):
+    return {"action": "team_replies"} if TEAM_REPLIES.fullmatch(s.strip()) else None
+
+
+def add_inbox(to: str, text: str):
+    """Write one message to the team inbox. Returns the saved item, or None for an unknown name / empty text."""
+    text = str(text).strip()[:1000]
+    if to not in TEAM_NAMES or not text:
+        return None
+    inbox = load_inbox()
+    item = {
+        "id": int(datetime.now().timestamp() * 1000),
+        "to": to,
+        "text": text,
+        "status": "new",       # new -> working -> done (Toto updates these)
+        "reply": "",
+        "created": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+    inbox.append(item)
+    with open(INBOX_FILE, "w", encoding="utf-8") as f:
+        json.dump(inbox, f, ensure_ascii=False, indent=2)
+    return item
+
+
+def team_answer(result: dict, sentence: str) -> dict:
+    """The /api/parse handler's side-effect step: do the send / read the replies, and answer with the
+    existing chat-reply shape (the page already shows it as a message, no task)."""
+    thai = is_thai(sentence)
+    if result.get("action") == "team_send":
+        if not result["text"]:
+            reply = f"บอก {result['to']} ว่าอะไรดี" if thai else f"What shall I tell {result['to']}?"
+        elif add_inbox(result["to"], result["text"]):
+            short = result["text"] if len(result["text"]) <= 60 else result["text"][:59] + "…"
+            reply = f"ส่งถึง {result['to']} แล้ว: {short}" if thai else f"Sent to {result['to']}: {short}"
+        else:
+            reply = "ส่งไม่สำเร็จ" if thai else "Could not send that."
+    else:
+        done = [i for i in load_inbox() if str(i.get("reply", "")).strip()][-5:]
+        if not done:
+            reply = "ยังไม่มีคำตอบ" if thai else "No replies yet."
+        else:
+            reply = " | ".join(f"{i.get('to', '?')}: {str(i['reply']).strip()[:80]}" for i in reversed(done))
+    return {"action": "smalltalk", "kind": "chat", "reply": reply, "path": "rules"}
+
+
 def work_out_command(sentence: str, now: str, categories: list, tasks: list, chosen: int = None) -> dict:
     """Work out what the sentence wants: add a task, or change/delete/complete an existing one.
     chosen: the #number the owner picked after Max asked "Which one?" (None normally)."""
@@ -1494,6 +1581,12 @@ def work_out_command(sentence: str, now: str, categories: list, tasks: list, cho
     kind = small_talk(s)
     if kind:
         return {"action": "smalltalk", "kind": kind}  # a friendly reply, no task, no AI call
+    # A message for the team: Python only, and BEFORE question_answer ("ask Toto what is due?" is a message, not a question)
+    if chosen is None:
+        plain = strip_greeting(s)[0]
+        team = team_message(plain) or team_replies(plain)
+        if team:
+            return team   # run_command stays pure: the handler does the write
     one_call = ONE_CALL and AI_PROVIDER == "ollama" and chosen is None
     # A question about the tasks: answer it, add nothing. One-call mode: only Python-clear questions here,
     # the unclear ones are decided by the single AI call below
@@ -1822,6 +1915,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(answer or add_without_ai(strip_greeting(" ".join(sentence.split()))[0]))
             earlier = str(body.get("earlier", ""))[:300] or None   # "Tell Max more…": the sentence Max asked about
             result, status = run_command(sentence, now, body.get("categories", [])[:20], tasks, chosen, earlier, body.get("age")), 200
+            if result.get("action") in ("team_send", "team_replies"):
+                result = team_answer(result, sentence)   # the only place a message is written (run_command stays pure)
         except urllib.error.URLError:
             result, status = {"error": "Ollama isn't running. Start the Ollama app and try again."}, 502
         except Exception as e:
@@ -1836,21 +1931,9 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             to = "Toto" if body.get("to") == "Claude" else body.get("to")  # Claude was renamed Toto
-            to = to if to in ("Toto", "Kimi", "George", "Bono", "Lewis", "GP") else "Toto"
-            text = str(body.get("text", "")).strip()[:1000]
-            if not text:
+            to = to if to in TEAM_NAMES else "Toto"
+            if not add_inbox(to, body.get("text", "")):
                 return self.send_json({"error": "Empty command"}, 400)
-            inbox = load_inbox()
-            inbox.append({
-                "id": int(datetime.now().timestamp() * 1000),
-                "to": to,
-                "text": text,
-                "status": "new",       # new -> working -> done (Toto updates these)
-                "reply": "",
-                "created": datetime.now().strftime("%Y-%m-%d %H:%M"),
-            })
-            with open(INBOX_FILE, "w", encoding="utf-8") as f:
-                json.dump(inbox, f, ensure_ascii=False, indent=2)
             self.send_json({"ok": True})
         except Exception as e:
             self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
