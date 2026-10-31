@@ -249,11 +249,25 @@ function festTheme() {
   if ((m === 9 && d >= 20) || (m === 10 && d <= 3)) return "halloween"; // 20 Oct - 3 Nov
   return "";
 }
+// Halloween icons: while the theme is on, every <use href="#i-name"> that has an "#h-name" twin is swapped.
+// A MutationObserver catches anything drawn later (task rows, cards), so no other code needs to know.
+function festIcons() {
+  const on = document.body.classList.contains("fest-halloween");
+  document.querySelectorAll("svg use").forEach((u) => {
+    const m = (u.getAttribute("href") || "").match(/^#[ih]-(.+)$/);
+    if (!m || !document.getElementById("h-" + m[1])) return;
+    const want = (on ? "#h-" : "#i-") + m[1];
+    if (u.getAttribute("href") !== want) u.setAttribute("href", want);
+  });
+}
+new MutationObserver(festIcons).observe(document.body, { childList: true, subtree: true });
+
 function drawFest() {
   const theme = festTheme();
   document.body.classList.toggle("fest-halloween", theme === "halloween");
   $("fest-toggle").textContent = t("festLabel")(settings.fest);
   $("fest-line").hidden = theme !== "halloween";
+  festIcons();
 }
 $("fest-toggle").addEventListener("click", () => {
   settings.fest = settings.fest === "off" ? "auto" : "off";
@@ -320,6 +334,7 @@ function render() {
     li.className = `todo-item p-${todo.priority}${todo.done ? " done" : ""}`;
     li.dataset.id = todo.id;
     li.dataset.num = todo.num;
+    li.dataset.fest = todo.num % 5; // which little Halloween icon this card gets (style.css)
     li.draggable = canDrag;
 
     // Manual editing: text, date, priority and category in one small form
