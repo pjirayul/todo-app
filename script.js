@@ -34,6 +34,7 @@ const TEXT = {
     stepsOffline: "Break it down needs Max, the AI server on your PC.", stepsFail: "Max couldn't come up with steps right now. Is Ollama running? Try again.",
     stepsPick: "Max suggests these steps. Pick the ones to add:", removeStep: "Remove step",
     morning: "Good morning", afternoon: "Good afternoon", evening: "Good evening", comma: ", ",
+    festDay: "Happy Halloween", festNight: "Trick or treat", // Halloween theme greetings (day / evening)
     dueToday: (n) => `${n} due today`, overdueN: (n) => `${n} overdue`, nothingDue: "Nothing due today",
     team: "Team", teamWorking: (n) => ` · ${n} working`, decWaiting: (n) => `${n} decision${n === 1 ? "" : "s"} waiting`,
     maxThinking: "Max is thinking…", maxReady: "Max ready", maxOffline: "Max offline", maxChecking: "Max: checking…",
@@ -111,6 +112,7 @@ const TEXT = {
     stepsOffline: "การแตกเป็นขั้นตอนต้องใช้ Max (เซิร์ฟเวอร์ AI บนคอมของคุณ)", stepsFail: "Max ยังคิดขั้นตอนไม่ออกตอนนี้ Ollama เปิดอยู่ไหม? ลองอีกครั้ง",
     stepsPick: "Max แนะนำขั้นตอนเหล่านี้ เลือกที่จะเพิ่ม:", removeStep: "ลบขั้นตอน",
     morning: "สวัสดีตอนเช้า", afternoon: "สวัสดีตอนบ่าย", evening: "สวัสดีตอนเย็น", comma: " ",
+    festDay: "สุขสันต์วันฮาโลวีน", festNight: "Trick or treat นะ",
     dueToday: (n) => `ครบกำหนดวันนี้ ${n}`, overdueN: (n) => `เลยกำหนด ${n}`, nothingDue: "ไม่มีงานครบกำหนดวันนี้",
     team: "ทีม", teamWorking: (n) => ` · ทำงานอยู่ ${n}`, decWaiting: (n) => `รอการตัดสินใจ ${n} เรื่อง`,
     maxThinking: "Max กำลังคิด…", maxReady: "Max พร้อม", maxOffline: "Max ออฟไลน์", maxChecking: "Max: กำลังตรวจสอบ…",
@@ -399,7 +401,9 @@ function render() {
 function drawGreeting() {
   const now = new Date();
   const hour = now.getHours();
-  const part = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+  let part = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+  // Halloween theme: "Happy Halloween" in the day, "Trick or treat" in the evening (fixed by hour, so it doesn't flicker on re-render)
+  if (document.body.classList.contains("fest-halloween")) part = hour < 18 ? "festDay" : "festNight";
   const name = document.createElement("em"); // the name gets the gradient colour
   name.textContent = OWNER_NAME;
   $("greet").replaceChildren(t(part) + t("comma"), name);

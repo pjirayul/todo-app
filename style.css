@@ -906,3 +906,21 @@ body.fest-halloween .answer-card::after {
     to { opacity: 0; transform: translateY(-34px) scale(1.15) rotate(8deg); }
   }
 }
+
+/* Halloween: one bat flies across the screen about once a minute (owner pick). Fixed, behind nothing clickable. */
+.fest-flybat { display: none; }
+body.fest-halloween .fest-flybat { display: block; position: fixed; top: 18vh; left: 0; width: 30px; height: 30px; z-index: 30; pointer-events: none;
+  background: var(--fest-2); opacity: 0; -webkit-mask: var(--fest-bat) center / contain no-repeat; mask: var(--fest-bat) center / contain no-repeat; }
+@media (prefers-reduced-motion: no-preference) {
+  body.fest-halloween .fest-flybat { animation: fest-flybat 60s linear 4s infinite; }
+}
+/* the flight takes ~7% of 60 s (about 4 s); the bat is invisible the rest of the minute */
+@keyframes fest-flybat {
+  0%   { opacity: 0;   transform: translate(-40px, 0) scale(.8); }
+  1%   { opacity: .85; }
+  3%   { transform: translate(35vw, -6vh) scale(1) rotate(-8deg); }
+  5%   { transform: translate(70vw, 3vh) scale(.9) rotate(6deg); }
+  6.5% { opacity: .85; }
+  7%   { opacity: 0;   transform: translate(105vw, -4vh) scale(.8); }
+  100% { opacity: 0;   transform: translate(105vw, -4vh) scale(.8); }
+}
