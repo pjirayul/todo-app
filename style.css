@@ -820,8 +820,8 @@ body.fest-halloween .todo-item[data-fest="4"]::after { -webkit-mask-image: var(-
 .brand { flex: none; white-space: nowrap; }
 
 /* Lighter glass header while the cobweb is on, so the web shows through (title and buttons keep full contrast) */
-/* clear glass: ~70% see-through (owner). Only a tiny blur: a strong blur smudged the thin cobweb lines away */
-body.fest-halloween .topbar { background: color-mix(in srgb, var(--card) 30%, transparent); -webkit-backdrop-filter: blur(1.5px) saturate(1.4); backdrop-filter: blur(1.5px) saturate(1.4); box-shadow: inset 0 1px 0 var(--glass-hi); }
+/* base glass (owner, 31 Oct): 50% see-through + tiny blur. A strong blur smudged the thin cobweb lines away */
+body.fest-halloween .topbar { background: color-mix(in srgb, var(--card) 50%, transparent); -webkit-backdrop-filter: blur(1.5px) saturate(1.4); backdrop-filter: blur(1.5px) saturate(1.4); box-shadow: inset 0 1px 0 var(--glass-hi); }
 body.fest-halloween .fest-decor .web { width: 64px; height: 64px; opacity: .8; }
 @media (max-width: 480px) { body.fest-halloween .fest-decor .web { width: 56px; height: 56px; } }
 
