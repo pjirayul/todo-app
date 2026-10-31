@@ -240,6 +240,8 @@ svg.i.sm { width: 15px; height: 15px; }
 .edit-row .e-text { flex: 1 1 100%; }
 .edit-row .e-cat { flex: 1; min-width: 100px; }
 .edit-row .e-due, .edit-row .e-priority { min-width: 0; }
+.edit-row .e-repeat { min-width: 0; min-height: 44px; flex: 1 1 auto; color: inherit; font-family: inherit; line-height: 1.5; }
+.edit-row .e-repeat:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .edit-row button { padding: 10px 18px; min-height: 44px; border-radius: 12px; border: 1px solid var(--border); font-size: 1.1rem; }
 .edit-row .primary { border: none; }
 .edit-form { padding: 4px 0; }
@@ -390,7 +392,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; font-size: .8rem; color: var(--muted); }
 .meta:empty { display: none; }
 .tag { padding: 1px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
-.due, .steps-count { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.due, .steps-count, .repeat-mark { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
 .due.overdue { color: var(--high); font-weight: 600; }
 .num {
   padding: 0 7px; border-radius: 6px;
@@ -586,6 +588,8 @@ footer { display: flex; justify-content: space-between; align-items: center; mar
 }
 .step-rm:hover, .step-rm:focus-visible { opacity: 1; color: var(--high); background: var(--danger-soft); }
 .steps-count svg.i.sm { color: var(--accent); }
+.repeat-mark { line-height: 1.5; }
+.repeat-mark svg.i.sm { color: var(--muted); flex: none; }
 
 /* Max's suggested steps: a soft violet card with "Add selected" (gradient) and "Cancel" (glass) */
 .suggest {
