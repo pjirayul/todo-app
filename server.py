@@ -1381,6 +1381,25 @@ def guard_bare_add(result: dict, tasks: list) -> dict:
 PENDING_SECONDS = 300   # an old question is forgotten after 5 minutes
 
 
+# English day/time words a title does not need ("Buy milk tomorrow" -> "Buy milk"); the due date is read separately
+EN_DATE_WORDS = re.compile(
+    r"\b(?:(?:on|by|at|for)\s+)?(?:(?:next|this)\s+)?(?:day after tomorrow|tomorrow(?:\s+(?:morning|afternoon|evening|night))?|today|tonight|"
+    r"this\s+(?:morning|afternoon|evening)|weekend|next week|(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|"
+    r"in\s+\d+\s+days?|\d{1,2}(?::\d\d)?\s*[ap]m|\d{1,2}:\d\d)\b", re.I)
+
+
+def clean_title(text: str) -> str:
+    """The owner's words as a task title: no 'add'/'remind me to' lead-in, no day/time words ('Call mom at 7pm' -> 'Call mom')."""
+    title = strip_lead_in(ADD_WORDS.sub("", " ".join(text.split())))
+    plain = " ".join(re.sub(THAI_DATE_WORDS, " ", EN_DATE_WORDS.sub(" ", title)).split()).strip(" ,.")
+    plain = plain or title   # never an empty title
+    return plain[:1].upper() + plain[1:]
+
+
+# A sentence that starts like a new task ("remind me to call bob", "add milk") is never the answer to Max's question
+NEW_TASK_START = re.compile(r"^(please\s+)?(remind\s+me|add\b|create\b|new task|remember\s+to|don'?t\s+forget)|^(เตือน|เพิ่ม|อย่าลืม)")
+
+
 def join_pending(text: str, earlier, age, tasks: list):
     """-> (sentence, joined). Joined = "earlier, text". Unrelated or too old = the new text alone, nothing half-done."""
     earlier = " ".join(str(earlier or "").split())[:300]
@@ -1388,7 +1407,7 @@ def join_pending(text: str, earlier, age, tasks: list):
     if not earlier or not isinstance(age, (int, float)) or age > PENDING_SECONDS:
         return text, False
     # Unrelated: a #number, a command word first, a question, or a long sentence that shares no word with anything
-    if re.search(r"#\s*\d", low) or any(rx.match(low) for rx in INTENT_WORDS.values()) or maybe_question(low, False):
+    if re.search(r"#\s*\d", low) or any(rx.match(low) for rx in INTENT_WORDS.values()) or maybe_question(low, False) or NEW_TASK_START.match(low):
         return text, False
     known = set(re.findall(r"\w+", " ".join([earlier] + [t["text"] for t in tasks]).lower()))
     if len(low.split()) > 6 and not (set(re.findall(r"\w+", low)) & known):
@@ -1463,6 +1482,7 @@ def several_card(s: str, result: dict, now: str, categories: list) -> dict:
     adds = []
     for p in parts:   # Python reads each part's date; no AI
         task = check_task({"text": p, "when": "none", "time": "", "priority": "med", "category": ""}, p, now, categories, memory)
+        task["text"] = clean_title(task["text"])   # the day is in "due" now: "Buy milk tomorrow" -> "Buy milk"
         adds.append({k: v for k, v in finish_add(task, p).items() if k != "askWhen"})   # no "When?" per part
     one = {k: v for k, v in result.items() if k != "tokens"}
     return {"action": "clarify", "case": "several", "id": uuid.uuid4().hex[:8], "q": "clarifyQ_several", "nums": [],
@@ -1474,10 +1494,14 @@ def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: 
                 earlier=None, age=None) -> dict:
     """Same as work_out_command, but every result says which road it took: "rules" (Python alone) or "ai".
     earlier + age (seconds): the owner's first sentence that Max asked "Tell me more" about."""
+    new_text = sentence
     sentence, joined = join_pending(sentence, earlier, age, tasks)
     result = guard_bare_add(work_out_command(sentence, now, categories, tasks, chosen), tasks)
     if joined and result.get("action") == "clarify":
         result["more"] = False   # the owner already told Max more: a second card, but no "Tell Max more…" loop
+        for o in result.get("options", []):   # "Add as new task" is the NEW words only, not "Cancel dentist, it is a ..."
+            if o.get("label") == "opt_add" and o["do"].get("action") == "add":
+                o["do"]["text"] = clean_title(new_text)
     elif not joined and chosen is None:
         plain = " ".join(strip_greeting(" ".join(sentence.split()))[0].split())
         result = vague_date_card(plain, several_card(plain, result, now, categories), now)
@@ -1553,6 +1577,14 @@ def add_inbox(to: str, text: str):
     return item
 
 
+def short_text(text: str, limit: int) -> str:
+    """Whole text if short, else cut at the last space before the limit + '...' (never mid-word)."""
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    return text[:limit].rsplit(" ", 1)[0].rstrip(" ,;:(") + "..."
+
+
 def team_answer(result: dict, sentence: str) -> dict:
     """The /api/parse handler's side-effect step: do the send / read the replies, and answer with the
     existing chat-reply shape (the page already shows it as a message, no task)."""
@@ -1570,7 +1602,7 @@ def team_answer(result: dict, sentence: str) -> dict:
         if not done:
             reply = "ยังไม่มีคำตอบ" if thai else "No replies yet."
         else:
-            reply = " | ".join(f"{i.get('to', '?')}: {str(i['reply']).strip()[:80]}" for i in reversed(done))
+            reply = " | ".join(f"{i.get('to', '?')}: {short_text(str(i['reply']).strip(), 80)}" for i in reversed(done))
     return {"action": "smalltalk", "kind": "chat", "reply": reply, "path": "rules"}
 
 
@@ -1898,6 +1930,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_error(404)
         if not self.from_our_page():  # no data changes here, but other sites must not make the PC run the AI
             return
+        if int(self.headers.get("Content-Length") or 0) > 300_000:   # 300 tasks fit easily; a 3 MB body does not
+            return self.send_json({"error": "Too long"}, 413)
         try:
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             sentence = str(body.get("text", ""))[:500]

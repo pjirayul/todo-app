@@ -41,12 +41,12 @@ const TEXT = {
     notifyBlocked: "Reminders are blocked for this site. To allow them: click the icon left of the address bar › Notifications › Allow, then reload.",
     notifyNone: "This browser can't show reminders.", limitSaved: (n) => `Daily AI limit: ${n} tokens`,
     sureClear: (n) => `Delete ${n} done task${n === 1 ? "" : "s"}?`, yesClear: "Yes, delete",
-    clarifyQ_done: "Mark this done?", clarifyQ_delete: "Cancel (delete) this task?", clarifyQ_change: "Change this task?",
+    clarifyQ_done: "Mark this done?", clarifyQ_delete: "Delete this task?", clarifyQ_change: "Change this task?",
     clarifyQ_similar: "Which one?", clarifyQ_pick: "Which task?", clarifyQ_several: "Add as separate tasks?", clarifyQ_question: "Is this a question?", clarifyQ_vague: "Which day next week?",
     opt_answer: "Show the answer", undoChip: "Undo", undone: "Undone.",
     opt_several: (names) => `Add ${names.length} tasks: ${names.map((x) => `"${x}"`).join(", ")}`, opt_one: "One task", tellMore: "Tell Max more…",
     answeringMax: "Answering Max:", addedMany: (nums) => `Max added ${nums.map((n) => "#" + n).join(", ")}`,
-    opt_complete: "Done", opt_delete: "Cancel", opt_update: "Change", opt_edit: "Edit", opt_uncomplete: "Reopen", opt_add: "Add as new task",
+    opt_complete: "Done", opt_delete: "Delete", opt_update: "Change", opt_edit: "Edit", opt_uncomplete: "Reopen", opt_add: "Add as new task",
     askWhich: "Which one?", askWhichTask: "Which task?", askWhen: (x) => `When is "${x}"?`,
     today: "Today", tomorrow: "Tomorrow", pickDate: "Pick date", noDate: "No date", ok: "OK", askDate: "Which day?",
     askDetails: "Quick details so Max can plan better", suggestSteps: "Suggest steps", skipSuggest: "Skip, just suggest",
@@ -120,12 +120,12 @@ const TEXT = {
     notifyBlocked: "การแจ้งเตือนของเว็บนี้ถูกบล็อกอยู่ วิธีเปิด: กดไอคอนซ้ายของช่องที่อยู่เว็บ › การแจ้งเตือน › อนุญาต แล้วโหลดหน้าใหม่",
     notifyNone: "เบราว์เซอร์นี้แสดงการแจ้งเตือนไม่ได้", limitSaved: (n) => `ขีดจำกัด AI ต่อวัน: ${n} โทเคน`,
     sureClear: (n) => `ลบงานที่เสร็จแล้ว ${n} งาน ใช่ไหม?`, yesClear: "ใช่ ลบเลย",
-    clarifyQ_done: "ทำเครื่องหมายว่าเสร็จ?", clarifyQ_delete: "ยกเลิก (ลบ) งานนี้?", clarifyQ_change: "แก้งานนี้?",
+    clarifyQ_done: "ทำเครื่องหมายว่าเสร็จ?", clarifyQ_delete: "ลบงานนี้?", clarifyQ_change: "แก้งานนี้?",
     clarifyQ_similar: "หมายถึงงานไหน?", clarifyQ_pick: "งานไหน?", clarifyQ_several: "เพิ่มเป็นหลายงานไหม?", clarifyQ_question: "นี่เป็นคำถามใช่ไหม?", clarifyQ_vague: "สัปดาห์หน้าวันไหน?",
     opt_answer: "ดูคำตอบ", undoChip: "เลิกทำ", undone: "เลิกทำแล้ว",
     opt_several: (names) => `เพิ่ม ${names.length} งาน: ${names.map((x) => `"${x}"`).join(", ")}`, opt_one: "งานเดียว", tellMore: "บอก Max เพิ่ม…",
     answeringMax: "กำลังตอบ Max:", addedMany: (nums) => `Max เพิ่ม ${nums.map((n) => "#" + n).join(", ")} แล้ว`,
-    opt_complete: "เสร็จแล้ว", opt_delete: "ยกเลิก", opt_update: "แก้", opt_edit: "แก้ไข", opt_uncomplete: "เปิดใหม่", opt_add: "เพิ่มเป็นงานใหม่",
+    opt_complete: "เสร็จแล้ว", opt_delete: "ลบ", opt_update: "แก้", opt_edit: "แก้ไข", opt_uncomplete: "เปิดใหม่", opt_add: "เพิ่มเป็นงานใหม่",
     askWhich: "หมายถึงงานไหน?", askWhichTask: "งานไหน?", askWhen: (x) => `"${x}" เมื่อไหร่?`,
     today: "วันนี้", tomorrow: "พรุ่งนี้", pickDate: "เลือกวัน", noDate: "ไม่ระบุวัน", ok: "ตกลง", askDate: "วันไหน?",
     askDetails: "ขอรายละเอียดสั้นๆ ให้ Max วางแผนได้ดีขึ้น", suggestSteps: "ขอขั้นตอน", skipSuggest: "ข้าม แนะนำเลย",
@@ -1061,8 +1061,12 @@ async function askWhichTask(text, cmd) {
 // ---------- 8c. Max asks before he guesses (clarify card) ----------
 // The server (clarify() in server.py) sends {case, options:[{label, num, do}]}; every "do" is the complete command.
 // Nothing is saved until a button is clicked. Cancel / Escape / ignoring = no change, the text stays in the box.
-const clarifyLabel = (o) => {
+const clarifyLabel = (o, card) => {
   if (o.do.action === "add_many") return t(o.label)(o.do.tasks.map((x) => x.text)); // "Add 2 tasks: …"
+  if (card?.case === "vague") { // "Monday (2 Nov, 09:00)" / "No date": name the choice, not three "Add as new task"
+    if (!o.do.due) return t("noDate");
+    return new Date(o.do.due).toLocaleDateString(t("locale"), { weekday: "long" }) + " (" + shortDate(o.do.due) + ")";
+  }
   if (!o.num) return t(o.label) + (o.do.due ? " → " + shortDate(o.do.due) : ""); // "Add as new task" / "One task" / a vague-date choice
   const x = todos.find((y) => y.num === o.num);
   if (!x) return `${t(o.label)} #${o.num}`;
@@ -1071,7 +1075,7 @@ const clarifyLabel = (o) => {
 };
 async function askClarify(card, text = "") {
   if (card.auto) return runAuto(card); // the owner nearly always says yes to this case: do it, offer Undo
-  const choices = card.options.map((o, i) => ({ label: clarifyLabel(o), value: i, primary: i === 0 }));
+  const choices = card.options.map((o, i) => ({ label: clarifyLabel(o, card), value: i, primary: i === 0 }));
   if (card.more && text) choices.push({ label: t("tellMore"), value: "more" }); // free text: Max keeps the sentence and waits
   const answer = await askMax(t("clarifyQ_" + card.case), [...choices, { label: t("cancel"), value: null }]);
   logClarify(card, !answer ? "none" : answer.value === "more" ? "more" : card.options[answer.value].label);
