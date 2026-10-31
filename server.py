@@ -516,6 +516,9 @@ STRONG_HINTS = (
 )
 
 
+TRUST_AI_CATEGORY = False   # job 0h-2 S4b switch: OFF, exam identical (97.4%), and the hints guard against the 3B over-using Work
+
+
 def pick_category(ai_category: str, sentence: str, known: list) -> str:
     """Keep the AI's category when it is one we know; when it gave none or an odd one, use keyword hints.
     Only existing category names are used (the owner's own spelling wins: 'health' -> 'Health')."""
@@ -523,6 +526,9 @@ def pick_category(ai_category: str, sentence: str, known: list) -> str:
     ai_category = (ai_category or "").strip()
     lower = sentence.lower()
     ai_known = ai_category.lower() in names
+    # Experiment S4b (TRUST_AI_CATEGORY): a known category from the AI stands; hints only fill an empty or odd one.
+    if TRUST_AI_CATEGORY and ai_known:
+        return names[ai_category.lower()]
     # Work words win over every keyword hint ("send run report to boss" is Work)
     if WORK_WORDS.search(lower):
         return names["work"] if (not ai_known or ai_category.lower() in ("work", "personal")) else names[ai_category.lower()]
