@@ -1,5 +1,23 @@
 {
  "_about": "Rotating example hints. Slots: morning 05-11, day 11-17, evening 17-05. Only lines Max handles today.",
+ "halloween": {
+  "en": [
+   "🎃 Trick or treat? Tell Max… if you dare",
+   "👻 add buy candy tomorrow",
+   "🦇 what's due today?",
+   "🍬 add Halloween party Saturday 7pm",
+   "🕸️ move #3 to friday",
+   "🧙 done #2"
+  ],
+  "th": [
+   "🎃 Trick or treat? บอก Max ได้เลย… ถ้ากล้า",
+   "👻 เพิ่ม ซื้อขนม พรุ่งนี้",
+   "🦇 วันนี้มีงานอะไรบ้าง",
+   "🍬 เพิ่ม ปาร์ตี้ฮาโลวีน วันเสาร์ 1 ทุ่ม",
+   "🕸️ เลื่อน #3 ไปวันศุกร์",
+   "🧙 เสร็จ #2"
+  ]
+ },
  "command": {
   "morning": {
    "en": [

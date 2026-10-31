@@ -33,6 +33,10 @@
     function lines() {
       const lang = getLang();
       const list = (((data[key] || {})[slotNow()] || {})[lang]) || [];
+      // Halloween theme on: show only the spooky lines (in hints.json "halloween") in the main command box
+      const fest = key === "command" && document.body.classList.contains("fest-halloween")
+        ? ((data.halloween || {})[lang]) || [] : [];
+      if (fest.length) return fest;
       return list.length ? list : [FALLBACK[lang]];
     }
     function show() { const l = lines(); ph.textContent = l[i % l.length]; } // textContent: never HTML
