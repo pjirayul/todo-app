@@ -221,6 +221,11 @@
     {"s": "tomorrow at 5pm", "earlier": "buy milk", "action": "add", "due": "2026-10-31T17:00", "ask": false},
     {"s": "dentist", "earlier": "cancel", "action": ["delete", "clarify"]},
     {"s": "what is due today?", "earlier": "cancel", "action": "answer"},
-    {"s": "done #2", "earlier": "buy milk", "action": "complete", "num": 2}
+    {"s": "done #2", "earlier": "buy milk", "action": "complete", "num": 2},
+    {"s": "the Ploy thing is finished", "action": "clarify", "ask": "done", "nums": [10]},
+    {"s": "I called dad", "action": "clarify", "ask": "done", "nums": [8]},
+    {"s": "forget about the laundry", "action": "clarify", "ask": "delete", "nums": [1]},
+    {"s": "move the dad call to saturday", "action": "clarify", "ask": "change", "nums": [8]},
+    {"s": "ขอ Claude จาก Ploy เสร็จแล้ว", "action": "clarify", "ask": "done", "nums": [10]}
   ]
 }
