@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
   <!-- ?v= makes browsers fetch the new file after an update (raise it on each release) -->
-  <link rel="stylesheet" href="style.css?v=31">
+  <link rel="stylesheet" href="style.css?v=32">
 </head>
 <body>
   <!-- Line icons, drawn once and reused with <use href="#i-..."> -->
@@ -39,6 +39,8 @@
   <main class="app">
     <!-- Header: slim glass bar (logo, settings, team), then a greeting with today's summary -->
     <header class="top">
+      <!-- Festive decoration (only drawn when body has fest-halloween): edges only, ignores clicks -->
+      <div class="fest-decor" aria-hidden="true"><span class="moon"></span><span class="web"></span><span class="hang sp"></span><span class="hang b1"></span><span class="hang b2"></span></div>
       <div class="topbar">
         <span class="brand">
           <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#i-wave"/></svg></span>
@@ -64,6 +66,7 @@
         <!-- Max (the AI assistant): green dot = ready, grey = offline. Opens Max's card on the status page -->
         <a href="status.html#max" class="max-status" id="max-status"><i></i><span id="max-text">Max</span></a>
       </p>
+      <p class="fest-line" id="fest-line" data-i18n="festHalloween"></p>
     </header>
 
     <!-- Command bar: add a task, or change one ("move #2 to friday", "done #3", "delete laundry") -->
@@ -107,6 +110,7 @@
 
     <footer>
       <span id="counter"></span>
+      <button id="fest-toggle" class="link" type="button"></button>
       <button id="clear-done" class="link" data-i18n="clear">Clear done</button>
     </footer>
     <!-- "Clear done" asks Yes/No here, next to the button -->
@@ -161,6 +165,6 @@
   </div>
 
   <script src="hints.js?v=1"></script>
-  <script src="script.js?v=40"></script>
+  <script src="script.js?v=41"></script>
 </body>
 </html>

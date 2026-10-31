@@ -8,7 +8,7 @@ const TEXT = {
     limitHit: "Today's AI limit is reached, task added without AI. Click the usage bar to raise the limit.",
     low: "Low", med: "Medium", high: "High", search: "Search tasks…",
     sortManual: "My order", sortDue: "Due date", sortPriority: "Priority",
-    all: "All", active: "Active", done: "Done", overdue: "Overdue", clear: "Clear done",
+    all: "All", active: "Active", done: "Done", overdue: "Overdue", clear: "Clear done", festHalloween: "Spooky season. Let's clear your list before midnight.", festLabel: (m) => `Festive: ${m === "off" ? "Off" : "Auto"}`,
     empty: "Nothing here yet", left: (n) => `${n} task${n === 1 ? "" : "s"} left`,
     remind: "Task due", editHint: "Double-click to edit", locale: "en-GB", thinking: "…",
     notFound: (q) => `Couldn't find task "${q}"`, which: (nums) => `Which one? ${nums}`,
@@ -83,7 +83,7 @@ const TEXT = {
     limitHit: "ใช้ AI ครบขีดจำกัดวันนี้แล้ว เพิ่มงานโดยไม่ใช้ AI กดที่แถบเพื่อเพิ่มขีดจำกัด",
     low: "ต่ำ", med: "กลาง", high: "สูง", search: "ค้นหางาน…",
     sortManual: "ลำดับของฉัน", sortDue: "วันครบกำหนด", sortPriority: "ความสำคัญ",
-    all: "ทั้งหมด", active: "ยังไม่เสร็จ", done: "เสร็จแล้ว", overdue: "เลยกำหนด", clear: "ลบงานที่เสร็จ",
+    all: "ทั้งหมด", active: "ยังไม่เสร็จ", done: "เสร็จแล้ว", overdue: "เลยกำหนด", clear: "ลบงานที่เสร็จ", festHalloween: "ฤดูฮาโลวีนแล้ว มาเคลียร์งานก่อนเที่ยงคืนกัน", festLabel: (m) => `เทศกาล: ${m === "off" ? "ปิด" : "อัตโนมัติ"}`,
     empty: "ยังไม่มีงาน", left: (n) => `เหลือ ${n} งาน`,
     remind: "ถึงเวลางาน", editHint: "ดับเบิลคลิกเพื่อแก้ไข", locale: "th-TH", thinking: "…",
     notFound: (q) => `ไม่พบงาน "${q}"`, which: (nums) => `หมายถึงงานไหน? ${nums}`,
@@ -241,6 +241,26 @@ function setPlaceholders() {
   });
 }
 
+// Festive theme: picks a season from today's date. Setting "Auto" follows the date, "Off" never decorates.
+// CHRISTMAS (1-26 Dec): add `if (m === 11 && d <= 26) return "christmas";` below, plus a body.fest-christmas block in style.css.
+function festTheme() {
+  if (settings.fest === "off") return "";
+  const now = new Date(), m = now.getMonth(), d = now.getDate();
+  if ((m === 9 && d >= 20) || (m === 10 && d <= 3)) return "halloween"; // 20 Oct - 3 Nov
+  return "";
+}
+function drawFest() {
+  const theme = festTheme();
+  document.body.classList.toggle("fest-halloween", theme === "halloween");
+  $("fest-toggle").textContent = t("festLabel")(settings.fest);
+  $("fest-line").hidden = theme !== "halloween";
+}
+$("fest-toggle").addEventListener("click", () => {
+  settings.fest = settings.fest === "off" ? "auto" : "off";
+  save("settings", settings);
+  render();
+});
+
 function render() {
   // Apply language and theme
   document.documentElement.lang = settings.lang;
@@ -253,6 +273,7 @@ function render() {
   // Line icon: a sun in dark mode (click for light), a moon in light mode
   $("theme").innerHTML = `<svg class="i"><use href="#i-${settings.theme === "dark" ? "sun" : "moon"}"/></svg>`;
   $("notify").classList.toggle("on", "Notification" in window && Notification.permission === "granted");
+  drawFest();
   drawGreeting();
   drawRemind();
   drawFocus(); // only the bar's own text (the bar lives outside the list)
