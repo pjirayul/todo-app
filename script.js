@@ -43,7 +43,9 @@ const TEXT = {
     sureClear: (n) => `Delete ${n} done task${n === 1 ? "" : "s"}?`, yesClear: "Yes, delete",
     clarifyQ_done: "Mark this done?", clarifyQ_delete: "Delete this task?", clarifyQ_change: "Change this task?",
     clarifyQ_similar: "Which one?", clarifyQ_pick: "Which task?", clarifyQ_several: "Add as separate tasks?", clarifyQ_question: "Is this a question?", clarifyQ_vague: "Which day next week?",
-    opt_answer: "Show the answer", undoChip: "Undo", undone: "Undone.",
+    opt_answer: "Show the answer", undoChip: "Undo", undone: "Undone.", nothingToUndo: "Nothing to undo.",
+    undoneWhat: (x) => `Undone: ${x}`, undoAdded: (nums) => `added ${nums.map((n) => "#" + n).join(", ")}`,
+    undoDeleted: (nums) => `deleted ${nums.map((n) => "#" + n).join(", ")}`, undoChanged: (nums) => `change to ${nums.map((n) => "#" + n).join(", ")}`,
     opt_several: (names) => `Add ${names.length} tasks: ${names.map((x) => `"${x}"`).join(", ")}`, opt_one: "One task", tellMore: "Tell Max more…",
     answeringMax: "Answering Max:", addedMany: (nums) => `Max added ${nums.map((n) => "#" + n).join(", ")}`,
     opt_complete: "Done", opt_delete: "Delete", opt_update: "Change", opt_edit: "Edit", opt_uncomplete: "Reopen", opt_add: "Add as new task",
@@ -125,7 +127,9 @@ const TEXT = {
     sureClear: (n) => `ลบงานที่เสร็จแล้ว ${n} งาน ใช่ไหม?`, yesClear: "ใช่ ลบเลย",
     clarifyQ_done: "ทำเครื่องหมายว่าเสร็จ?", clarifyQ_delete: "ลบงานนี้?", clarifyQ_change: "แก้งานนี้?",
     clarifyQ_similar: "หมายถึงงานไหน?", clarifyQ_pick: "งานไหน?", clarifyQ_several: "เพิ่มเป็นหลายงานไหม?", clarifyQ_question: "นี่เป็นคำถามใช่ไหม?", clarifyQ_vague: "สัปดาห์หน้าวันไหน?",
-    opt_answer: "ดูคำตอบ", undoChip: "เลิกทำ", undone: "เลิกทำแล้ว",
+    opt_answer: "ดูคำตอบ", undoChip: "เลิกทำ", undone: "เลิกทำแล้ว", nothingToUndo: "ไม่มีอะไรให้เลิกทำ",
+    undoneWhat: (x) => `เลิกทำแล้ว: ${x}`, undoAdded: (nums) => `เพิ่ม ${nums.map((n) => "#" + n).join(", ")}`,
+    undoDeleted: (nums) => `ลบ ${nums.map((n) => "#" + n).join(", ")}`, undoChanged: (nums) => `แก้ ${nums.map((n) => "#" + n).join(", ")}`,
     opt_several: (names) => `เพิ่ม ${names.length} งาน: ${names.map((x) => `"${x}"`).join(", ")}`, opt_one: "งานเดียว", tellMore: "บอก Max เพิ่ม…",
     answeringMax: "กำลังตอบ Max:", addedMany: (nums) => `Max เพิ่ม ${nums.map((n) => "#" + n).join(", ")} แล้ว`,
     opt_complete: "เสร็จแล้ว", opt_delete: "ลบ", opt_update: "แก้", opt_edit: "แก้ไข", opt_uncomplete: "เปิดใหม่", opt_add: "เพิ่มเป็นงานใหม่",
@@ -706,14 +710,16 @@ function noteIfMistake(todo) {
 }
 
 function deleteNow(todo) {
+  startUndo();
   backup(`before delete #${todo.num}`, true);
   noteIfMistake(todo);
-  deleteTaskFiles(todo);
+  // The task's files stay in IndexedDB until the undo is gone (endUndo / clearUndo drop them), so Undo can bring them back
   todos = todos.filter((x) => x !== todo);
   update();
   $("todo-input").value = "";
   $("todo-input").focus();
   showMessage(spooky(t("deleted")(todo.num))); // confirm it is really gone
+  endUndo();
 }
 function askDelete(todo) {
   askYesNo($("cmd-msg"), t("sureDelete")(`#${todo.num} "${todo.text}"`), t("yes"), () => deleteNow(todo), () => $("todo-input").focus());
@@ -789,6 +795,7 @@ function nextDue(due, repeat, now = new Date()) {
 // again can never make a second copy). The copy has no attached files (they would be shared and deleted twice).
 // Returns the copy, or null. Callers do backup() first and update() after.
 function markDone(todo) {
+  if (!undoDepth) touchUndo(todo.id); // the owner ticked it (checkbox, banner, focus): an old undo must not overwrite that
   todo.done = true;
   if (!REPEATS.includes(todo.repeat) || !todo.due) return null;
   const copy = {
@@ -859,6 +866,7 @@ async function parseWithMax(text, extra = {}) {
 
 // Do a command and say what happened (keeps the text in the box when it didn't work)
 function finishCommand(cmd) {
+  startUndo();
   showMessage("");
   const msg = applyCommand(cmd);
   if (msg === "") {
@@ -868,11 +876,13 @@ function finishCommand(cmd) {
     if (done && !cmd.copy) showMessage(spooky(t(done)(cmd.num))); // a repeat copy already said "Done. Next: ..."
   }
   if (msg) showMessage(msg, !cmd.choices?.length); // "Which one?" is not a warning
-  // A Yes/No question is waiting: put the focus on Yes, so Enter confirms the delete
-  ($("cmd-msg").querySelector("button") || $("todo-input")).focus();
+  endUndo(); // adds the [Undo] chip when something really changed
+  // A Yes/No question is waiting: put the focus on Yes, so Enter confirms the delete (the Undo chip never takes the focus)
+  ($("cmd-msg").querySelector("button:not(.undo-chip)") || $("todo-input")).focus();
 }
 
 function addTask(task, problem = "") {
+  startUndo();
   backup(`before add "${task.text.slice(0, 40)}"`);
   const num = newNum();
   todos.push({ id: Date.now() + Math.random(), num, text: task.text, done: false, due: task.due || "", priority: task.priority || "med", cat: task.category || "", notified: false, notes: "", files: [], steps: [], detailsAsked: false, repeat: REPEATS.includes(task.repeat) ? task.repeat : "" });
@@ -884,6 +894,7 @@ function addTask(task, problem = "") {
     const when = task.due ? new Date(task.due).toLocaleString(t("locale"), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
     showMessage(spooky(t("maxAdded")(num, task.text, when))); // textContent inside, so task text never runs as HTML
   }
+  endUndo();
 }
 
 // ---------- Ask Max: answers to questions about the tasks ----------
@@ -1147,8 +1158,10 @@ function doClarified(act) {
   }
   if (act.action === "add_many") { // "Add 2 tasks": one message for all of them
     const nums = [];
+    startUndo(); // the whole group is ONE undo
     for (const task of act.tasks) { addTask(task, "quiet"); nums.push(todos[todos.length - 1].num); }
-    return showMessage(spooky(t("addedMany")(nums)));
+    showMessage(spooky(t("addedMany")(nums)));
+    return endUndo();
   }
   if (act.action === "add") return act.askWhen ? askWhenThenAdd(act) : addTask(act);
   if (act.action === "edit") { // "move" alone: open that task's editor
@@ -1159,36 +1172,109 @@ function doClarified(act) {
   finishCommand(act);
 }
 
-// Auto-act (Python decided from the owner's last answers). ONE snapshot is kept, so [Undo] puts things back for ~10 s.
-let undoTimer = 0;
+// Auto-act (Python decided from the owner's last answers): do it, and the shared Undo helper below offers [Undo].
 function runAuto(card) {
-  const act = card.options[0].do;
-  const before = new Set(todos.map((x) => x.id));
-  const index = todos.findIndex((x) => x.num === card.nums[0]);
-  const old = index >= 0 ? JSON.parse(JSON.stringify(todos[index])) : null; // the task as it was
-  doClarified(act);
+  startUndo();
+  doClarified(card.options[0].do);
   logClarify(card, "act");
-  if (act.action === "answer") return; // nothing changed, nothing to undo
-  const added = todos.filter((x) => !before.has(x.id)).map((x) => x.id); // new tasks (an add / several)
+  endUndo(card); // card: so Undo can tell Python the auto-act was wrong
+}
+
+// ---------- 8d. Undo for Max ----------
+// ONE snapshot of the last Max action (memory only: a reload forgets it). startUndo() copies the list before the
+// action, endUndo() compares and keeps what changed: tasks that were added, and the old copy of tasks that were
+// changed or deleted. That covers add, several, done (and its repeat copy), reopen, delete, move and auto-acts.
+// The owner's own clicks (tick, edit, delete) are NOT undoable; they clear the snapshot if they touch the same task.
+let undoSnap = null;   // { added: [ids], old: [{ index, task }], doomed: [file ids], card, until }
+let undoStart = null;  // the list before the running action
+let undoDepth = 0;     // actions inside actions (a command that deletes, an auto-act) count as one
+let undoTimer = 0;
+let lastSentence = ""; // what the owner typed, for the learning loop
+const UNDO_CHIP_MS = 10000;
+const copyList = (list) => JSON.parse(JSON.stringify(list));
+
+function startUndo() {
+  if (undoDepth++ === 0) undoStart = copyList(todos);
+}
+function endUndo(card = null) {
+  if (--undoDepth > 0) return;
+  undoDepth = 0;
+  const before = undoStart;
+  undoStart = null;
+  if (!before) return;
+  const ids = new Set(before.map((x) => x.id));
+  const added = todos.filter((x) => !ids.has(x.id)).map((x) => x.id);
+  const old = [];
+  before.forEach((x, index) => {
+    const now = todos.find((y) => y.id === x.id);
+    if (!now || JSON.stringify(now) !== JSON.stringify(x)) old.push({ index, task: x });
+  });
+  if (!added.length && !old.length) return; // nothing changed (a question, "Which one?"): keep the earlier undo
+  clearUndo(); // a new action replaces the old snapshot (its deleted files are dropped now)
+  const gone = old.filter((o) => !todos.some((y) => y.id === o.task.id));
+  undoSnap = { added, old, card, doomed: gone.flatMap((o) => (o.task.files || []).map((f) => f.id)), until: Date.now() + UNDO_CHIP_MS };
+  drawUndoChip();
+}
+// Forget the snapshot; the files of deleted tasks can go now, because nothing can bring them back
+function clearUndo() {
+  clearTimeout(undoTimer);
+  document.querySelectorAll(".undo-chip").forEach((c) => c.remove());
+  undoSnap?.doomed.forEach((id) => deleteFile(id));
+  undoSnap = null;
+}
+// The owner changed this task by hand: an undo that touches it would wipe that edit
+function touchUndo(id) {
+  if (undoSnap && (undoSnap.added.includes(id) || undoSnap.old.some((o) => o.task.id === id))) clearUndo();
+}
+const undoLive = () => !!undoSnap && Date.now() < undoSnap.until;
+
+// The [Undo] chip sits in the message line for ~10 s (typing "undo" works longer)
+function drawUndoChip() {
+  if (!undoLive()) return;
   const chip = document.createElement("button");
   chip.type = "button";
-  chip.className = "chip";
+  chip.className = "chip undo-chip";
+  chip.style.cssText = "flex: none; white-space: nowrap"; // keep the word whole on a narrow screen (the message line is a flex row)
   chip.textContent = t("undoChip");
-  chip.addEventListener("click", () => {
-    clearTimeout(undoTimer);
-    todos = todos.filter((x) => !added.includes(x.id));
-    if (old) {
-      const at = todos.findIndex((x) => x.num === old.num);
-      if (at >= 0) todos[at] = old; else todos.splice(Math.min(index, todos.length), 0, old); // a deleted task comes back
-    }
-    update();
-    showMessage(t("undone"));
-    logClarify(card, "undo"); // counts against "act": too many undos and Max asks again
-  });
-  const box = $("cmd-msg");
-  box.append(" ", chip);
+  chip.addEventListener("click", () => { undoLast(); $("todo-input").focus(); });
+  $("cmd-msg").append(" ", chip);
   clearTimeout(undoTimer);
-  undoTimer = setTimeout(() => chip.remove(), 10000);
+  undoTimer = setTimeout(() => chip.remove(), UNDO_CHIP_MS);
+}
+
+function undoLast() {
+  const s = undoSnap;
+  if (!s) return showMessage(t("nothingToUndo"));
+  clearTimeout(undoTimer);
+  undoSnap = null; // used once
+  const addedTasks = todos.filter((x) => s.added.includes(x.id));
+  const changedNums = [...new Set([...s.old.map((o) => o.task.num), ...addedTasks.map((x) => x.num)])];
+  const deleted = s.old.some((o) => !todos.some((y) => y.id === o.task.id));
+  const flipped = s.old.some((o) => { const now = todos.find((y) => y.id === o.task.id); return now && now.done !== o.task.done; });
+  backup("before undo", true);
+  todos = todos.filter((x) => !s.added.includes(x.id));
+  for (const o of s.old) { // lowest position first, so every task goes back to its place
+    const at = todos.findIndex((x) => x.id === o.task.id);
+    if (at >= 0) todos[at] = o.task; else todos.splice(Math.min(o.index, todos.length), 0, o.task); // a deleted task comes back
+  }
+  update();
+  const what = deleted ? t("undoDeleted")(changedNums) : s.old.length || !addedTasks.length ? t("undoChanged")(changedNums) : t("undoAdded")(changedNums);
+  showMessage(spooky(t("undoneWhat")(what)));
+  if (s.card) logClarify(s.card, "undo"); // counts against "act": too many undos and Max asks again
+  // Learning loop: Max got it wrong. A plain add reuses noteIfMistake; the rest says what kind of action it was
+  if (addedTasks.length === 1 && !s.old.length) noteIfMistake(addedTasks[0]);
+  else noteUndo(deleted ? "delete" : flipped ? "complete" : addedTasks.length > 1 ? "add_many" : addedTasks.length ? "complete" : "update");
+  if (!deleted && !addedTasks.length) flash(changedNums[0]);
+}
+// Same private log as noteIfMistake (api/max/mistake), action "undo" + what was undone. Never blocks the undo.
+function noteUndo(undid) {
+  if (!LOCAL) return;
+  fetch("api/max/mistake", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: lastSentence, action: "undo", undid, created: new Date().toISOString(), deletedAt: new Date().toISOString() }),
+    signal: AbortSignal.timeout(5000),
+  }).catch(() => {});
 }
 
 // A meeting/flight/trip… with no day: "When?" Today · Tomorrow · Pick date · No date (= add it as it is)
@@ -1256,6 +1342,16 @@ $("todo-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = $("todo-input").value.trim();
   if (!text) return;
+  lastSentence = text.slice(0, 200);
+  // A bare "undo" / "เลิกทำ" (greeting allowed) takes back Max's last action. It is decided here, before the server:
+  // the snapshot lives in this page. "undo #2" / "undo laundry" are not bare, so they still reopen a task.
+  // A bare "cancel" / "ยกเลิก" means undo only while the [Undo] chip is showing, otherwise it keeps asking which task to delete.
+  const bareWord = stripGreeting(text).toLowerCase().replace(/[\s.!]+$/, "");
+  if (/^(undo|เลิกทำ)$/.test(bareWord) || (undoLive() && /^(cancel|ยกเลิก)$/.test(bareWord))) {
+    $("todo-input").value = "";
+    hideAnswer();
+    return undoLast();
+  }
   if (isGreetingOnly(text)) { // just "hi max": say hello, add nothing
     $("todo-input").value = "";
     return showMessage(t("greetReply"));
@@ -1337,10 +1433,10 @@ $("todo-form").addEventListener("submit", async (e) => {
     // Always give the box back, even if something above went wrong
     button.disabled = input.disabled = false;
     button.textContent = t("add");
-    if (!followUp) ($("cmd-msg").querySelector("button") || input).focus();
+    if (!followUp) ($("cmd-msg").querySelector("button:not(.undo-chip)") || input).focus();
   }
   if (followUp) return followUp();
-  if (problem && !cmd) showMessage(problem, true); // in-page: the owner's browser blocks alert()
+  if (problem && !cmd) { showMessage(problem, true); drawUndoChip(); } // in-page: the owner's browser blocks alert()
 });
 
 // ---------- 5. Clicks inside the list: tick, edit, delete ----------
@@ -1355,6 +1451,7 @@ $("todo-list").addEventListener("click", async (e) => {
     // Remove one attachment
     e.preventDefault();
     const todo = findTodo(e.target);
+    touchUndo(todo.id);
     backup(`before removing a file from #${todo.num}`);
     todo.files = todo.files.filter((f) => f.id !== e.target.dataset.rm);
     deleteFile(e.target.dataset.rm);
@@ -1367,12 +1464,14 @@ $("todo-list").addEventListener("click", async (e) => {
   } else if (e.target.classList.contains("check")) {
     backup(`before ${e.target.checked ? "done" : "undo"} #${findTodo(e.target).num}`);
     const ticked = findTodo(e.target);
+    touchUndo(ticked.id);
     if (e.target.checked) markDone(ticked);
     else ticked.done = false;
     update();
     if (ticked.done) ghostPoof(ticked.id);
   } else if (e.target.classList.contains("delete")) {
     const todo = findTodo(e.target);
+    touchUndo(todo.id);
     backup(`before delete #${todo.num}`, true);
     noteIfMistake(todo);
     deleteTaskFiles(todo);
@@ -1382,11 +1481,13 @@ $("todo-list").addEventListener("click", async (e) => {
   } else if (e.target.classList.contains("step-check")) {
     // Tick or untick one step of the checklist
     const todo = findTodo(e.target);
+    touchUndo(todo.id);
     backup(`before ticking a step of #${todo.num}`);
     todo.steps[Number(e.target.dataset.step)].done = e.target.checked;
     update();
   } else if (e.target.classList.contains("step-rm")) {
     const todo = findTodo(e.target);
+    touchUndo(todo.id);
     backup(`before removing a step from #${todo.num}`);
     todo.steps.splice(Number(e.target.dataset.step), 1);
     update();
@@ -1398,6 +1499,7 @@ $("todo-list").addEventListener("click", async (e) => {
     const chosen = suggest.steps.filter((s, i) => suggest.picked[i]);
     suggest = null;
     if (!chosen.length) return render();
+    touchUndo(todo.id);
     backup(`before adding steps to #${todo.num}`);
     todo.steps.push(...chosen.map((text) => ({ text, done: false })));
     update();
@@ -1481,6 +1583,7 @@ $("todo-list").addEventListener("submit", async (e) => {
   e.preventDefault();
   const form = e.target;
   const todo = findTodo(form);
+  touchUndo(todo.id);
   backup(`before edit #${todo.num}`);
   todo.text = form.querySelector(".e-text").value.trim() || todo.text;
   todo.due = form.querySelector(".e-due").value;
@@ -1558,6 +1661,7 @@ $("clear-done").addEventListener("click", () => {
   askYesNo($("foot-msg"), t("sureClear")(count), t("yesClear"), () => {
     backup("before clear done", true);
     todos.filter((x) => x.done).forEach(deleteTaskFiles);
+    clearUndo();
     todos = todos.filter((x) => !x.done);
     update();
   });
@@ -1898,6 +2002,7 @@ function cleanTodos(list) {
 
 // Put a whole new task list in place (after Restore or Import)
 function replaceTasks(list, savedNextNum) {
+  clearUndo();
   todos = list;
   suggest = null;
   nextNum = Math.max(Number(savedNextNum) || 1, 1, ...todos.map((x) => x.num + 1));
@@ -2034,6 +2139,7 @@ async function sendToDb(keepalive = false) {
 
 // Show the database's list (and keep a copy in localStorage)
 function useDbData(data) {
+  clearUndo();
   todos = cleanTodos(data.todos) || [];
   nextNum = Math.max(Number(data.nextNum) || 1, 1, ...todos.map((x) => x.num + 1));
   dbVersion = data.version;
