@@ -1342,7 +1342,6 @@ $("todo-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = $("todo-input").value.trim();
   if (!text) return;
-  lastSentence = text.slice(0, 200);
   // A bare "undo" / "เลิกทำ" (greeting allowed) takes back Max's last action. It is decided here, before the server:
   // the snapshot lives in this page. "undo #2" / "undo laundry" are not bare, so they still reopen a task.
   // A bare "cancel" / "ยกเลิก" means undo only while the [Undo] chip is showing, otherwise it keeps asking which task to delete.
@@ -1350,8 +1349,9 @@ $("todo-form").addEventListener("submit", async (e) => {
   if (/^(undo|เลิกทำ)$/.test(bareWord) || (undoLive() && /^(cancel|ยกเลิก)$/.test(bareWord))) {
     $("todo-input").value = "";
     hideAnswer();
-    return undoLast();
+    return undoLast(); // keep lastSentence = the sentence Max got wrong, for the learning loop
   }
+  lastSentence = text.slice(0, 200);
   if (isGreetingOnly(text)) { // just "hi max": say hello, add nothing
     $("todo-input").value = "";
     return showMessage(t("greetReply"));
