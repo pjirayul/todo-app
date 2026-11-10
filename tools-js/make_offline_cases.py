@@ -67,8 +67,8 @@ CASES = [
     ("null", "#3 priority high", "priority change: not in the JS rules yet"),
     # --- questions ---
     ("ask", "what's due today"), ("ask", "what's due tomorrow"), ("ask", "what's due this week"), ("ask", "what is due friday"),
-    ("ask", "what's overdue"), ("ask", "what have I finished"), ("finish", "what did I finish", "what did I finished"),
-    ("finish", "what did I finish today", "what did I finished today"), ("finish", "what did I finish this week", "what did I finished this week"), ("ask", "show high priority tasks"), ("ask", "what's due next friday"),
+    ("ask", "what's overdue"), ("ask", "what have I finished"), ("finish", "what did I finish"),
+    ("finish", "what did I finish today"), ("finish", "what did I finish this week"), ("ask", "show high priority tasks"), ("ask", "what's due next friday"),
     ("ask", "what do I have this weekend"), ("ask", "how many tasks are left"), ("ask", "มีอะไรต้องทำวันนี้"),
     ("ask", "งานอะไรสัปดาห์นี้"), ("ask", "anything about rent"),
     ("null", "what did I finish yesterday", "Python says it does not record the finish day: no list"),
@@ -134,8 +134,8 @@ def main():
         if kind == "add":
             entry["expect"] = expected_add(sentence)
         elif kind in ("cmd", "ask", "finish"):
-            # "finish": Python only reads "finished" as a done-question, so we ask it the same thing with that word
-            result = run(case[2] if kind == "finish" else sentence)
+            # "finish" = "what did I finish ...": Python now reads it as a done-question (server.py question_filter)
+            result = run(sentence)
             if result is None:  # "done #99": Python still asks the AI once, then keeps its own "can't find #99"
                 with memory():
                     result = server.command_by_rules(sentence, NOW_TEXT, CATEGORIES, [dict(t) for t in TASKS])
@@ -145,8 +145,6 @@ def main():
             if result.get("path") != "rules":
                 raise SystemExit(f"{sentence!r}: Python needed the AI ({result}) - make it a null case")
             entry["expect"] = simple(result)
-            if kind == "finish":
-                entry["python_gap"] = "Python needs the word 'finished'; JS also reads 'did I finish'. Expected = Python's answer to the 'finished' wording."
         else:  # null
             entry["expect"] = None
             entry["why"] = case[2]

@@ -563,8 +563,7 @@
     if (!f.when && UNREAD_DAY.test(low)) f.unread = true; // a day we cannot read
     if (rx(raw`\b(high|urgent|important|asap)\b|ด่วน|สำคัญ`).test(low)) f.priority = "high";
     else if (rx(raw`\blow\b|ไม่รีบ`).test(low)) f.priority = "low";
-    // "what did I finish" asks for DONE tasks. Python only knows "finished"/"done"/"completed" today, so it would
-    // list OPEN tasks for "what did I finish today": this is the one place JS is on purpose a little ahead (see report).
+    // "what did I finish" asks for DONE tasks (same as question_filter in server.py)
     if (rx(raw`\b(done|completed|finished)\b|เสร็จแล้ว|\bdid i (?:finish|complete)\b`).test(low)) f.status = "done";
     for (const name of names) {
       if (!f.cat && rx("(?<!" + WORD + ")" + escapeRe(name.toLowerCase()) + "(?!" + WORD + ")").test(low)) f.cat = name.toLowerCase();

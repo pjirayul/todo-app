@@ -1151,7 +1151,8 @@ def question_filter(low: str, now: datetime, categories: list) -> dict:
         f["priority"] = "high"
     elif re.search(r"\blow\b|ไม่รีบ", low):
         f["priority"] = "low"
-    if re.search(r"\b(done|completed|finished)\b|เสร็จแล้ว", low):
+    # "what did I finish" asks for DONE tasks too (but "what do I need to finish" is still an open-task question)
+    if re.search(r"\b(done|completed|finished)\b|เสร็จแล้ว|\bdid i (?:finish|complete)\b", low):
         f["status"] = "done"
     for name in names:
         if not f["cat"] and re.search(r"(?<!\w)" + re.escape(name.lower()) + r"(?!\w)", low):
@@ -2756,7 +2757,7 @@ ALLOWED_HOSTS = make_allowed_hosts(8000)
 ALLOWED_ORIGINS = tuple("http://" + host for host in ALLOWED_HOSTS)
 # The only files the server hands out; everything else in the folder stays private
 PUBLIC_FILES = {"/", "/index.html", "/style.css", "/script.js", "/status.html",
-                "/icon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", "/manifest.json", "/hints.json", "/hints.js"}
+                "/icon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", "/manifest.json", "/hints.json", "/hints.js", "/max-offline.js"}
 STATUS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "status.json")
 
 

@@ -1626,8 +1626,14 @@ $("todo-form").addEventListener("submit", async (e) => {
       if (LOCAL) console.warn("AI unavailable:", err);
       showMessage("");
       problem = err.message === t("limitHit") ? t("limitHit") : t("aiOff");
-      answer = localQuestion(text); // simple questions need no AI
-      if (!answer && !QUESTION_WORDS.test(stripGreeting(text).toLowerCase())) cmd = simpleCommand(text);
+      // max-offline.js: Python's clear-sentence rules in JS (dated tasks, "#3 done", "move #3 to friday", questions).
+      // null = not sure, then the older offline helpers below run as before.
+      const off = window.MaxOffline?.understand(text, todos, new Date());
+      if (off?.action === "answer") answer = off;
+      else if (off?.action === "add") { task = off; problem = ""; } // understood without the AI: no "Max is offline" warning
+      else if (off) cmd = off;
+      if (!off) answer = localQuestion(text); // simple questions need no AI
+      if (!off && !answer && !QUESTION_WORDS.test(stripGreeting(text).toLowerCase())) cmd = simpleCommand(text);
       if (!answer && !cmd && LOCAL && problem === t("limitHit")) {
         // A new task at the AI limit: Python can still ask "When?" for a meeting/trip (no AI used),
         // and still answers questions (the tricky ones: a weekday, a category)

@@ -1100,6 +1100,13 @@ class Job6FixRound(unittest.TestCase):
         r = server.command_by_rules("delay dentist appointment by 3 days", NOW_TEXT, [], self.RENT)
         self.assertEqual((r["num"], r["changes"]), (4, {"due": "2026-11-05T16:30"}))
 
+    def test_did_i_finish_is_a_done_question(self):
+        now = datetime.strptime(NOW_TEXT, "%Y-%m-%dT%H:%M")
+        for q in ("what did I finish", "what did i complete today"):
+            self.assertEqual(server.question_filter(q.lower(), now, [])["status"], "done", q)
+        # "what do I need to finish" still asks for open tasks
+        self.assertEqual(server.question_filter("what do i need to finish today", now, [])["status"], "open")
+
     def test_empty_or_wrong_chat_reply_gets_a_friendly_line(self):
         self.assertEqual(server.chat_reply("", "tell me a joke"), server.CHAT_FALLBACK["en"])
         self.assertEqual(server.chat_reply("", "คุณเป็นยังไงบ้าง"), server.CHAT_FALLBACK["th"])
