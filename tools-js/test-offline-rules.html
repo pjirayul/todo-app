@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>max-offline.js test</title>
+<style>body{font:14px/1.5 monospace;margin:16px}.pass{color:#0a7d2c}.fail{color:#c00;font-weight:bold}pre{margin:0 0 0 24px;color:#555}</style>
+</head>
+<body>
+<!--
+  Browser version of tools-js/test_offline_rules.js (same list, same checks).
+  The browser cannot read files from disk, so serve the app folder with any static server, e.g. from the app folder:
+      python -m http.server 8765 --bind 127.0.0.1
+  and open http://127.0.0.1:8765/tools-js/test-offline-rules.html   (not the 8000 server: it only serves the app's own files)
+-->
+<h3 id="summary">Running...</h3>
+<div id="out"></div>
+<script src="../max-offline.js"></script>
+<script>
+(async () => {
+  const out = document.getElementById("out");
+  const list = await (await fetch("../.claude/docs/offline-rules-cases.json")).json();
+  // Same compare as the Node script: sorted keys, only the parts the page uses
+  const plain = (v) => JSON.stringify(v, (k, x) => (x && typeof x === "object" && !Array.isArray(x)
+    ? Object.keys(x).sort().reduce((o, key) => { o[key] = x[key]; return o; }, {}) : x));
+  const KEEP = ["action", "priority", "repeat", "num", "changes", "missing", "choices", "text", "due", "category", "filter", "nums"];
+  const pick = (cmd) => (cmd ? KEEP.reduce((o, k) => (k in cmd ? Object.assign(o, { [k]: cmd[k] }) : o), {}) : null);
+  let passed = 0;
+  for (const c of list.cases) {
+    const got = pick(MaxOffline.understand(c.text, JSON.parse(JSON.stringify(list.todos)), list.now));
+    const ok = plain(got) === plain(c.expect);
+    if (ok) passed++;
+    const line = document.createElement("div");
+    line.className = ok ? "pass" : "fail";
+    line.textContent = `${ok ? "PASS" : "FAIL"}  #${c.id} [${c.kind}] ${c.text}`; // textContent: sentences are never run as HTML
+    out.appendChild(line);
+    if (!ok) {
+      const pre = document.createElement("pre");
+      pre.textContent = "expected: " + plain(c.expect) + "\ngot:      " + plain(got);
+      out.appendChild(pre);
+    }
+  }
+  document.getElementById("summary").textContent = `${passed} of ${list.cases.length} passed`;
+  document.title = `${passed}/${list.cases.length} passed`;
+})().catch((err) => { document.getElementById("summary").textContent = "Error: " + err.message; });
+</script>
+</body>
+</html>
