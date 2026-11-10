@@ -51,3 +51,9 @@ The owner is a beginner builder; keep code simple, readable, and explained.
 - Bump `?v=` in index.html when script.js/style.css change.
 - status.json / inbox.json / ideas.json / backups/ are private (gitignored). Update your own entry in status.json when you start/finish.
 - Toto uploads to GitHub only when the owner says so.
+
+## Dot level (added 10 Nov 2026, see claude-config\SYSTEM-DESIGN-v1.md)
+- Level: **do then tell me**. Deploy, push, delete, kill programs, startup changes = always ask.
+- Cloud runs: later, only if a private repo is approved.
+- Keep `STATUS.md` up to date (5-10 lines) at the end of each work session. Run reports go to `D:\My Drive\Dev Project\_reports\`.
+
