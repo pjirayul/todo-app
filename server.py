@@ -1369,7 +1369,7 @@ def question_answer(sentence: str, now: str, categories: list, tasks: list, use_
 # ---------- One AI call that understands the whole sentence (job 0h) ----------
 # The AI only reads the language (what kind of sentence, which words name a task); Python does every exact part:
 # dates, #numbers (regex only), finding the task, the question filter, and the safety checks below.
-INTENTS = ["add", "change", "done", "undo", "delete", "question", "chat"]
+INTENTS = ["add", "change", "done", "undo", "delete", "question", "chat", "cant"]   # cant = asks Max for something he cannot do
 UNDERSTAND_SCHEMA = {
     "type": "object",
     "properties": {   # the task fields come FIRST: the title and dates were better when the AI wrote them before the intent
@@ -1449,6 +1449,13 @@ def understand(s: str, now: str, categories: list, tasks: list, greeted: bool = 
         found = TOOLS["list_tasks"](tasks, f, datetime.strptime(now[:16], "%Y-%m-%dT%H:%M"))
         return {"action": "answer", "filter": f, "nums": [t["num"] for t in found], "tokens": tokens}
 
+    # The AI says "I cannot do that" (send an email, play music): a card, never a silent refusal or a wrong task.
+    # Python checks: the AI must also have written a reply, and a #number or command word means a task command, not "cant".
+    # A wrong "cant" costs one click ("Add as task"), so no phrase lists here.
+    if intent == "cant" and str(r.get("reply") or "").strip() and not re.search(r"#\s*\d", low) \
+            and not any(p.search(low) for p in INTENT_WORDS.values()):
+        return cant_card(as_new()) | {"tokens": tokens}
+
     if intent == "question" and not asked:
         # The AI hears a question that Python's gate did not: a card, but only when a real task is named (never for a plain add)
         target = " ".join(str(r.get("target") or "").split())
@@ -1518,6 +1525,12 @@ def clarify(case: str, nums: list, make_do, add_do: dict = None) -> dict:
     # The page writes the sentences from its own text table (EN/TH); "more" is for "Tell Max more…" (0q-2)
     return {"action": "clarify", "case": case, "id": uuid.uuid4().hex[:8], "q": "clarifyQ_" + case,
             "nums": nums, "options": options, "more": True} | auto_flag(case)
+
+
+def cant_card(add_do: dict) -> dict:
+    """"I can't do that yet. Add it as a task?" One button; Cancel is added by the page. The page writes the sentence (EN/TH)."""
+    return {"action": "clarify", "case": "cant", "id": uuid.uuid4().hex[:8], "q": "clarifyQ_cant", "nums": [],
+            "options": [{"label": "opt_cantadd", "do": add_do}], "more": False}
 
 
 def pick_card(action: str, tasks: list) -> dict:
@@ -2636,7 +2649,7 @@ def pick_kind(picked: str) -> str:
     """The page sends the button label (opt_complete, opt_add...): act = any button that did what Max offered first."""
     if picked in ("act", "add", "more", "none", "undo"):
         return picked
-    return "add" if picked in ("opt_add", "opt_one") else "act"
+    return "add" if picked in ("opt_add", "opt_one", "opt_cantadd") else "act"
 
 
 # Learning: when the owner nearly always taps the first button, Max just does it (and shows Undo). Exact things never switch.

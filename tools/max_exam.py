@@ -149,6 +149,16 @@ def main():
     for w in wrong:
         print("WRONG", w["s"], w["bad"], (json.dumps(w["got"], ensure_ascii=False)[:230] if verbose else ""))
 
+    # Not scored: how often does the small model say "cant" (the card) on lines Max really cannot do?
+    # Plain adds in the exam above already count as false_asks if a card appears for them.
+    probe = exam.get("cant_lines", [])
+    if probe:
+        with mock.patch.object(server, "load_memory", return_value=server.clean_memory({})),              mock.patch.object(server, "load_clarify_log", return_value=[]):
+            cards = [server.run_command(line, exam["now"], exam["categories"], [dict(t) for t in exam["tasks"]]).get("case") == "cant"
+                     for line in probe]
+        summary["cant_fired"] = f"{sum(cards)}/{len(cards)}"
+        print("cant card fired on", summary["cant_fired"], "can't-do lines;", [l for l, c in zip(probe, cards) if not c], "did not")
+
     path = os.path.join(server.DATA_DIR, "exam-results.json")
     try:
         with open(path, encoding="utf-8-sig") as f:
