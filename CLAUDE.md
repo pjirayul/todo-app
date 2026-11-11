@@ -50,10 +50,11 @@ The owner is a beginner builder; keep code simple, readable, and explained.
 - After changing server.py, restart it (Start-Process python server.py, minimized) and confirm 200.
 - Bump `?v=` in index.html when script.js/style.css change.
 - status.json / inbox.json / ideas.json / backups/ are private (gitignored). Update your own entry in status.json when you start/finish.
-- Toto uploads to GitHub only when the owner says so.
+- Toto uploads to GitHub (main / GitHub Pages = live) only when the owner says so. Pushing to a `claude/*` branch is OK without asking (owner, 11 Nov 2026).
 
 ## Dot level (added 10 Nov 2026, see claude-config\SYSTEM-DESIGN-v1.md)
-- Level: **do then tell me**. Deploy, push, delete, kill programs, startup changes = always ask.
+- Level: **do then tell me**. Deploy, push to main / going live, delete, kill programs, startup changes = always ask.
+  Exception: `git push` to a `claude/*` branch (work in progress, not live) = do then tell me.
 - Cloud runs: later, only if a private repo is approved.
 - Keep `STATUS.md` up to date (5-10 lines) at the end of each work session. Run reports go to `D:\My Drive\Dev Project\_reports\`.
 
