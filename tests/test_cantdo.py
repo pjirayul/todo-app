@@ -152,8 +152,9 @@ class TaskQuestions(unittest.TestCase):
         r = ask("งานไหนสำคัญที่สุดตอนนี้", TASKS12)
         self.assertEqual((r["action"], r["filter"]["priority"], r["nums"]), ("answer", "high", [12]))
 
-    def test_finished_yesterday_gets_an_honest_answer(self):
-        for text, thai in [("What did I finish yesterday?", False), ("เมื่อวานทำอะไรเสร็จ", True)]:
+    def test_finished_last_month_gets_an_honest_answer(self):
+        # job 9: today / yesterday / this week work now (tests/test_finished.py); a month still cannot be read
+        for text, thai in [("What did I finish last month?", False), ("เดือนที่แล้วทำอะไรเสร็จ", True)]:
             r = ask(text, TASKS12)
             self.assertEqual(r["action"], "smalltalk", text)
             self.assertNotIn("couldn't read", r["reply"])

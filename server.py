@@ -1117,6 +1117,8 @@ def question_filter(low: str, now: datetime, categories: list) -> dict:
         f["when"] = "overdue"
     elif re.search(r"no (due )?date|without (a )?(due )?date|undated|ไม่มีวันที่|ไม่มีกำหนด", low):
         f["when"] = "none"
+    elif re.search(r"yesterday|เมื่อวาน", low):  # job 9: "what did I finish yesterday?" (a past day, so done tasks)
+        f["when"], f["date"] = "date", (today - timedelta(days=1)).isoformat()
     elif re.search(r"day after tomorrow|มะรืน", low):  # before "tomorrow": the first words contain it
         f["when"], f["date"] = "date", (today + timedelta(days=2)).isoformat()
     elif next_weekday_named(low, today):
@@ -1152,8 +1154,11 @@ def question_filter(low: str, now: datetime, categories: list) -> dict:
     elif re.search(r"\blow\b|ไม่รีบ", low):
         f["priority"] = "low"
     # "what did I finish" asks for DONE tasks too (but "what do I need to finish" is still an open-task question)
-    if re.search(r"\b(done|completed|finished)\b|เสร็จแล้ว|\bdid i (?:finish|complete)\b", low):
+    if re.search(r"\b(done|completed|finished)\b|เสร็จแล้ว|อะไรเสร็จ|\bdid i (?:finish|complete)\b", low):
         f["status"] = "done"
+        # "what did I finish on monday?" means the Monday that has passed (weekday_date gives the coming one)
+        if f["when"] == "date" and weekday_in(low) and f["date"] > today.isoformat():
+            f["date"] = (datetime.strptime(f["date"], "%Y-%m-%d").date() - timedelta(days=7)).isoformat()
     for name in names:
         if not f["cat"] and re.search(r"(?<!\w)" + re.escape(name.lower()) + r"(?!\w)", low):
             f["cat"] = name.lower()
@@ -1310,9 +1315,14 @@ def list_tasks(tasks: list, f: dict, now: datetime) -> list:
         return [t for t in tasks if t["num"] == f["num"]]
     now_text = now.strftime("%Y-%m-%dT%H:%M")
     first, last = due_range(f, now) if f["when"] in ("today", "tomorrow", "week", "weekend", "nextweek", "date") else ("", "")
+    done_ask = f["status"] == "done"
+    if done_ask and f["when"] == "week":   # "what did I finish this week?": Monday until today (the past part of the week)
+        first, last = (now.date() - timedelta(days=now.weekday())).isoformat(), now.date().isoformat()
     found = []
     for t in tasks:
         due = t.get("due", "")
+        if done_ask and first:   # job 9: a day asked about DONE tasks = the day it was ticked, not the due day
+            due = t.get("doneAt", "")   # tasks ticked before job 9 have no finish time: they are not counted
         if bool(t.get("done")) != (f["status"] == "done"):
             continue
         if f["priority"] and t.get("priority", "med") != f["priority"]:
@@ -1355,10 +1365,10 @@ def question_answer(sentence: str, now: str, categories: list, tasks: list, use_
         return {"action": "smalltalk", "kind": "chat", "reply": f["reply"], "tokens": f["tokens"]}
     if f.pop("unread", False):  # honest answer instead of a list that only looks like an answer
         thai = re.search(r"[฀-๿]", sentence)
-        if DONE_ASK.search(low):   # "what did I finish yesterday?": we do not store the finish day yet, say so
+        if DONE_ASK.search(low):   # "what did I finish last month?": a day the filter cannot read, say what works
             return {"action": "smalltalk", "kind": "chat", "tokens": f.get("tokens", 0),
-                    "reply": "ตอนนี้ผมยังไม่ได้บันทึกว่างานเสร็จวันไหนครับ" if thai else
-                             "I don't record the day a task was finished yet, so I can't answer that."}
+                    "reply": "ผมบอกได้ว่าเสร็จอะไรวันนี้ เมื่อวาน หรือสัปดาห์นี้ครับ" if thai else
+                             "I can tell you what you finished today, yesterday or this week."}
         return {"action": "smalltalk", "kind": "chat", "tokens": f.get("tokens", 0),
                 "reply": "ขอโทษครับ อ่านวันนั้นไม่ออก ลองถามว่า วันนี้ พรุ่งนี้ สัปดาห์นี้ หรือชื่อวันดูนะ" if thai else
                          "Sorry, I couldn't read that day. Try today, tomorrow, this week or a weekday."}
@@ -2128,7 +2138,9 @@ class Handler(SimpleHTTPRequestHandler):
             tasks = [{"num": int(t["num"]), "text": str(t.get("text", "")), "done": t.get("done") is True,
                       "priority": t.get("priority") if t.get("priority") in ("low", "med", "high") else "med",
                       "cat": str(t.get("cat", ""))[:100],  # priority + category are for questions ("high priority work")
-                      "due": t["due"] if isinstance(t.get("due"), str) and DUE_FORMAT.fullmatch(t["due"]) else ""}
+                      "due": t["due"] if isinstance(t.get("due"), str) and DUE_FORMAT.fullmatch(t["due"]) else "",
+                      # when it was ticked done: "what did I finish today?" looks at this, not at the due date
+                      "doneAt": t["doneAt"] if isinstance(t.get("doneAt"), str) and DUE_FORMAT.fullmatch(t["doneAt"]) else ""}
                      for t in body.get("tasks", [])[:300]]
             chosen = body.get("num") if isinstance(body.get("num"), int) else None  # picked after "Which one?"
             if body.get("noAI"):  # the page's daily AI limit is reached: words only, no AI
@@ -2385,7 +2397,8 @@ def open_db():
         updated TEXT NOT NULL,
         steps TEXT NOT NULL DEFAULT '[]',     -- checklist as JSON: [{"text": "...", "done": false}]
         details_asked INTEGER NOT NULL DEFAULT 0,  -- Max already asked the trip details (or the owner skipped)
-        repeat TEXT NOT NULL DEFAULT '')""")      # '' | day | week | month: the next copy is made when it is ticked
+        repeat TEXT NOT NULL DEFAULT '',          -- '' | day | week | month: the next copy is made when it is ticked
+        done_at TEXT NOT NULL DEFAULT '')""")     # YYYY-MM-DDTHH:MM when it was ticked done ('' = open, or done before job 9)
     # Databases made before "Break it down" have no steps column yet: add it (existing tasks get [])
     columns = [row[1] for row in con.execute("PRAGMA table_info(tasks)")]
     if "steps" not in columns:
@@ -2399,6 +2412,10 @@ def open_db():
     if "repeat" not in columns:
         con.execute("ALTER TABLE tasks ADD COLUMN repeat TEXT NOT NULL DEFAULT ''")
         con.commit()
+    # Same for "what did I finish?" (job 9): tasks done before this have no finish time ('')
+    if "done_at" not in columns:
+        con.execute("ALTER TABLE tasks ADD COLUMN done_at TEXT NOT NULL DEFAULT ''")
+        con.commit()
     con.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")  # nextNum, version
     return con
 
@@ -2411,11 +2428,11 @@ def get_meta(con, key, default):
 def load_tasks() -> dict:
     con = open_db()
     try:
-        rows = con.execute("SELECT id, num, text, done, due, priority, cat, notified, notes, files, steps, details_asked, repeat "
+        rows = con.execute("SELECT id, num, text, done, due, priority, cat, notified, notes, files, steps, details_asked, repeat, done_at "
                            "FROM tasks ORDER BY sort").fetchall()
         todos = [{"id": r[0], "num": r[1], "text": r[2], "done": bool(r[3]), "due": r[4], "priority": r[5],
                   "cat": r[6], "notified": bool(r[7]), "notes": r[8], "files": json.loads(r[9]),
-                  "steps": json.loads(r[10]), "detailsAsked": bool(r[11]), "repeat": r[12]} for r in rows]
+                  "steps": json.loads(r[10]), "detailsAsked": bool(r[11]), "repeat": r[12], "doneAt": r[13]} for r in rows]
         return {"todos": todos, "nextNum": get_meta(con, "nextNum", 1), "version": get_meta(con, "version", 0)}
     finally:
         con.close()
@@ -2450,6 +2467,9 @@ def clean_tasks(todos):
                       for s in steps if isinstance(s, dict) and isinstance(s.get("text"), str)][:30],
             "detailsAsked": t.get("detailsAsked") is True,
             "repeat": t.get("repeat") if t.get("repeat") in ("day", "week", "month") else "",   # a page that does not know it sends none
+            # when it was ticked done (the page sets it); an open task never keeps one
+            "doneAt": t["doneAt"] if t.get("done") is True and isinstance(t.get("doneAt"), str)
+                      and DUE_FORMAT.fullmatch(t["doneAt"]) else "",
         })
     return clean
 
@@ -2471,17 +2491,18 @@ def _save_tasks(tasks: list, next_num, base_version):
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             # Keep each task's created time, and only touch "updated" when the task really changed
             old = {r[0]: r[1:] for r in con.execute(
-                "SELECT num, id, text, done, due, priority, cat, notes, files, notified, steps, details_asked, repeat, created, updated FROM tasks")}
+                "SELECT num, id, text, done, due, priority, cat, notes, files, notified, steps, details_asked, repeat, done_at, created, updated FROM tasks")}
             con.execute("DELETE FROM tasks")
             for sort, t in enumerate(tasks):
                 values = (t["id"], t["text"], int(t["done"]), t["due"], t["priority"], t["cat"], t["notes"],
                           json.dumps(t["files"], ensure_ascii=False), int(t["notified"]),
-                          json.dumps(t["steps"], ensure_ascii=False), int(t["detailsAsked"]), t.get("repeat", ""))
+                          json.dumps(t["steps"], ensure_ascii=False), int(t["detailsAsked"]), t.get("repeat", ""),
+                          t.get("doneAt", ""))
                 before = old.get(t["num"])
                 created = before[-2] if before else now
                 updated = before[-1] if before and tuple(before[:-2]) == values else now
-                con.execute("INSERT INTO tasks (id, text, done, due, priority, cat, notes, files, notified, steps, details_asked, repeat, "
-                            "num, sort, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                con.execute("INSERT INTO tasks (id, text, done, due, priority, cat, notes, files, notified, steps, details_asked, repeat, done_at, "
+                            "num, sort, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                             values + (t["num"], sort, created, updated))
             next_num = max([int(next_num) if isinstance(next_num, int) else 1, get_meta(con, "nextNum", 1)]
                            + [t["num"] + 1 for t in tasks])  # numbers are never reused

@@ -541,6 +541,7 @@
     const nextNamed = nextWeekdayNamed(low, today);
     if (rx(raw`overdue|\blate\b|past due|เลยกำหนด|เกินกำหนด|งานค้าง|ค้างอยู่`).test(low)) f.when = "overdue";
     else if (rx(raw`no (due )?date|without (a )?(due )?date|undated|ไม่มีวันที่|ไม่มีกำหนด`).test(low)) f.when = "none";
+    else if (rx(raw`yesterday|เมื่อวาน`).test(low)) { f.when = "date"; f.date = isoDay(addDays(today, -1)); } // job 9
     else if (rx(raw`day after tomorrow|มะรืน`).test(low)) { f.when = "date"; f.date = isoDay(addDays(today, 2)); }
     else if (nextNamed) { f.when = "date"; f.date = nextNamed; }
     else if (dayWords.special === "weekend") f.when = "weekend";
@@ -564,7 +565,11 @@
     if (rx(raw`\b(high|urgent|important|asap)\b|ด่วน|สำคัญ`).test(low)) f.priority = "high";
     else if (rx(raw`\blow\b|ไม่รีบ`).test(low)) f.priority = "low";
     // "what did I finish" asks for DONE tasks (same as question_filter in server.py)
-    if (rx(raw`\b(done|completed|finished)\b|เสร็จแล้ว|\bdid i (?:finish|complete)\b`).test(low)) f.status = "done";
+    if (rx(raw`\b(done|completed|finished)\b|เสร็จแล้ว|อะไรเสร็จ|\bdid i (?:finish|complete)\b`).test(low)) {
+      f.status = "done";
+      // "what did I finish on monday?" = the Monday that has passed
+      if (f.when === "date" && weekdayIn(low) && f.date > isoDay(today)) f.date = isoDay(addDays(makeDay(...f.date.split("-").map(Number)), -7));
+    }
     for (const name of names) {
       if (!f.cat && rx("(?<!" + WORD + ")" + escapeRe(name.toLowerCase()) + "(?!" + WORD + ")").test(low)) f.cat = name.toLowerCase();
     }
@@ -598,9 +603,12 @@
     const today = makeDay(now.y, now.m, now.d);
     const nowText = pad2date(now) + "T" + pad(now.hh) + ":" + pad(now.mm);
     const ranged = ["today", "tomorrow", "week", "weekend", "nextweek", "date"].includes(f.when);
-    const [first, last] = ranged ? dueRange(f, today) : ["", ""];
+    let [first, last] = ranged ? dueRange(f, today) : ["", ""];
+    const doneAsk = f.status === "done";
+    if (doneAsk && f.when === "week") [first, last] = [isoDay(addDays(today, -weekdayIndex(today))), isoDay(today)]; // Monday until today
     const found = tasks.filter((t) => {
-      const due = t.due || "";
+      // job 9: a day asked about DONE tasks = the day it was ticked (doneAt), not the due day
+      const due = (doneAsk && first ? t.doneAt : t.due) || "";
       if (!!t.done !== (f.status === "done")) return false;
       if (f.priority && (t.priority || "med") !== f.priority) return false;
       if (f.cat && (t.cat || "").toLowerCase() !== f.cat.toLowerCase()) return false;

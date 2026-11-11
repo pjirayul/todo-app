@@ -25,12 +25,12 @@ TASKS = [
     {"num": 2, "text": "Call mom", "done": False, "due": "2026-10-28T18:00", "priority": "med", "cat": "Personal"},
     {"num": 3, "text": "Dentist appointment", "done": False, "due": "2026-10-29T14:00", "priority": "high", "cat": "Health"},
     {"num": 4, "text": "Pay rent", "done": False, "due": "2026-10-25T09:00", "priority": "high", "cat": "Home"},
-    {"num": 5, "text": "Buy milk", "done": True, "due": "2026-10-28T08:00", "priority": "med", "cat": "Shopping"},
+    {"num": 5, "text": "Buy milk", "done": True, "due": "2026-10-28T08:00", "priority": "med", "cat": "Shopping", "doneAt": "2026-10-28T08:10"},
     {"num": 6, "text": "Write report", "done": False, "due": "", "priority": "med", "cat": "Work"},
-    {"num": 7, "text": "Send invoice", "done": True, "due": "2026-10-27T09:00", "priority": "low", "cat": "Money"},
+    {"num": 7, "text": "Send invoice", "done": True, "due": "2026-10-27T09:00", "priority": "low", "cat": "Money", "doneAt": "2026-10-27T17:00"},
     {"num": 8, "text": "Gym", "done": False, "due": "2026-10-31T07:00", "priority": "low", "cat": "Health"},
     {"num": 9, "text": "Team meeting", "done": False, "due": "2026-11-02T10:00", "priority": "med", "cat": "Work"},
-    {"num": 10, "text": "Plan holiday", "done": True, "due": "2026-10-28T12:00", "priority": "med", "cat": "Personal"},
+    {"num": 10, "text": "Plan holiday", "done": True, "due": "2026-10-28T12:00", "priority": "med", "cat": "Personal", "doneAt": "2026-10-26T12:30"},
 ]
 CATEGORIES = sorted({t["cat"] for t in TASKS})
 
@@ -71,7 +71,9 @@ CASES = [
     ("finish", "what did I finish today"), ("finish", "what did I finish this week"), ("ask", "show high priority tasks"), ("ask", "what's due next friday"),
     ("ask", "what do I have this weekend"), ("ask", "how many tasks are left"), ("ask", "มีอะไรต้องทำวันนี้"),
     ("ask", "งานอะไรสัปดาห์นี้"), ("ask", "anything about rent"),
-    ("null", "what did I finish yesterday", "Python says it does not record the finish day: no list"),
+    # job 9: done questions use the day it was ticked (doneAt), not the due day
+    ("finish", "what did I finish yesterday"), ("finish", "what did I finish on monday"), ("finish", "เมื่อวานทำอะไรเสร็จ"),
+    ("null", "what did I finish last month", "a month: Python says which days it can read (no list)"),
 ]
 
 

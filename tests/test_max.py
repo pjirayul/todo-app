@@ -980,7 +980,7 @@ class SpecialDays(unittest.TestCase):
         self.assertEqual(server.due_range(f, self.NOW), ("2026-10-31", "2026-11-01"))
 
     def test_unreadable_day_is_said(self):
-        for text in ["what is due next month", "what did I finish yesterday", "อะไรบ้างเดือนนี้"]:
+        for text in ["what is due next month", "what did I finish last month", "อะไรบ้างเดือนนี้"]:
             r = server.question_answer(text, "2026-10-30T10:00", [], [], use_ai=False)
             self.assertEqual(r["kind"], "chat", text)
         r = server.question_answer("what to do next", "2026-10-30T10:00", [], [], use_ai=False)
