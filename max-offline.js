@@ -732,7 +732,7 @@
     }
   }
 
-  const api = { understand, rulesDate, resolveDue, fixDateTypos, thaiTime, englishTime, version: 1 };
+  const api = { understand, rulesDate, resolveDue, fixDateTypos, thaiTime, englishTime, version: 2 };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (root) root.MaxOffline = api;
 })(typeof window !== "undefined" ? window : typeof globalThis !== "undefined" ? globalThis : null);
