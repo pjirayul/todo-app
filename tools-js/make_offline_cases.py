@@ -56,6 +56,12 @@ CASES = [
     ("null", "buy milk and call mom tomorrow", "two tasks in one sentence: Python asks the AI to cut it"),
     ("null", "dentist next week", "an appointment with no weekday: Python offers Monday / Friday / no date"),
     ("null", "pay rent urgent friday", "priority word: the AI sets the priority"),
+    # --- a list the owner wrote (#17): the commas are the cut, no AI ---
+    ("several", "Add 3 tasks: buy milk, call mom, pay rent"), ("several", "add 2 tasks: buy milk tomorrow, call mom friday"),
+    ("several", "add 3 tasks: buy milk, call mom and pay rent"), ("several", "Add tasks: wash the car, pay the bills, clean the desk"),
+    ("several", "เพิ่ม 3 งาน: ซื้อนม, โทรหาแม่, จ่ายค่าเช่า"),
+    ("null", "add 3 tasks: buy milk, call mom", "the count says 3 but there are 2 items: not a list"),
+    ("null", "add 2 tasks: buy milk, dentist next week", "an item JS cannot read: Python decides"),
     # --- commands on one task ---
     ("cmd", "#1 done"), ("cmd", "done #2"), ("cmd", "#5 undo"), ("cmd", "undo #5"), ("cmd", "#3 delete"), ("cmd", "delete #4"),
     ("cmd", "move #1 to friday"), ("cmd", "move #2 to tomorrow 5pm"), ("cmd", "#6 tomorrow"), ("cmd", "reschedule #3 to 5pm"),
@@ -126,6 +132,14 @@ def simple(result):
     return {k: result[k] for k in keep if k in result}
 
 
+def card_view(card):
+    """The part of a several card that max-offline.js has to match (labels, the tasks, the 'One task' text)."""
+    keep = ("text", "due", "priority", "category", "repeat")
+    return {"card": "several", "labels": [o["label"] for o in card["options"]],
+            "tasks": [{k: t[k] for k in keep} for t in card["options"][0]["do"]["tasks"]],
+            "one": card["options"][1]["do"]["text"]}
+
+
 def main():
     cases = []
     for i, case in enumerate(CASES, 1):
@@ -133,6 +147,11 @@ def main():
         entry = {"id": i, "kind": kind, "text": sentence}
         if kind == "add":
             entry["expect"] = expected_add(sentence)
+        elif kind == "several":
+            result = run(sentence)
+            if not result or result.get("case") != "several" or result.get("path") != "rules":
+                raise SystemExit(f"{sentence!r}: Python did not build a rules-only several card ({result})")
+            entry["expect"] = card_view(result)
         elif kind in ("cmd", "ask", "finish"):
             # "finish" = "what did I finish ...": Python now reads it as a done-question (server.py question_filter)
             result = run(sentence)

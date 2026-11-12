@@ -159,6 +159,18 @@ def main():
         summary["cant_fired"] = f"{sum(cards)}/{len(cards)}"
         print("cant card fired on", summary["cant_fired"], "can't-do lines;", [l for l, c in zip(probe, cards) if not c], "did not")
 
+    # Not scored (#17): does the small model cut "buy milk and call mom tomorrow" into a "several" card?
+    # one_task_lines are lists after ONE verb: a "several" card there would be wrong (counted as split_wrong).
+    split, keep = exam.get("several_lines", []), exam.get("one_task_lines", [])
+    if split or keep:
+        with mock.patch.object(server, "load_memory", return_value=server.clean_memory({})),              mock.patch.object(server, "load_clarify_log", return_value=[]):
+            ask = lambda line: server.run_command(line, exam["now"], exam["categories"], [dict(t) for t in exam["tasks"]]).get("case") == "several"
+            cut, kept_wrong = [ask(l) for l in split], [ask(l) for l in keep]
+        summary["several_fired"] = f"{sum(cut)}/{len(cut)}"
+        summary["split_wrong"] = f"{sum(kept_wrong)}/{len(kept_wrong)}"
+        print("several card fired on", summary["several_fired"], "multi-task lines;", [l for l, c in zip(split, cut) if not c], "did not;",
+              "wrongly on", summary["split_wrong"], "single-task lists")
+
     path = os.path.join(server.DATA_DIR, "exam-results.json")
     try:
         with open(path, encoding="utf-8-sig") as f:

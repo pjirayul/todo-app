@@ -17,10 +17,17 @@ const plain = (v) => JSON.stringify(v, (k, x) => (x && typeof x === "object" && 
 const KEEP = ["action", "priority", "repeat", "num", "changes", "missing", "choices", "text", "due", "category", "filter", "nums"];
 const pick = (cmd) => (cmd ? KEEP.reduce((o, k) => (k in cmd ? Object.assign(o, { [k]: cmd[k] }) : o), {}) : null);
 
+// A "several" card is compared by its labels, its tasks and the "One task" text (not the random id)
+const cardView = (cmd) => (cmd && cmd.case === "several"
+  ? { card: "several", labels: cmd.options.map((o) => o.label),
+      tasks: cmd.options[0].do.tasks.map((t) => ["text", "due", "priority", "category", "repeat"].reduce((o, k) => Object.assign(o, { [k]: t[k] }), {})),
+      one: cmd.options[1].do.text } : null);
+
 let passed = 0;
 const failed = [];
 for (const c of list.cases) {
-  const got = pick(MaxOffline.understand(c.text, JSON.parse(JSON.stringify(list.todos)), list.now));
+  const out = MaxOffline.understand(c.text, JSON.parse(JSON.stringify(list.todos)), list.now);
+  const got = out && out.case === "several" ? cardView(out) : pick(out);
   const ok = plain(got) === plain(c.expect);
   if (ok) passed++; else failed.push(c);
   console.log(`${ok ? "PASS" : "FAIL"}  #${String(c.id).padStart(2, "0")} [${c.kind}] ${c.text}`);

@@ -650,6 +650,55 @@
     return { action: "add", text, due, priority: "med", category: pickCategory(sentence, categories), repeat: "" };
   }
 
+  // ---------- "Add 3 tasks: buy milk, call mom, pay rent" (server.py list_parts + make_several_card) ----------
+  // The owner wrote the list, so the commas are the cut: no AI needed. Each item has its own day; none share one here.
+  const LIST_START = rx(raw`^(?:add|create)\s+(?:(\d+)\s+)?tasks?\s*:\s*(.+)$|^เพิ่ม\s*(?:(\d+)\s*)?งาน\s*:\s*(.+)$`, "is");
+  function listParts(s) {
+    const m = LIST_START.exec(oneSpace(s));
+    if (!m) return [];
+    const count = m[2] ? m[1] : m[3];
+    const rest = m[2] ? m[2] : m[4];
+    const cut = (text, re) => text.split(re).map((x) => stripChars(x, " .")).filter(Boolean);
+    let parts = cut(rest, /[,;]/);
+    if (count && parts.length === Number(count) - 1) { // "a, b and c": with a count, the last "and" also cuts
+      parts = cut(parts.slice(0, -1).concat(parts[parts.length - 1].split(/\s+and\s+|และ/)).join(", "), /[,;]/);
+    }
+    if ((count && parts.length !== Number(count)) || parts.length < 2 || parts.length > 5 || (!count && parts.length < 3)) return [];
+    return parts.every((x) => x.length >= 2) ? parts : [];
+  }
+
+  // One item: the same steps as addByRules, but an item with no day is fine (a plain task). null = not sure.
+  function listItem(part, now, times, categories) {
+    const sentence = cleanSentence(part);
+    const lower = sentence.toLowerCase().split(NOWADAYS).join(" ");
+    if (REPEAT_WORDS.test(lower) || PRIORITY_HINT.test(lower) || EVENT_WORDS.test(lower) || TRAVEL_WORDS.test(lower)) return null;
+    const rules = rulesDate(sentence, times);
+    if (!rules) {
+      if (DAY_HINTS.test(lower) || CLOCK_TIME.test(sentence)) return null; // a day we cannot read (a month...)
+      return { text: makeTitle(sentence, false), due: "", priority: "med", category: pickCategory(sentence, categories), repeat: "" };
+    }
+    const due = resolveDue(rules, makeDay(now.y, now.m, now.d), times);
+    const text = makeTitle(sentence, !!rules.time);
+    if (!due || DAY_HINTS.test(text.toLowerCase()) || CLOCK_TIME.test(text) || DAY_PARTS.some(([re]) => re.test(text.toLowerCase()))) return null;
+    return { text, due, priority: "med", category: pickCategory(sentence, categories), repeat: "" };
+  }
+
+  function listByRules(s, now, times, categories) {
+    const parts = listParts(s);
+    if (!parts.length) return null;
+    const tasks = parts.map((p) => listItem(p, now, times, categories));
+    if (tasks.some((t) => !t)) return null;
+    const m = LIST_START.exec(oneSpace(s));
+    const whole = m[2] || m[4];
+    if (EVENT_WORDS.test(whole) || TRAVEL_WORDS.test(whole) || REPEAT_WORDS.test(whole)) return null; // "One task" would need Python's "When?"
+    const one = { action: "add", text: capital(whole), due: "", priority: "med", category: "" };
+    return {
+      action: "clarify", case: "several", id: Math.random().toString(16).slice(2, 10), q: "clarifyQ_several", nums: [], more: true,
+      options: [{ label: "opt_several", do: { action: "add_many", tasks: tasks.map((t) => Object.assign({ action: "add" }, t)) } },
+        { label: "opt_one", do: one }],
+    };
+  }
+
   // ---------- The one function script.js calls ----------
   // text: what the owner typed; todos: [{num, text, done, due, priority, cat}]; today: a Date or "YYYY-MM-DDTHH:MM"
   // times: optional About me times ({morning, afternoon, evening, tonight}); default 09:00 / 13:00 / 18:00 / 20:00
@@ -665,6 +714,8 @@
 
       const [plain] = stripGreeting(s);
       if (TEAM.test(plain)) return null; // a message for the team: the server's job
+      const listed = listByRules(plain, now, clock, categories); // "Add 3 tasks: a, b, c"
+      if (listed) return listed;
       const filter = parseQuestion(s, now, categories);
       if (filter) {
         if (filter.unread) return null; // a day we cannot read (yesterday, a month...)

@@ -18,6 +18,8 @@
     {"num": 13, "text": "Rent car return", "done": false, "due": "", "priority": "med", "cat": "Personal"}
   ],
   "cant_lines": ["send an email to my boss", "play some music for me", "book me a flight to Tokyo", "turn off the living room light", "what is the weather like in Bangkok", "order a pizza for dinner", "call my mom for me", "ส่งอีเมลหาเจ้านายให้หน่อย", "เปิดเพลงให้ฟังหน่อย", "จองตั๋วเครื่องบินไปเชียงใหม่ให้หน่อย"],
+  "several_lines": ["buy milk and call mom tomorrow", "call the plumber and pay the electric bill friday", "water the plants and send the report at 5pm", "ซื้อนมและโทรหาแม่พรุ่งนี้", "ล้างจานแล้วก็รดน้ำต้นไม้", "add 3 tasks: buy milk, call mom, pay rent"],
+  "one_task_lines": ["buy milk and eggs", "meet Tom and Ann on friday", "ซื้อไข่และนม"],
   "cases": [
     {"s": "buy bread", "action": "add", "title": ["buy bread", "bread"], "due": "", "priority": "med", "category": ["Shopping", "Home"]},
     {"s": "buy bread tomorrow", "action": "add", "title": ["buy bread", "bread"], "due": "2026-10-31T09:00", "category": ["Shopping", "Home"]},

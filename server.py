@@ -1641,17 +1641,73 @@ def could_be_several(s: str) -> bool:
 
 
 def check_parts(parts, s: str) -> list:
-    """The AI's parts, or [] = one task. 2-3 parts made of the owner's own words; all have a day/time or none does."""
+    """The AI's parts, or [] = one task. 2-3 parts made of the owner's own words.
+    Days: every part has its own, or none does, or ONE trailing day is shared ("buy milk and call mom tomorrow")."""
     if not isinstance(parts, list) or not 2 <= len(parts) <= 3:
         return []
     parts = [" ".join(str(p).split()) for p in parts]
     for p in parts:   # each part must be a literal piece of the sentence: the 3B model invents or copies words ("tomorrow" twice)
         if len(p) < 2 or p.lower() not in " ".join(s.lower().split()):
             return []
-    dated = [bool(DAY_HINTS.search(p.lower())) or time_said(p.lower()) for p in parts]
-    # "call Tom and email Ann tomorrow": one shared day (the AI may even drop it from the parts) = one task
-    sentence_dated = bool(DAY_HINTS.search(s.lower())) or time_said(s.lower())
-    return parts if all(dated) or (not any(dated) and not sentence_dated) else []
+    dated = [is_dated(p) for p in parts]
+    # A day on the first/middle part only ("buy milk tomorrow and call mom") is unclear: one task, as before
+    if all(dated) or not any(dated) or dated == [False] * (len(parts) - 1) + [True]:
+        return parts
+    return []
+
+
+def is_dated(text: str) -> bool:
+    return bool(DAY_HINTS.search(text.lower())) or time_said(text.lower())
+
+
+def shared_day_source(parts: list, s: str) -> str:
+    """The text whose day every undated part shares ("" = no sharing: each part keeps its own).
+    The last part has the day -> that part. The AI dropped the day from every part but the sentence has one -> the sentence."""
+    dated = [is_dated(p) for p in parts]
+    if all(dated):
+        return ""
+    if dated[-1]:
+        return parts[-1]
+    return s if is_dated(s) else ""
+
+
+def make_several_card(parts: list, s: str, one: dict, now: str, categories: list, tokens: int = 0) -> dict:
+    """The "Add N tasks?" card. Python reads each part's date (no AI); an undated part takes the shared day."""
+    memory = load_memory()
+    source = shared_day_source(parts, s)
+    shared = ""
+    if source:
+        shared = check_task({"text": source, "when": "none", "time": "", "priority": "med", "category": ""},
+                            source, now, categories, memory)["due"]
+    adds = []
+    for p in parts:
+        task = check_task({"text": p, "when": "none", "time": "", "priority": "med", "category": ""}, p, now, categories, memory)
+        task["text"] = clean_title(task["text"])   # the day is in "due" now: "Buy milk tomorrow" -> "Buy milk"
+        if shared and not task["due"]:
+            task["due"] = shared
+        adds.append({k: v for k, v in finish_add(task, p).items() if k != "askWhen"})   # no "When?" per part
+    return {"action": "clarify", "case": "several", "id": uuid.uuid4().hex[:8], "q": "clarifyQ_several", "nums": [],
+            "options": [{"label": "opt_several", "do": {"action": "add_many", "tasks": adds}}, {"label": "opt_one", "do": one}],
+            "more": True, "tokens": tokens} | auto_flag("several")
+
+
+# "Add 3 tasks: buy milk, call mom, pay rent": the owner wrote the list, so Python cuts it at the commas (no AI call)
+LIST_START = re.compile(r"^(?:add|create)\s+(?:(\d+)\s+)?tasks?\s*:\s*(.+)$|^เพิ่ม\s*(?:(\d+)\s*)?งาน\s*:\s*(.+)$", re.I | re.S)
+
+
+def list_parts(s: str) -> list:
+    """The pieces of an explicit list, or [] = not a list. A given count must match; without a count a list needs 2+ commas."""
+    m = LIST_START.match(" ".join(s.split()))
+    if not m:
+        return []
+    count, rest = (m.group(1), m.group(2)) if m.group(2) else (m.group(3), m.group(4))
+    cut = lambda text, rx: [x.strip(" .") for x in re.split(rx, text) if x.strip(" .")]
+    parts = cut(rest, r"[,;]")
+    if count and len(parts) == int(count) - 1:   # "a, b and c": with a count, the last "and" also cuts
+        parts = cut(", ".join(parts[:-1] + re.split(r"\s+and\s+|และ", parts[-1])), r"[,;]")
+    if (count and len(parts) != int(count)) or not 2 <= len(parts) <= 5 or (not count and len(parts) < 3):
+        return []
+    return parts if all(len(x) >= 2 for x in parts) else []
 
 
 def several_card(s: str, result: dict, now: str, categories: list) -> dict:
@@ -1665,16 +1721,18 @@ def several_card(s: str, result: dict, now: str, categories: list) -> dict:
     parts = check_parts(r.get("parts"), s)
     if not parts:
         return result | {"tokens": result.get("tokens", 0) + r.get("tokens", 0)}
-    memory = load_memory()
-    adds = []
-    for p in parts:   # Python reads each part's date; no AI
-        task = check_task({"text": p, "when": "none", "time": "", "priority": "med", "category": ""}, p, now, categories, memory)
-        task["text"] = clean_title(task["text"])   # the day is in "due" now: "Buy milk tomorrow" -> "Buy milk"
-        adds.append({k: v for k, v in finish_add(task, p).items() if k != "askWhen"})   # no "When?" per part
     one = {k: v for k, v in result.items() if k != "tokens"}
-    return {"action": "clarify", "case": "several", "id": uuid.uuid4().hex[:8], "q": "clarifyQ_several", "nums": [],
-            "options": [{"label": "opt_several", "do": {"action": "add_many", "tasks": adds}}, {"label": "opt_one", "do": one}],
-            "more": True, "tokens": result.get("tokens", 0) + r.get("tokens", 0)} | auto_flag("several")
+    return make_several_card(parts, s, one, now, categories, result.get("tokens", 0) + r.get("tokens", 0))
+
+
+def list_card(s: str, now: str, categories: list):
+    """The card for an explicit list, or None. No AI: the owner's commas are the cut."""
+    parts = list_parts(s)
+    if not parts:
+        return None
+    rest = LIST_START.match(" ".join(s.split()))
+    one = {k: v for k, v in add_without_ai(rest.group(2) or rest.group(4)).items() if k != "tokens"}
+    return make_several_card(parts, s, one, now, categories) | {"path": "rules"}
 
 
 def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: int = None,
@@ -1683,6 +1741,10 @@ def run_command(sentence: str, now: str, categories: list, tasks: list, chosen: 
     earlier + age (seconds): the owner's first sentence that Max asked "Tell me more" about."""
     new_text = sentence
     sentence, joined = join_pending(sentence, earlier, age, tasks)
+    if not joined and chosen is None:   # the owner wrote a list ("Add 3 tasks: a, b, c"): no AI call needed
+        listed = list_card(" ".join(strip_greeting(" ".join(sentence.split()))[0].split()), now, categories)
+        if listed:
+            return listed
     result = guard_bare_add(work_out_command(sentence, now, categories, tasks, chosen), tasks)
     if joined and result.get("action") == "clarify":
         result["more"] = False   # the owner already told Max more: a second card, but no "Tell Max more…" loop

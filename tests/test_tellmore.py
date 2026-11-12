@@ -65,11 +65,9 @@ class Several(unittest.TestCase):
         self.assertEqual(dues[0][:10], "2026-10-29")
         self.assertTrue(dues[1].endswith("T19:00"))
 
-    def test_one_shared_day_stays_one_task(self):
-        r = run("call Tom and email Ann tomorrow", ai=parts_ai(["call Tom", "email Ann tomorrow"]))
-        self.assertEqual(r["action"], "add")
-        r = run("call Tom and email Ann tomorrow", ai=parts_ai(["call Tom", "email Ann"]))   # the AI dropped the day
-        self.assertEqual(r["action"], "add")
+    def test_a_day_on_the_first_part_only_stays_one_task(self):
+        r = run("buy milk tomorrow and call mom", ai=parts_ai(["buy milk tomorrow", "call mom"]))
+        self.assertEqual(r["action"], "add")   # unclear which parts the day belongs to: as before (#17 shares only a trailing day)
 
     def test_list_of_items_is_one_task_without_an_ai_call(self):
         for text in ["buy milk and eggs", "buy salt and pepper", "ซื้อไข่และนม"]:
