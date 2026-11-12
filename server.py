@@ -1041,7 +1041,7 @@ GREETING = re.compile(r"^\s*(?:(?:hi|hey|hello|yo|ok|okay|good\s+(?:morning|afte
 # Natural ways to ask about the day that have no task word in them
 NATURAL_Q = re.compile(r"\bwhat (?:to do|should i|shall i|do i (?:have|need|got)|am i (?:doing|supposed)|have i got|else)\b"
                        r"|\bwhat(?:'s| is) (?:my|on|the plan)\b|\bwhats (?:my|on)\b"
-                       r"|^my (?:tasks?|to-?dos?|plan|day|schedule)\b|ทำอะไรดี|ต้องทำ|ทำอะไร")
+                       r"|^my (?:tasks?|to-?dos?|plan|day|schedule)\b|^did i (?:finish|complete)\b|ทำอะไรดี|ต้องทำ|ทำอะไร")
 # The loose "maybe a question" gate: a question word anywhere, a "?", or a greeting. Only then is the AI asked.
 QUESTION_WORD_ANYWHERE = re.compile(r"\b(what|how|which|should|when|where|who|why|anything)\b|อะไร|ไหม|มั้ย|กี่|ยังไง|ไร")
 ORDER_START = re.compile(r"^(show|list|tell me|give me)\b")  # also normal verbs ("show Tom the report"): stricter

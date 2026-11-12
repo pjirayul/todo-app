@@ -74,7 +74,7 @@ CASES = [
     # --- questions ---
     ("ask", "what's due today"), ("ask", "what's due tomorrow"), ("ask", "what's due this week"), ("ask", "what is due friday"),
     ("ask", "what's overdue"), ("ask", "what have I finished"), ("finish", "what did I finish"),
-    ("finish", "what did I finish today"), ("finish", "what did I finish this week"), ("ask", "show high priority tasks"), ("ask", "what's due next friday"),
+    ("finish", "what did I finish today"), ("finish", "did I finish today"), ("finish", "did I finish the report"), ("finish", "what did I finish this week"), ("ask", "show high priority tasks"), ("ask", "what's due next friday"),
     ("ask", "what do I have this weekend"), ("ask", "how many tasks are left"), ("ask", "มีอะไรต้องทำวันนี้"),
     ("ask", "งานอะไรสัปดาห์นี้"), ("ask", "anything about rent"),
     ("null", "what did I finish yesterday", "Python says it does not record the finish day: no list"),

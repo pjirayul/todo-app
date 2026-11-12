@@ -505,7 +505,7 @@
   const QUESTION_START = rx(raw`^(what|what's|whats|which|show|list|how many|how much|anything|any|is there|are there|do i have|have i got|tell me|give me)\b`);
   const QUESTION_TH = rx(raw`มีอะไร|อะไรบ้าง|กี่งาน|งานอะไร|งานไหน|อันไหน|งานค้าง|เลยกำหนด|เกินกำหนด|^แสดง`);
   const NATURAL_Q = rx(raw`\bwhat (?:to do|should i|shall i|do i (?:have|need|got)|am i (?:doing|supposed)|have i got|else)\b` +
-    raw`|\bwhat(?:'s| is) (?:my|on|the plan)\b|\bwhats (?:my|on)\b|^my (?:tasks?|to-?dos?|plan|day|schedule)\b|ทำอะไรดี|ต้องทำ|ทำอะไร`);
+    raw`|\bwhat(?:'s| is) (?:my|on|the plan)\b|\bwhats (?:my|on)\b|^my (?:tasks?|to-?dos?|plan|day|schedule)\b|^did i (?:finish|complete)\b|ทำอะไรดี|ต้องทำ|ทำอะไร`);
   const TASK_WORDS = rx(raw`\b(tasks?|to-?dos?|left|remaining|pending|outstanding|open|have)\b|งาน`);
   const ORDER_START = rx(raw`^(show|list|tell me|give me)\b`);
   const ABOUT = rx(raw`(?:about|regarding|containing|เกี่ยวกับ|เรื่อง)\s*(.+?)(?=\s+(?:due|today|tomorrow|this|next|on|by|before|overdue|high|urgent|in)\b|วันนี้|พรุ่งนี้|สัปดาห์|อาทิตย์|[?.!]|$)`);
