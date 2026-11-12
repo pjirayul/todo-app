@@ -200,7 +200,7 @@ svg.i.sm { width: 15px; height: 15px; }
   border: none; outline: none; background: none;
   font-size: 1.1rem; padding: 8px 0;
 }
-#todo-input { text-overflow: ellipsis; }
+#todo-input { text-overflow: ellipsis; min-height: 44px; } /* 44px tap height */
 /* Placeholder is a long example: a touch smaller than typed text so it fits */
 #todo-input::placeholder { color: var(--muted); font-size: .95rem; letter-spacing: -.005em; opacity: 1; }
 /* Command bar border: plain at rest, soft AI gradient + glow when you type, slowly flowing while AI thinks.
@@ -464,8 +464,8 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .cmd-msg.ask .ask-field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .cmd-msg.ask .ask-field input::placeholder { color: var(--muted); }
 .cmd-msg.ask .ask-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 0; }
-/* Answer chips (also the Yes / No buttons): rounded, 40px tall, 44px tap area; the main one in the gradient */
-.cmd-msg .chip { min-height: 40px; padding: 6px 16px; font-size: .9rem; background: var(--card); border-color: var(--border); }
+/* Answer chips (also the Yes / No buttons): rounded, 44px tall; the main one in the gradient */
+.cmd-msg .chip { min-height: 44px; padding: 6px 16px; font-size: .9rem; background: var(--card); border-color: var(--border); }
 .cmd-msg .chip.active { font-weight: 600; }
 @media (hover: hover) { .cmd-msg .chip:not(.active):hover { color: var(--accent); } }
 /* Yes / No questions (delete, Clear done, restore): same rounded card, buttons wrap under the question on phones */
@@ -694,7 +694,7 @@ footer { display: flex; justify-content: space-between; align-items: center; mar
 .answer-cat { font-size: .78rem; white-space: nowrap; }
 .answer-more { margin: 4px 4px 0; color: var(--muted); font-size: .85rem; }
 .answer-actions { margin: 10px 0 0; gap: 8px; }
-.answer-actions .chip { min-height: 40px; padding: 6px 16px; font-size: .9rem; background: var(--card); border-color: var(--border); color: var(--text); }
+.answer-actions .chip { min-height: 44px; padding: 6px 16px; font-size: .9rem; background: var(--card); border-color: var(--border); color: var(--text); }
 .answer-actions .chip:first-child { background: var(--ai-grad); color: var(--on-accent); border-color: transparent; font-weight: 600; }
 .answer-actions .chip:first-child:only-child, .answer-actions .chip:first-child { box-shadow: 0 3px 10px var(--ai-glow); }
 .answer-card :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
